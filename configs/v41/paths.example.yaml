@@ -1,0 +1,14 @@
+# Template only. Copy to a private, git-ignored location and fill with the
+# researcher-approved roots. Never commit a filled copy.
+schema_version: v41.0
+raw_data_root: /path/to/read-only/raw_root        # read-only; never written
+private_root: /path/to/private/output_root       # outside every Git checkout
+repo_root: /path/to/this/checkout
+layout:
+  audits: audits/<audit-id>
+  registry: registry/<version>
+  annotations: annotations/<version>
+  derived: derived/<version>
+  runs: runs/<run-id>
+  evaluation: evaluation/<run-id>
+  restricted_reference: restricted_reference/<version>   # separate role/ACL

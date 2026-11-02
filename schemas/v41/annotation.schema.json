@@ -1,0 +1,176 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "anatobind/v41/annotation.schema.json",
+  "title": "AnnotationRecord v4.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "annotation_uid",
+    "task",
+    "class_scope",
+    "representation",
+    "path",
+    "label_map_version",
+    "provenance_type",
+    "creator_or_model",
+    "creator_version",
+    "parent_annotation_uid",
+    "completeness",
+    "review_region_path",
+    "input_visibility",
+    "quality_status",
+    "intended_role",
+    "reference_role",
+    "adjudication_status",
+    "reader_ids",
+    "protocol_hash",
+    "visibility_evidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v41.0"
+    },
+    "annotation_uid": {
+      "type": "string"
+    },
+    "task": {
+      "type": "string",
+      "enum": [
+        "A",
+        "U",
+        "R_geo",
+        "R_clin",
+        "surface_defect",
+        "localization"
+      ]
+    },
+    "class_scope": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "representation": {
+      "type": "string",
+      "enum": [
+        "voxel",
+        "surface",
+        "bbox",
+        "instance",
+        "study"
+      ]
+    },
+    "path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "label_map_version": {
+      "type": "string"
+    },
+    "provenance_type": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "expert_corrected",
+        "automated",
+        "box_fill",
+        "geometry",
+        "unknown"
+      ]
+    },
+    "creator_or_model": {
+      "type": "string"
+    },
+    "creator_version": {
+      "type": "string"
+    },
+    "parent_annotation_uid": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "completeness": {
+      "type": "string",
+      "enum": [
+        "target_complete",
+        "region_complete",
+        "positive_only",
+        "unreviewed",
+        "unknown"
+      ]
+    },
+    "review_region_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "input_visibility": {
+      "type": "string",
+      "enum": [
+        "visible",
+        "limited",
+        "unobservable",
+        "unknown"
+      ]
+    },
+    "quality_status": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "needs_review",
+        "rejected"
+      ]
+    },
+    "intended_role": {
+      "type": "string",
+      "enum": [
+        "train",
+        "val",
+        "test",
+        "pseudo_only",
+        "excluded"
+      ]
+    },
+    "reference_role": {
+      "type": "string",
+      "enum": [
+        "expert_voxel",
+        "weak_localization",
+        "pseudo_only",
+        "unverified"
+      ]
+    },
+    "adjudication_status": {
+      "type": "string",
+      "enum": [
+        "single_reader",
+        "dual_reader",
+        "adjudicated",
+        "consensus",
+        "not_applicable"
+      ]
+    },
+    "reader_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "protocol_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "visibility_evidence": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

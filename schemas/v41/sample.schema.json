@@ -1,0 +1,315 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "anatobind/v41/sample.schema.json",
+  "title": "SampleRecord v4.1",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shape",
+        "spacing_mm",
+        "affine",
+        "axis_codes",
+        "units"
+      ],
+      "properties": {
+        "shape": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "spacing_mm": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "type": "number"
+          }
+        },
+        "affine": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "axis_codes": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "type": "string"
+          }
+        },
+        "units": {
+          "type": "string",
+          "enum": [
+            "mm"
+          ]
+        }
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "sample_uid",
+    "source_dataset",
+    "source_release",
+    "cohort",
+    "patient_uid",
+    "study_uid",
+    "session_uid",
+    "parent_scan_uid",
+    "derivative_uid",
+    "leakage_group_uid",
+    "exposure_history",
+    "split",
+    "native_acquisition_dim",
+    "observation_mode",
+    "image_paths",
+    "modality_names",
+    "modality_is_synthetic",
+    "available_modality_mask",
+    "image_geometry",
+    "original_geometry",
+    "transform_chain",
+    "geometry_status",
+    "label_value_qc",
+    "anatomy_ontology_version",
+    "abnormality_ontology_version",
+    "relation_semantics_version",
+    "annotation_records",
+    "review_regions",
+    "visibility_records",
+    "quality_records",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v41.0"
+    },
+    "sample_uid": {
+      "type": "string"
+    },
+    "source_dataset": {
+      "type": "string"
+    },
+    "source_release": {
+      "type": "string"
+    },
+    "cohort": {
+      "type": "string"
+    },
+    "patient_uid": {
+      "type": "string"
+    },
+    "study_uid": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "session_uid": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "parent_scan_uid": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "derivative_uid": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "leakage_group_uid": {
+      "type": "string"
+    },
+    "exposure_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "experiment_id",
+          "role",
+          "recorded_at"
+        ],
+        "properties": {
+          "experiment_id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "train",
+              "val",
+              "test",
+              "ssl",
+              "pseudo_label",
+              "unknown"
+            ]
+          },
+          "recorded_at": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "split": {
+      "type": "string",
+      "enum": [
+        "train",
+        "development_val",
+        "locked_test",
+        "unassigned",
+        "excluded"
+      ]
+    },
+    "native_acquisition_dim": {
+      "type": "integer",
+      "enum": [
+        2,
+        3
+      ]
+    },
+    "observation_mode": {
+      "type": "string",
+      "enum": [
+        "3d",
+        "strict_2d",
+        "native_2d"
+      ]
+    },
+    "image_paths": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "modality_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "modality_is_synthetic": {
+      "type": "array",
+      "items": {
+        "type": "boolean"
+      }
+    },
+    "available_modality_mask": {
+      "type": "array",
+      "items": {
+        "type": "boolean"
+      }
+    },
+    "image_geometry": {
+      "$ref": "#/definitions/geometry"
+    },
+    "original_geometry": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "transform_chain": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "geometry_status": {
+      "type": "string",
+      "enum": [
+        "not_checked",
+        "pass",
+        "fail",
+        "needs_review"
+      ]
+    },
+    "label_value_qc": {
+      "type": "string",
+      "enum": [
+        "not_checked",
+        "pass",
+        "fail",
+        "needs_review"
+      ]
+    },
+    "anatomy_ontology_version": {
+      "type": "string"
+    },
+    "abnormality_ontology_version": {
+      "type": "string"
+    },
+    "relation_semantics_version": {
+      "type": "string"
+    },
+    "annotation_records": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "review_regions": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "visibility_records": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "quality_records": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "ingest_commit",
+        "ingest_time"
+      ],
+      "properties": {
+        "ingest_commit": {
+          "type": "string"
+        },
+        "ingest_time": {
+          "type": "string"
+        },
+        "source_manifest_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

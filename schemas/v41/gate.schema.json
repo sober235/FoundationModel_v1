@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "anatobind/v41/gate.schema.json",
+  "title": "GateDecision v4.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "gate_id",
+    "scope_hash",
+    "engineering_status",
+    "scientific_conclusion",
+    "evidence_hashes",
+    "blockers",
+    "approved_by",
+    "approved_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v41.0"
+    },
+    "gate_id": {
+      "type": "string"
+    },
+    "scope_hash": {
+      "type": "string"
+    },
+    "engineering_status": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "BLOCKED",
+        "FAIL"
+      ]
+    },
+    "scientific_conclusion": {
+      "type": "string",
+      "enum": [
+        "SUPPORTED",
+        "NOT_SUPPORTED",
+        "INCONCLUSIVE",
+        "NOT_EVALUATED"
+      ]
+    },
+    "evidence_hashes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "approved_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "approved_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

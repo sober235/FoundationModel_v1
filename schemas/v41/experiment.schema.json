@@ -1,0 +1,146 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "anatobind/v41/experiment.schema.json",
+  "title": "RunRegistration v4.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "code_sha256",
+    "config_sha256",
+    "data_manifest_sha256",
+    "split_sha256",
+    "ontology_sha256",
+    "supervision_sha256",
+    "initialization",
+    "readable_roles",
+    "budget",
+    "hardware",
+    "seeds",
+    "numerical_settings",
+    "evaluation_rules",
+    "approvals"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v41.0"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "code_sha256": {
+      "type": "string"
+    },
+    "config_sha256": {
+      "type": "string"
+    },
+    "data_manifest_sha256": {
+      "type": "string"
+    },
+    "split_sha256": {
+      "type": "string"
+    },
+    "ontology_sha256": {
+      "type": "string"
+    },
+    "supervision_sha256": {
+      "type": "string"
+    },
+    "initialization": {
+      "type": "object",
+      "required": [
+        "kind",
+        "exposure_status"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "random",
+            "checkpoint"
+          ]
+        },
+        "checkpoint_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exposure_status": {
+          "type": "string",
+          "enum": [
+            "none",
+            "verified_clean",
+            "unverified",
+            "exposed"
+          ]
+        }
+      }
+    },
+    "readable_roles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "train",
+          "development_val"
+        ]
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": [
+        "max_steps",
+        "max_wall_seconds",
+        "approved_by"
+      ],
+      "properties": {
+        "max_steps": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_wall_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "approved_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "hardware": {
+      "type": "object"
+    },
+    "seeds": {
+      "type": "object"
+    },
+    "numerical_settings": {
+      "type": "object"
+    },
+    "evaluation_rules": {
+      "type": "object"
+    },
+    "approvals": {
+      "type": "object"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "TODO",
+        "IN_PROGRESS",
+        "BLOCKED",
+        "PASS",
+        "FAIL",
+        "DEFERRED"
+      ]
+    }
+  }
+}

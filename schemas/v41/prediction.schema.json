@@ -1,0 +1,145 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "anatobind/v41/prediction.schema.json",
+  "title": "Prediction v4.1 (reference-free)",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shape",
+        "spacing_mm",
+        "affine",
+        "axis_codes",
+        "units"
+      ],
+      "properties": {
+        "shape": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "spacing_mm": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "type": "number"
+          }
+        },
+        "affine": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "axis_codes": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "type": "string"
+          }
+        },
+        "units": {
+          "type": "string",
+          "enum": [
+            "mm"
+          ]
+        }
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "sample_uid",
+    "observation_uid",
+    "mode",
+    "geometry",
+    "a_prob",
+    "u_prob",
+    "instances",
+    "relations",
+    "acceptance",
+    "lineage"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v41.0"
+    },
+    "sample_uid": {
+      "type": "string"
+    },
+    "observation_uid": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "3d",
+        "strict_2d",
+        "native_2d"
+      ]
+    },
+    "geometry": {
+      "$ref": "#/definitions/geometry"
+    },
+    "a_prob": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "u_prob": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "required": [
+        "accepted"
+      ],
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "lineage": {
+      "type": "object"
+    }
+  }
+}
