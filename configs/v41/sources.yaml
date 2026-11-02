@@ -1,0 +1,118 @@
+# Source-level inventory configuration for the 17 top-level raw entries.
+# No case identifiers appear here; patterns describe directory layout only.
+schema_version: v41.0
+note: Source-level inventory config. Every entry starts pending_verification; patterns describe the observed directory layout
+  and do not assert decoded content or patient counts.
+credential_like_patterns:
+- '*token*'
+- '*credential*'
+- '*.key'
+- '*.pem'
+- .netrc
+- '*secret*'
+- '*password*'
+archive_suffixes:
+- .tar.gz
+- .tgz
+- .zip
+- .tar
+- .7z
+sources:
+  ISLES_ltr:
+    priority: P0
+    role: U
+    status: pending_verification
+    case_patterns:
+    - ISLES-2022/sub-*
+    - ISLES-2022/derivatives/sub-*
+    image_patterns:
+    - ISLES-2022/sub-*/ses-*/dwi/*.nii.gz
+    - ISLES-2022/sub-*/ses-*/anat/*.nii.gz
+    label_patterns:
+    - ISLES-2022/derivatives/sub-*/ses-*/*_msk.nii.gz
+    notes: DWI/ADC-mask space and FLAIR registration must be checked in T05; derivatives share the case id of rawdata.
+  SKM-TEA_ltr:
+    priority: P0
+    role: A
+    status: pending_verification
+    case_patterns:
+    - image_files/*.h5
+    - segmentation_masks/dicom-track/*.nii.gz
+    - segmentation_masks/raw-data-track/*.nii.gz
+    image_patterns:
+    - image_files/*.h5
+    label_patterns:
+    - segmentation_masks/*/*.nii.gz
+    notes: annotations/v1.0.0/*.json carry 3D boxes (weak U, limited R); dicoms/*.tar.gz are per-scan archives, not extra
+      cases; six-class channel order must be read from source, not assumed.
+  SKM-TEA:
+    priority: P1
+    role: raw_kspace
+    status: pending_verification
+    case_patterns:
+    - files_recon_calib-24/*.h5
+    image_patterns:
+    - files_recon_calib-24/*.h5
+    notes: TB-scale k-space; not a phase-1 decode target. .truncated copies are quarantined.
+  UCSF-PDGM_lh:
+    priority: P1
+    role: U
+    status: pending_verification
+    notes: Follow-up patient mapping and mask versions pending review (T03).
+  UCSF-BMSR_cbb:
+    priority: P1
+    role: U
+    status: pending_verification
+    notes: Original seg vs BraTS-seg label differences pending review (T04).
+  SibBMS_ms:
+    priority: P1
+    role: cohort
+    status: pending_verification
+    notes: MS and Norm cohorts reuse sub-### numbering; cohort prefix must stay in patient_uid.
+  derived:
+    priority: P1
+    role: legacy_derived
+    status: pending_verification
+    notes: Read-only legacy outputs; Dataset902 box-fill is never an expert U reference.
+  fastMRI_lh_brain_knee:
+    priority: P2
+    role: image_only
+    status: pending_verification
+  fastMR_lh_bran_knee_rawdata:
+    priority: P2
+    role: raw_kspace
+    status: pending_verification
+  HCP_lh_T1T2:
+    priority: P2
+    role: image_only
+    status: pending_verification
+  OASIS_cbb:
+    priority: P2
+    role: image_only
+    status: pending_verification
+  AMOS_cbb:
+    priority: P2
+    role: out_of_scope_ct_mri
+    status: pending_verification
+  CMRxRecon_ty:
+    priority: P2
+    role: out_of_scope_cardiac
+    status: pending_verification
+  KMAR-50K_ty:
+    priority: P2
+    role: artifact
+    status: pending_verification
+  SPIDER_cbb:
+    priority: P2
+    role: A_spine
+    status: pending_verification
+  TotalSegmentator_MRI_cbb:
+    priority: P2
+    role: A_auto
+    status: pending_verification
+  TotalSegmentor_MRI_cbb:
+    priority: P2
+    role: A_auto_duplicate_candidate
+    status: pending_verification
+    notes: Possible duplicate of TotalSegmentator_MRI_cbb; confirm before counting.
+

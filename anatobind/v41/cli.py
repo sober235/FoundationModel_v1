@@ -16,18 +16,26 @@ class PrivateParser(argparse.ArgumentParser):
         self.exit(2, f"{self.prog}: error: invalid_arguments\n")
 
 
-SUBCOMMANDS: dict[str, object] = {}
+from pathlib import Path
+
+REGISTRARS = ("anatobind.v41.inventory",)
+
+
+def package_repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
 
 
 def build_parser() -> PrivateParser:
+    import importlib
+
     parser = PrivateParser(
         prog="anatobind.v41",
         description="AnatoBind-MRI v4.1 command contract (anatobind.v41). "
         "Subcommands appear only after their task is implemented and tested.",
     )
     subparsers = parser.add_subparsers(dest="command")
-    for name, register in SUBCOMMANDS.items():
-        register(subparsers.add_parser(name))
+    for module_name in REGISTRARS:
+        importlib.import_module(module_name).register_cli(subparsers)
     return parser
 
 
