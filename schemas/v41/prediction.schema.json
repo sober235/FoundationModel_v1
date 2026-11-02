@@ -112,17 +112,36 @@
     "instances": {
       "type": "array",
       "items": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["instance_id", "class_name", "score", "voxel_count"],
+        "properties": {
+          "instance_id": {"type": "integer"},
+          "class_name": {"type": "string"},
+          "score": {"type": "number"},
+          "voxel_count": {"type": "integer", "minimum": 0},
+          "bbox_voxel": {"type": ["array", "null"], "minItems": 6, "maxItems": 6, "items": {"type": "integer"}},
+          "host_structure": {"type": ["string", "null"]}
+        }
       }
     },
     "relations": {
       "type": "array",
       "items": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["subject_instance_id", "predicate", "object_structure", "score"],
+        "properties": {
+          "subject_instance_id": {"type": "integer"},
+          "predicate": {"type": "string"},
+          "object_structure": {"type": "string"},
+          "score": {"type": "number"}
+        }
       }
     },
     "acceptance": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "accepted"
       ],
@@ -139,7 +158,15 @@
       }
     },
     "lineage": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkpoint_sha256"],
+      "properties": {
+        "checkpoint_sha256": {"type": ["string", "null"]},
+        "code_commit": {"type": ["string", "null"]},
+        "config_sha256": {"type": ["string", "null"]},
+        "run_id": {"type": ["string", "null"]}
+      }
     }
   }
 }

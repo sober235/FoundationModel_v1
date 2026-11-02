@@ -16,6 +16,7 @@ LOCALIZATION_ONLY = ("bbox", "instance", "study")
 COMPLETE = ("target_complete",)
 REGION = ("region_complete",)
 POSITIVE_ONLY = ("positive_only",)
+EXCLUDED_INTENDED_ROLES = ("excluded", "pseudo_only")
 
 
 def annotation_eligibility(annotation: dict, task: str, class_scope: list[str]) -> dict:
@@ -53,13 +54,16 @@ def annotation_eligibility(annotation: dict, task: str, class_scope: list[str]) 
 
 def build_eligibility(record: dict, task: str, class_scope: list[str], shape: tuple[int, ...],
                       review_regions: dict[str, np.ndarray] | None = None,
-                      targets: dict[str, np.ndarray] | None = None) -> np.ndarray:
+                      targets: dict[str, np.ndarray] | None = None,
+                      roles: tuple[str, ...] = ("qualified",)) -> np.ndarray:
     review_regions = review_regions or {}
     targets = targets or {}
     eligible = np.zeros((len(class_scope), *shape), dtype=bool)
     for annotation in record.get("annotation_records", []):
+        if annotation.get("intended_role") in EXCLUDED_INTENDED_ROLES:
+            continue
         decision = annotation_eligibility(annotation, task, class_scope)
-        if decision["role"] == "none" or decision["localization_only"]:
+        if decision["role"] not in roles or decision["localization_only"]:
             continue
         completeness = annotation.get("completeness")
         for index, name in enumerate(class_scope):

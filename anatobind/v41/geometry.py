@@ -25,12 +25,21 @@ def geometry_from_nifti(image) -> dict:
         "spacing_mm": spacing,
         "affine": [[float(v) for v in row] for row in affine],
         "axis_codes": [str(c) for c in __import__("nibabel").aff2axcodes(affine)],
-        "units": "mm" if xyz_unit in ("mm", "unknown") else _UNIT_NAMES.get(xyz_unit, str(xyz_unit)),
+        "units": _UNIT_NAMES.get(xyz_unit, str(xyz_unit)),
         "units_declared": str(xyz_unit),
         "qform_code": int(header["qform_code"]),
         "sform_code": int(header["sform_code"]),
         "physical_fov_mm": [float(round(s * n, 6)) for s, n in zip(spacing, shape)],
     }
+
+
+SCHEMA_GEOMETRY_KEYS = ("shape", "spacing_mm", "affine", "axis_codes", "units")
+
+
+def to_schema_geometry(geometry: dict) -> dict:
+    if geometry.get("units") != "mm":
+        raise ValueError("UNITS_NOT_MM")
+    return {key: geometry[key] for key in SCHEMA_GEOMETRY_KEYS}
 
 
 def audit_geometry(image: dict, label: dict, atol_affine: float = 1e-3, atol_spacing: float = 1e-3) -> dict:

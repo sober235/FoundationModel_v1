@@ -55,7 +55,7 @@ def test_isles_records_validate_and_carry_exposure():
         validated = validate_sample(record)
         assert validated.split == "unassigned"
         assert validated.exposure_history[0]["role"] == "unknown"
-        assert validated.annotation_records[0].reference_role == "expert_voxel"
+        assert validated.annotation_records[0].reference_role == "unverified"
         assert validated.annotation_records[0].completeness == "unknown"
         assert validated.image_geometry is None
         assert validated.geometry_status == "not_checked"

@@ -1,13 +1,15 @@
 # T07 — manifest v1 与 G0 门决策（匿名结论）
 
 日期：2026-11-02。命令：`audit --scope isles_u`、`audit --scope skm_a`、`resolve-identities`、`build-manifest`、`gate --gate G0-U/G0-A/G0-joint`。
+**修订（评审后）**：ISLES 发布 mask 的参照角色由 `expert_voxel` 改为 `unverified`（协议未核实，不得作为专家参照）；`expert_voxel` 现要求 voxel/surface 表示 + accepted + target/region_complete；审计状态词表限定为 pass/fail/missing，作用域必填；门决策直接绑定审计文件哈希。重跑产物：`audits/isles_u_v2/`、`registry/manifest_v2/`、`registry/g0_decisions_v2/`（**权威版本**；v1 目录保留为历史）。结论不变：0/405 准入，三门 FAIL。
+
 私有产物：`$PRIVATE_ROOT/audits/{isles_u_v1,skm_a_v1}/`（`annotation_provenance_report.csv`、`input_visibility_report.csv`、`eligibility_coverage.csv`、`registration_records.jsonl`）、`audits/identity_v1/resolve/`（`patient_alias_report.csv`、`split_leakage_report.json`、`groups.json`）、`registry/gate_inputs_v1/`（审计索引与门输入）、`registry/manifest_v1/`（`manifest.jsonl` + `manifest.lock.json`，不可变）、`registry/g0_decisions_v1/`（三份门决策；`registry/gates_v1/` 为修复前的过期版本，已被取代）。
 
 ## 注册记录（P0）
 
 | 来源 | 记录 | 患者组 | 标注 | 参照角色 / 完整性 | 监督资格 |
 |---|---|---|---|---|---|
-| ISLES_ltr（U） | 250 | 250 | 250 个 mask | `expert_voxel`，`manual`，completeness **unknown**（发布协议未核实） | 250/250 `none`（COMPLETENESS_UNKNOWN） |
+| ISLES_ltr（U） | 250 | 250 | 250 个 mask | `unverified`（v1 曾记 `expert_voxel`，评审后改正），`manual`，completeness **unknown**（发布协议未核实） | 250/250 `none`（COMPLETENESS_UNKNOWN） |
 | SKM-TEA_ltr（A） | 155 | 155（按标注 subject_id） | 310 个 mask + 476 个 bbox | mask：`expert_voxel`，`target_complete`；bbox：`weak_localization`，`positive_only` | A：310 `qualified`；U(bbox)：470 `qualified`（仅定位）、6 `none`（confidence 0 → rejected） |
 
 - 所有 405 条记录 `split=unassigned`，并带 `legacy_foundation_model_unverified` 曝光项（角色 unknown）：**没有任何病例可被称为未曝光盲测**。

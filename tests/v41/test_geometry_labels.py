@@ -84,7 +84,7 @@ def test_geometry_from_nifti_records_physical_space(tmp_path):
     assert geometry["spacing_mm"] == [0.5, 0.5, 2.0]
     assert geometry["axis_codes"] == ["A", "L", "S"]
     assert geometry["physical_fov_mm"] == [2.0, 3.0, 16.0]
-    assert geometry["units"] == "mm"
+    assert geometry["units"] == "unknown" and geometry["units_declared"] == "unknown"
     assert "qform_code" in geometry and "sform_code" in geometry
 
 

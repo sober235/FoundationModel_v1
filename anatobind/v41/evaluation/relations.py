@@ -17,7 +17,8 @@ def relation_scores(predicted: list[tuple], truth: list[tuple], lesions_without_
     tp = len(predicted_set & truth_set)
     precision = tp / len(predicted_set) if predicted_set else 0.0
     recall = tp / len(truth_set) if truth_set else 0.0
-    denominator = len(truth_set) + lesions_without_reference
+    lesions_with_reference = len({x[0] for x in truth_set})
+    denominator = lesions_with_reference + lesions_without_reference
     return {
         "micro_precision": precision,
         "micro_recall": recall,
@@ -25,5 +26,6 @@ def relation_scores(predicted: list[tuple], truth: list[tuple], lesions_without_
         "per_predicate": per_predicate,
         "lesions_without_reference": lesions_without_reference,
         "reference_coverage_denominator": denominator,
-        "reference_coverage": (len(truth_set) / denominator) if denominator else None,
+        "lesions_with_reference": lesions_with_reference,
+        "reference_coverage": (lesions_with_reference / denominator) if denominator else None,
     }

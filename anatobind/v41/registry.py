@@ -25,6 +25,9 @@ REQUIRED_AUDITS = (
     "input_visibility_report",
 )
 QUALIFIED_PROVENANCE = ("manual", "expert_corrected")
+AUDIT_STATUSES = ("pass", "fail", "missing")
+EXPERT_REPRESENTATIONS = ("voxel", "surface")
+EXPERT_COMPLETENESS = ("target_complete", "region_complete")
 GATES = ("G0-U", "G0-A", "G0-joint")
 GATE_SIGNOFFS = {
     "G0-U": ("target_abnormality_definition",),
@@ -41,16 +44,27 @@ class ManifestError(ValueError):
 
 def check_reference_qualification(record: SampleRecord) -> None:
     for annotation in record.annotation_records:
-        if annotation.reference_role == "expert_voxel" and annotation.provenance_type not in QUALIFIED_PROVENANCE:
+        if annotation.reference_role != "expert_voxel":
+            continue
+        if (annotation.provenance_type not in QUALIFIED_PROVENANCE
+                or annotation.representation not in EXPERT_REPRESENTATIONS
+                or annotation.quality_status != "accepted"
+                or annotation.completeness not in EXPERT_COMPLETENESS):
             raise ManifestError("UNQUALIFIED_REFERENCE")
+
+
+def _check_status(status) -> str:
+    if status not in AUDIT_STATUSES:
+        raise ManifestError("INVALID_AUDIT_STATUS")
+    return status
 
 
 def _audit_index(audit_reports: list[dict], source: str) -> dict[str, str]:
     index: dict[str, str] = {}
     for report in audit_reports:
+        status = _check_status(report.get("status", "missing"))
         if report.get("scope") not in (source, "all"):
             continue
-        status = report.get("status", "missing")
         previous = index.get(report["name"])
         if previous is None or (previous != "fail" and status == "fail") or (previous == "missing" and status != "missing"):
             index[report["name"]] = status
@@ -111,7 +125,7 @@ def publish_manifest(records: list[SampleRecord], audit_reports: list[dict], out
         "entries": len(entries),
         "admitted": sum(1 for e in entries if e["status"] == "admitted"),
         "blocked": sum(1 for e in entries if e["status"] == "blocked"),
-        "audit_reports": {f'{a["name"]}@{a.get("scope", "all")}': {"status": a.get("status"), "sha256": a.get("sha256")}
+        "audit_reports": {f'{a["name"]}@{a["scope"]}': {"status": a.get("status"), "sha256": a.get("sha256")}
                           for a in audit_reports},
         "required_audits": list(REQUIRED_AUDITS),
     }
@@ -120,10 +134,20 @@ def publish_manifest(records: list[SampleRecord], audit_reports: list[dict], out
             "manifest_sha256": lock["manifest_sha256"]}
 
 
-def evaluate_gate(gate_id: str, reports: dict[str, str], approvals: dict,
-                  joint_evidence: dict | None = None) -> GateDecision:
+def evaluate_gate(gate_id: str, reports: dict[str, str] | list[dict], approvals: dict,
+                  joint_evidence: dict | None = None, source: str | None = None) -> GateDecision:
     if gate_id not in GATES:
         raise ManifestError("UNKNOWN_GATE")
+    if isinstance(reports, list):
+        if source is None:
+            raise ManifestError("GATE_SOURCE_REQUIRED")
+        evidence = sorted({e["sha256"] for e in reports
+                           if e.get("scope") in (source, "all") and e.get("sha256")})
+        reports = _audit_index(reports, source)
+    else:
+        for status in reports.values():
+            _check_status(status)
+        evidence = [hashlib.sha256(json.dumps(reports, sort_keys=True).encode()).hexdigest()]
     blockers = []
     failed = [name for name in REQUIRED_AUDITS if reports.get(name) == "fail"]
     missing = [name for name in REQUIRED_AUDITS if reports.get(name, "missing") == "missing"]
@@ -153,7 +177,7 @@ def evaluate_gate(gate_id: str, reports: dict[str, str], approvals: dict,
         scope_hash=hashlib.sha256(json.dumps(reports, sort_keys=True).encode()).hexdigest(),
         engineering_status=engineering,
         scientific_conclusion="NOT_EVALUATED",
-        evidence_hashes=[hashlib.sha256(json.dumps(reports, sort_keys=True).encode()).hexdigest()],
+        evidence_hashes=evidence,
         blockers=blockers,
         approved_by=", ".join(approvers) if approvers else None,
         approved_at=None if not approvers else max(a["approved_at"] for a in approvals.values()
@@ -166,10 +190,12 @@ def assemble_audit_index(entries: list[dict]) -> list[dict]:
         path = Path(entry["path"])
         if not path.is_file():
             raise ManifestError("AUDIT_FILE_MISSING")
+        if not entry.get("scope"):
+            raise ManifestError("AUDIT_SCOPE_MISSING")
         assembled.append({
             "name": entry["name"],
-            "scope": entry.get("scope", "all"),
-            "status": entry["status"],
+            "scope": entry["scope"],
+            "status": _check_status(entry.get("status")),
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         })
     names = [(e["name"], e["scope"]) for e in assembled]
@@ -222,12 +248,18 @@ def _cli_gate(args) -> int:
     from anatobind.v41.paths import resolve_private_output, write_private_json
 
     out = resolve_private_output(Path(args.out), Path(args.private_root), package_repo_root())
-    reports = json.loads(Path(args.reports).read_text())
+    if args.audit_index:
+        reports = assemble_audit_index(json.loads(Path(args.audit_index).read_text()))
+    elif args.reports:
+        reports = json.loads(Path(args.reports).read_text())
+    else:
+        raise ValueError("GATE_INPUT_REQUIRED")
     approvals = json.loads(Path(args.approvals).read_text()) if args.approvals else {}
     joint = json.loads(Path(args.joint_evidence).read_text()) if args.joint_evidence else None
-    decision = evaluate_gate(args.gate, reports, approvals, joint_evidence=joint)
+    decision = evaluate_gate(args.gate, reports, approvals, joint_evidence=joint, source=args.source)
     out.mkdir(mode=0o700, parents=True, exist_ok=True)
-    write_private_json(out / f"{args.gate}.json", dict(decision.__dict__))
+    name = f"{args.gate}.{args.source}.json" if args.source else f"{args.gate}.json"
+    write_private_json(out / name, dict(decision.__dict__))
     print(json.dumps({"gate_id": decision.gate_id, "engineering_status": decision.engineering_status,
                       "scientific_conclusion": decision.scientific_conclusion,
                       "blockers": len(decision.blockers)}))
@@ -250,7 +282,9 @@ def register_cli(subparsers) -> None:
     manifest.set_defaults(func=_cli_build_manifest)
     gate = subparsers.add_parser("gate")
     gate.add_argument("--gate", required=True, choices=list(GATES))
-    gate.add_argument("--reports", required=True)
+    gate.add_argument("--reports")
+    gate.add_argument("--audit-index")
+    gate.add_argument("--source")
     gate.add_argument("--approvals")
     gate.add_argument("--joint-evidence")
     gate.add_argument("--out", required=True)

@@ -77,8 +77,10 @@ def segmentation_metrics(pred: np.ndarray, truth: np.ndarray, eligible: np.ndarr
                          spacing: tuple[float, ...], policy: dict, strict: bool = False) -> dict:
     missing = check_policy(policy, strict)
     tolerance = policy.get("surface_tolerance_mm")
+    eligible = _as_bool(eligible)
+    pred, truth = _as_bool(pred) & eligible, _as_bool(truth) & eligible
     metrics = {
-        "dice": dice_score(pred, truth, eligible),
+        "dice": dice_score(pred, truth),
         "hd95_mm": hd95(pred, truth, spacing),
         "nsd": None if tolerance is None else nsd(pred, truth, spacing, tolerance),
         "surface_tolerance_mm": tolerance,

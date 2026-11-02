@@ -78,6 +78,9 @@ def build_registration_records(scope: str, assets: list[dict], skm_annotations: 
     if scope == "isles_u":
         for pair in isles.pair_assets(assets):
             case = pair["case_id"]
+            present = [role for role in ("dwi", "adc", "flair") if role in pair["images"]]
+            if not present:
+                continue
             records.append({
                 "schema_version": "v41.0",
                 "sample_uid": f"isles2022:{case}:ses-0001",
@@ -94,10 +97,10 @@ def build_registration_records(scope: str, assets: list[dict], skm_annotations: 
                 "split": "unassigned",
                 "native_acquisition_dim": 3,
                 "observation_mode": "3d",
-                "image_paths": [pair["images"][role] for role in ("dwi", "adc", "flair") if role in pair["images"]],
-                "modality_names": [role for role in ("dwi", "adc", "flair") if role in pair["images"]],
-                "modality_is_synthetic": [False] * len(pair["images"]),
-                "available_modality_mask": [role in pair["images"] for role in ("dwi", "adc", "flair")],
+                "image_paths": [pair["images"][role] for role in present],
+                "modality_names": list(present),
+                "modality_is_synthetic": [False] * len(present),
+                "available_modality_mask": [True] * len(present),
                 "image_geometry": None,
                 "original_geometry": None,
                 "transform_chain": [],
@@ -122,7 +125,7 @@ def build_registration_records(scope: str, assets: list[dict], skm_annotations: 
                     "input_visibility": "unknown",
                     "quality_status": "accepted",
                     "intended_role": "train",
-                    "reference_role": "expert_voxel",
+                    "reference_role": "unverified",
                     "adjudication_status": "not_applicable",
                     "reader_ids": ["isles2022_release"],
                     "protocol_hash": None,
@@ -136,6 +139,8 @@ def build_registration_records(scope: str, assets: list[dict], skm_annotations: 
     else:
         skm_annotations = skm_annotations or {}
         for pair in skm.pair_assets(assets):
+            if not pair["h5_relpath"]:
+                continue
             case = pair["case_id"]
             meta = skm_annotations.get(case, {})
             annotations = []
@@ -203,7 +208,7 @@ def build_registration_records(scope: str, assets: list[dict], skm_annotations: 
                 "split": "unassigned",
                 "native_acquisition_dim": 3,
                 "observation_mode": "3d",
-                "image_paths": [pair["h5_relpath"]] if pair["h5_relpath"] else [],
+                "image_paths": [pair["h5_relpath"]],
                 "modality_names": ["qdess_dual_echo"],
                 "modality_is_synthetic": [False],
                 "available_modality_mask": [True],

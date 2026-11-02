@@ -100,8 +100,10 @@ def freeze_splits(records: list[SampleRecord], policy: dict, out: Path, groups: 
     body["leakage"] = leakage
     out = Path(out)
     out.mkdir(mode=0o700, parents=True, exist_ok=True)
-    write_private_json(out / "splits.json", body)
     write_private_json(out / "split_leakage_report.json", leakage)
+    if not leakage["pass"]:
+        raise ValueError("SPLIT_LEAKAGE")
+    write_private_json(out / "splits.json", body)
     _write_csv(out / "patient_alias_report.csv", alias_report_rows(records, aliases, groups),
                ["a", "b", "kind", "status", "evidence", "group", "a_in_records", "b_in_records"])
     _write_jsonl(out / "exposure_ledger.jsonl", [

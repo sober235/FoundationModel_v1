@@ -37,3 +37,4 @@
 - 仅 ISLES DWI/ADC + mask、SKM H5(echo1/echo2) + 转置后 dicom 轨道掩膜 满足体素级对齐；其余组合（ISLES FLAIR、SKM raw 轨道）进入 manifest 时应判 `fail`/排除。
 - 3 例 ISLES 全零 mask、SKM 8 个非 160 层掩膜（4 例 × 2 轨道）需在准入前人工复核。
 - 没有任何 QC 结果构成临床意义上的“配准合格”；`atol` 只是数值一致性阈值。
+- 单位声明：ISLES NIfTI 头声明 `mm`；SKM NIfTI 掩膜头单位为 `unknown`（spacing 0.3125/0.8 与 qDESS 协议一致，但未声明）。`geometry_from_nifti` 不再把 unknown 伪装为 mm；进入 schema 前须经 `to_schema_geometry`，unknown 单位的记录应标 `geometry_status=needs_review`。
