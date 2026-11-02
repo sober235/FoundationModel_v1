@@ -3,7 +3,7 @@ import copy
 import pytest
 
 SECRET_PATH = "/private/zz_patient_root/case_000777"
-SECRET_CASE = "CASE_SECRET_000777"
+SECRET_CASE = "******************"
 
 
 def _annotation():
@@ -87,3 +87,16 @@ def sample_dict():
 @pytest.fixture
 def secret_values():
     return SECRET_PATH, SECRET_CASE
+
+
+@pytest.fixture
+def make_sample():
+    def build(**overrides):
+        record = copy.deepcopy(_sample())
+        annotation_overrides = overrides.pop("annotation", None)
+        record.update(overrides)
+        if annotation_overrides is not None:
+            record["annotation_records"][0].update(annotation_overrides)
+        return record
+
+    return build

@@ -18,7 +18,7 @@ class PrivateParser(argparse.ArgumentParser):
 
 from pathlib import Path
 
-REGISTRARS = ("anatobind.v41.inventory",)
+REGISTRARS = ("anatobind.v41.inventory", "anatobind.v41.splits")
 
 
 def package_repo_root() -> Path:
