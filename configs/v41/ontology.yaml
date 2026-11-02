@@ -1,0 +1,76 @@
+# Explicit semantic mappings for v4.1. Integers are never semantics on their
+# own: every source encoding is named, versioned and mapped here.
+schema_version: v41.0
+
+anatomy:
+  skm_a6_v1:
+    description: SKM-TEA six-class cartilage/meniscus anatomy (Contract 4.1). Mutually exclusive with background 0.
+    background: 0
+    classes:
+      "1": {name: patellar_cartilage, host: patellar_cartilage, laterality: none}
+      "2": {name: femoral_cartilage, host: femoral_cartilage, laterality: none}
+      "3": {name: tibial_cartilage_medial, host: tibial_cartilage, laterality: medial}
+      "4": {name: tibial_cartilage_lateral, host: tibial_cartilage, laterality: lateral}
+      "5": {name: meniscus_medial, host: meniscus, laterality: medial}
+      "6": {name: meniscus_lateral, host: meniscus, laterality: lateral}
+    source_encodings:
+      dataset901_integer_labels:
+        status: observed
+        note: Integer labels 1-6 as exported by the legacy Dataset901; the integer table above follows it.
+      skm_h5_seg_channels:
+        status: pending_verification
+        layout: "(x, y, z, channel) bool, 6 channels"
+        assumed_channel_order:
+          - patellar_cartilage
+          - femoral_cartilage
+          - tibial_cartilage_medial
+          - tibial_cartilage_lateral
+          - meniscus_medial
+          - meniscus_lateral
+        evidence: SKM-TEA v1.0.0 documentation; must be confirmed per track against NIfTI integer masks in T05 before any training export.
+  synthseg_a32_v1:
+    description: Legacy SynthSeg 32-entity brain anatomy used by the old repository. Kept as a separate namespace; never merged with skm_a6_v1.
+    status: legacy_only
+
+skm_tissue_table_v1:
+  description: SKM-TEA annotations/v1.0.0 `tissues` table (annotation tissue_id namespace, distinct from A labels).
+  "1": {name: Meniscus, a_classes: [5, 6], status: in_scope_laterality_unknown}
+  "2": {name: ACL, a_classes: [], status: out_of_anatomy_scope}
+  "3": {name: PCL, a_classes: [], status: out_of_anatomy_scope}
+  "4": {name: Femoral Cartilage, a_classes: [2], status: in_scope}
+  "5": {name: Patellar Cartilage, a_classes: [1], status: in_scope}
+  "6": {name: Tibial Cartilage, a_classes: [3, 4], status: in_scope_laterality_unknown}
+  "-1": {name: none, a_classes: [], status: no_host}
+
+abnormality:
+  u_v1:
+    description: Target abnormality classes. Each class is formally runnable only after clinical sign-off.
+    classes:
+      cartilage_lesion: {source_supercategory: Cartilage Lesion, host_tissues: [4, 5, 6], clinical_definition_signoff: null}
+      meniscal_tear: {source_supercategory: Meniscal Tear, host_tissues: [1], clinical_definition_signoff: null}
+      ligament_tear: {source_supercategory: Ligament Tear, host_tissues: [2, 3], scope: out_of_anatomy_scope, clinical_definition_signoff: null}
+      effusion: {source_supercategory: Effusion, host_tissues: [-1], scope: no_host, clinical_definition_signoff: null}
+      ischemic_infarct: {source_dataset: ISLES_ltr, host_tissues: [], scope: brain_published_protocol, clinical_definition_signoff: null}
+
+relations:
+  r_geo_v1:
+    description: Geometric relations derived from qualified A and U references; engineering evidence only.
+    predicates: [inside, overlaps, abuts, near, disjoint]
+    near_mm: null
+    status: engineering
+  r_clin_v1:
+    description: Clinical relations (involvement, origin, compression). Requires independent clinical evidence.
+    predicates: [involves, originates_from, compresses]
+    clinical_definition_signoff: null
+
+tasks:
+  A: {ontology: skm_a6_v1, formal_requires: []}
+  U: {ontology: u_v1, formal_requires: [clinical_definition_signoff]}
+  R_geo: {ontology: r_geo_v1, formal_requires: [near_mm]}
+  R_clin: {ontology: r_clin_v1, formal_requires: [clinical_definition_signoff]}
+  surface_defect: {description: Observed surface footprint/grade of tissue loss, formal_requires: [clinical_definition_signoff], clinical_definition_signoff: null}
+  defect_volume: {description: Counterfactual missing-tissue volume. Not a phase-1 task; listed only so it is never confused with surface_defect., phase: deferred}
+
+pending_value_ranges:
+  ucsf_pdgm: {status: pending_verification, note: label integers not yet read from source; do not guess}
+  ucsf_bmsr: {status: pending_verification, note: original seg vs BraTS-seg differ; do not guess}

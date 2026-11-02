@@ -1,0 +1,31 @@
+{
+ "a6_hosts": [
+  "femoral_cartilage",
+  "meniscus",
+  "patellar_cartilage",
+  "tibial_cartilage"
+ ],
+ "errors": [],
+ "formal_runnable": {
+  "A": true,
+  "R_clin": false,
+  "R_geo": false,
+  "U": false,
+  "surface_defect": false
+ },
+ "h5_channel_order_status": "pending_verification",
+ "ontology_sha256": "4393caa67f4655ee0c42c65edbe4f0f357723c71d41fbbc6f155980f768aa9a6",
+ "pass": true,
+ "pending_value_ranges": [
+  "ucsf_bmsr",
+  "ucsf_pdgm"
+ ],
+ "versions": {
+  "abnormality": "u_v1",
+  "anatomy": "skm_a6_v1",
+  "anatomy_legacy": "synthseg_a32_v1",
+  "relation_clin": "r_clin_v1",
+  "relation_geo": "r_geo_v1",
+  "tissue_table": "skm_tissue_table_v1"
+ }
+}
