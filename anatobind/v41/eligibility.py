@@ -35,8 +35,11 @@ def annotation_eligibility(annotation: dict, task: str, class_scope: list[str]) 
         decision.update(role=role, reason="LOCALIZATION_ONLY", localization_only=True)
         return decision
     completeness = annotation.get("completeness")
+    if completeness == "unreviewed":
+        decision.update(role="none", reason="COMPLETENESS_UNREVIEWED")
+        return decision
     if completeness not in COMPLETE + REGION + POSITIVE_ONLY:
-        decision.update(role=role, reason="COMPLETENESS_UNREVIEWED")
+        decision.update(role="none", reason="COMPLETENESS_UNKNOWN")
         return decision
     covered = set(annotation.get("class_scope") or [])
     for name in class_scope:

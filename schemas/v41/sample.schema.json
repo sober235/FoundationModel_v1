@@ -225,7 +225,12 @@
       }
     },
     "image_geometry": {
-      "$ref": "#/definitions/geometry"
+      "$ref": "#/definitions/geometry",
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Physical space of the image grid; null only while geometry_status is not_checked."
     },
     "original_geometry": {
       "type": [
