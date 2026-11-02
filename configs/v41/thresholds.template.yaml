@@ -1,0 +1,13 @@
+# Frozen evaluation policy. Nulls must be filled by the clinical/statistics
+# owners before any production (development or locked) evaluation; the
+# evaluator BLOCKS on nulls in strict mode instead of backfilling values.
+schema_version: v41.0
+surface_tolerance_mm: null        # clinical owner, before T17 freeze
+iou_match_threshold: null         # frozen matching protocol
+fp_budget_per_scan: null          # clinical + statistics owner
+j_target_range: null              # [lower, upper] target interval for J
+a_noninferiority_margin: null     # statistics owner
+statistics:
+  bootstrap_n: 2000               # proposed default, confirm at registration
+  bootstrap_seed: 20261101        # proposed default, confirm at registration
+  ci_level: 0.95
