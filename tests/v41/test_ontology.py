@@ -64,7 +64,7 @@ def test_validate_ontology_reports_unsigned_clinical_tasks():
     assert report["pass"] is True
     assert report["versions"]["anatomy"] == "skm_a6_v1"
     assert report["versions"]["anatomy_legacy"] == "synthseg_a32_v1"
-    assert report["h5_channel_order_status"] == "pending_verification"
+    assert report["h5_channel_order_status"] == "verified"
     assert report["formal_runnable"]["R_clin"] is False
     assert report["formal_runnable"]["U"] is False
     assert report["formal_runnable"]["surface_defect"] is False

@@ -31,6 +31,6 @@ def test_geometry_qc_writes_three_reports_and_flags_mismatch(tmp_path):
     status = summary["geometry_by_source_role_status"]
     assert status["ISLES_ltr|dwi|pass|-"] == 1
     assert status["ISLES_ltr|adc|fail|AFFINE_MISMATCH"] == 1
-    assert any(k.startswith("ISLES_ltr|flair|fail|SHAPE_MISMATCH") for k in status)
+    assert not any("|flair|" in k for k in status)
     assert summary["label_value_qc_by_source"] == {"ISLES_ltr|pass|-|unexpected=False": 1}
     assert summary["pairing_by_source_status"] == {"ISLES_ltr|paired": 1}

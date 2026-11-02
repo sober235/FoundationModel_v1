@@ -18,7 +18,7 @@ anatomy:
         status: observed
         note: Integer labels 1-6 as exported by the legacy Dataset901; the integer table above follows it.
       skm_h5_seg_channels:
-        status: pending_verification
+        status: verified
         layout: "(x, y, z, channel) bool, 6 channels"
         assumed_channel_order:
           - patellar_cartilage
@@ -27,7 +27,7 @@ anatomy:
           - tibial_cartilage_lateral
           - meniscus_medial
           - meniscus_lateral
-        evidence: SKM-TEA v1.0.0 documentation; must be confirmed per track against NIfTI integer masks in T05 before any training export.
+        evidence: "T05 channel_check, 12/12 cases: channel i == A6 label i+1 (dice 1.0) against the dicom-track NIfTI after transpose_xy; the raw-data-track is not voxel-consistent and is not an A reference."
   synthseg_a32_v1:
     description: Legacy SynthSeg 32-entity brain anatomy used by the old repository. Kept as a separate namespace; never merged with skm_a6_v1.
     status: legacy_only
@@ -50,7 +50,7 @@ abnormality:
       meniscal_tear: {source_supercategory: Meniscal Tear, host_tissues: [1], clinical_definition_signoff: null}
       ligament_tear: {source_supercategory: Ligament Tear, host_tissues: [2, 3], scope: out_of_anatomy_scope, clinical_definition_signoff: null}
       effusion: {source_supercategory: Effusion, host_tissues: [-1], scope: no_host, clinical_definition_signoff: null}
-      ischemic_infarct: {source_dataset: ISLES_ltr, host_tissues: [], scope: brain_published_protocol, clinical_definition_signoff: null}
+      ischemic_infarct: {source_dataset: ISLES_ltr, host_tissues: [], scope: brain_published_protocol, definition: acute to sub-acute ischemic infarct as delineated by the ISLES 2022 protocol; white matter hyperintensities and chronic gliosis are not this class, clinical_definition_signoff: null}
 
 relations:
   r_geo_v1:

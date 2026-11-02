@@ -30,7 +30,7 @@ sources:
     - ISLES-2022/sub-*/ses-*/anat/*.nii.gz
     label_patterns:
     - ISLES-2022/derivatives/sub-*/ses-*/*_msk.nii.gz
-    notes: DWI/ADC-mask space and FLAIR registration must be checked in T05; derivatives share the case id of rawdata.
+    notes: Model inputs are DWI and ADC only (FLAIR excluded by researcher decision 2026-11-02; it is off the mask grid in 250/250). Masks follow the ISLES 2022 published protocol and register as expert_voxel for ischemic_infarct.
   SKM-TEA_ltr:
     priority: P0
     role: A
@@ -43,8 +43,10 @@ sources:
     - image_files/*.h5
     label_patterns:
     - segmentation_masks/*/*.nii.gz
+    xyz_units_policy: mm
     notes: annotations/v1.0.0/*.json carry 3D boxes (weak U, limited R); dicoms/*.tar.gz are per-scan archives, not extra
-      cases; six-class channel order must be read from source, not assumed.
+      cases. The only A reference is the H5 seg (== xy-transposed dicom-track NIfTI); raw-data-track masks are not registered.
+      NIfTI headers declare xyz units unknown; the researcher confirmed mm on 2026-11-02.
   SKM-TEA:
     priority: P1
     role: raw_kspace

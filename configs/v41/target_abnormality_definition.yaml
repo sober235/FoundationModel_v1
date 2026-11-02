@@ -1,0 +1,19 @@
+# Target abnormality definition (U) for the G0 gates.
+# Content dictated by the researcher on 2026-11-02. It becomes binding only
+# when approved_by and approved_at are filled in configs/v41/approvals.json
+# by the researcher; the agent never fills them.
+schema_version: v41.0
+field: target_abnormality_definition
+version: tad_v1
+sources:
+  ISLES_ltr:
+    target_classes: [ischemic_infarct]
+    definition: Acute to sub-acute ischemic infarct as delineated by the ISLES 2022 protocol on DWI/ADC.
+    not_in_scope: [white_matter_hyperintensity, chronic_gliosis, other_lesions]
+    normal_claim_scope: "No acute/sub-acute infarct seen; says nothing about other findings."
+    inputs: [dwi, adc]
+  SKM-TEA_ltr:
+    target_classes: [cartilage_lesion, meniscal_tear, ligament_tear, effusion]
+    definition: All four SKM-TEA v1.0.0 abnormality supercategories.
+    reference_status: bbox only (weak_localization); no voxel-level U reference exists yet.
+    normal_claim_scope: "Only for reviewed classes and visible inputs."

@@ -23,6 +23,17 @@ def nifti_to_h5(labels: np.ndarray) -> np.ndarray:
     return _TRANSFORMS[NIFTI_TO_H5_TRANSFORM](labels)
 
 
+def nifti_to_h5_shape(shape) -> tuple[int, ...]:
+    return tuple(nifti_to_h5(np.empty(tuple(shape), dtype=bool)).shape)
+
+
+def h5_seg_shape(path: Path) -> tuple[int, ...]:
+    import h5py
+
+    with h5py.File(path, "r") as handle:
+        return tuple(handle["seg"].shape[:3])
+
+
 def pair_assets(assets: list[dict]) -> list[dict]:
     cases: dict[str, dict] = {}
     for asset in assets:

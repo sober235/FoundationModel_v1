@@ -21,6 +21,9 @@ LEGACY_EXPOSURE = {"experiment_id": "legacy_foundation_model_unverified",
                    "role": "unknown", "recorded_at": "2026-11-02T00:00:00Z"}
 SCOPES = ("isles_u", "skm_a")
 _SCOPE_SOURCE = {"isles_u": "ISLES_ltr", "skm_a": "SKM-TEA_ltr"}
+ISLES_PROTOCOL_EVIDENCE = ("ISLES 2022 protocol (doi:10.1038/s41597-022-01875-5): hybrid U-Net pre-segmentation edited by trained raters, "
+                           "approved by an attending neuroradiologist; acute/sub-acute infarct only; raters also read FLAIR, "
+                           "which is not a model input")
 A6_CLASSES = ["patellar_cartilage", "femoral_cartilage", "tibial_cartilage_medial",
               "tibial_cartilage_lateral", "meniscus_medial", "meniscus_lateral"]
 
@@ -78,7 +81,7 @@ def build_registration_records(scope: str, assets: list[dict], skm_annotations: 
     if scope == "isles_u":
         for pair in isles.pair_assets(assets):
             case = pair["case_id"]
-            present = [role for role in ("dwi", "adc", "flair") if role in pair["images"]]
+            present = [role for role in isles.ROLES if role in pair["images"]]
             if not present:
                 continue
             records.append({
@@ -120,16 +123,16 @@ def build_registration_records(scope: str, assets: list[dict], skm_annotations: 
                     "creator_or_model": "ISLES-2022 release",
                     "creator_version": "2022",
                     "parent_annotation_uid": None,
-                    "completeness": "unknown",
+                    "completeness": "target_complete",
                     "review_region_path": None,
-                    "input_visibility": "unknown",
+                    "input_visibility": "visible",
                     "quality_status": "accepted",
                     "intended_role": "train",
-                    "reference_role": "unverified",
+                    "reference_role": "expert_voxel",
                     "adjudication_status": "not_applicable",
                     "reader_ids": ["isles2022_release"],
                     "protocol_hash": None,
-                    "visibility_evidence": "release protocol verification pending",
+                    "visibility_evidence": ISLES_PROTOCOL_EVIDENCE,
                 }] if pair["label_relpath"] else [],
                 "review_regions": [],
                 "visibility_records": [],
@@ -144,7 +147,7 @@ def build_registration_records(scope: str, assets: list[dict], skm_annotations: 
             case = pair["case_id"]
             meta = skm_annotations.get(case, {})
             annotations = []
-            for track, track_name in (("dicom_track_relpath", "dicom-track"), ("raw_track_relpath", "raw-data-track")):
+            for track, track_name in (("dicom_track_relpath", "dicom-track"),):
                 if pair.get(track):
                     annotations.append({
                         "annotation_uid": f"skmtea:{case}:seg:{track_name}",

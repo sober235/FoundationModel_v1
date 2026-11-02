@@ -13,8 +13,8 @@
   "U": false,
   "surface_defect": false
  },
- "h5_channel_order_status": "pending_verification",
- "ontology_sha256": "4393caa67f4655ee0c42c65edbe4f0f357723c71d41fbbc6f155980f768aa9a6",
+ "h5_channel_order_status": "verified",
+ "ontology_sha256": "c30e86aff306962177e34b746d76e2bed90bedd4efbb287cc28b8a53d93931c7",
  "pass": true,
  "pending_value_ranges": [
   "ucsf_bmsr",

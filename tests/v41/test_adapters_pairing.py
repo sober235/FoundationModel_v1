@@ -5,7 +5,7 @@ import numpy as np
 from anatobind.v41.adapters import isles, skm
 
 
-def test_isles_pairing_groups_mask_with_three_images():
+def test_isles_pairing_groups_mask_with_dwi_and_adc():
     assets = [
         {"source": "ISLES_ltr", "kind": "image", "case_id": "sub-0001", "relpath": "ISLES_ltr/ISLES-2022/sub-0001/ses-0001/dwi/sub-0001_ses-0001_dwi.nii.gz"},
         {"source": "ISLES_ltr", "kind": "image", "case_id": "sub-0001", "relpath": "ISLES_ltr/ISLES-2022/sub-0001/ses-0001/dwi/sub-0001_ses-0001_adc.nii.gz"},
@@ -16,7 +16,7 @@ def test_isles_pairing_groups_mask_with_three_images():
     ]
     pairs = isles.pair_assets(assets)
     assert len(pairs) == 1
-    assert set(pairs[0]["images"]) == {"dwi", "adc", "flair"}
+    assert set(pairs[0]["images"]) == {"dwi", "adc"}
     assert pairs[0]["label_relpath"].endswith("_msk.nii.gz")
 
 

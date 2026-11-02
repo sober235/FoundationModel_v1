@@ -66,25 +66,27 @@ def run_geometry_qc(root: Path, assets: list[dict], out: Path, skm_channel_cases
     for index, pair in enumerate(skm_pairs):
         if progress and index % 25 == 0:
             print(f"progress SKM {index}/{len(skm_pairs)}", flush=True)
-        tracks = {k: pair[k] for k in ("dicom_track_relpath", "raw_track_relpath") if pair[k]}
+        rel = pair["dicom_track_relpath"]
+        complete = bool(pair["h5_relpath"] and rel)
         pairing_rows.append({"source": pair["source"], "case_id": pair["case_id"],
-                             "status": "paired" if pair["h5_relpath"] and len(tracks) == 2 else "incomplete",
-                             "images": ["h5"] if pair["h5_relpath"] else [], "label_relpath": json.dumps(tracks)})
-        geometries = {k: _geometry(root / v) for k, v in tracks.items()}
-        if len(geometries) == 2:
-            report = audit_geometry(geometries["dicom_track_relpath"], geometries["raw_track_relpath"])
-            geometry_rows.append({"source": pair["source"], "case_id": pair["case_id"], "image_role": "dicom_track_vs_raw_track",
-                                  "image_relpath": tracks["dicom_track_relpath"], "label_relpath": tracks["raw_track_relpath"],
-                                  **report, "label_shape": geometries["raw_track_relpath"]["shape"],
-                                  "label_spacing_mm": geometries["raw_track_relpath"]["spacing_mm"]})
-        if label_values:
-            for track, rel in tracks.items():
-                labels, meta = read_categorical_nifti(root / rel)
-                values = label_value_report(labels, A6_ALLOWED)
-                label_rows.append({"source": pair["source"], "case_id": pair["case_id"], "label_relpath": rel,
-                                   "label_value_qc": meta["label_value_qc"], "reason": meta["label_value_reason"],
-                                   "values_present": values["values_present"], "unexpected_values": values["unexpected_values"],
-                                   "scl_slope": meta["scl_slope"], "dtype_on_disk": meta["dtype_on_disk"]})
+                             "status": "paired" if complete else "incomplete",
+                             "images": ["h5"] if pair["h5_relpath"] else [], "label_relpath": rel})
+        if complete:
+            label_geometry = _geometry(root / rel)
+            seg_shape = skm.h5_seg_shape(root / pair["h5_relpath"])
+            same = list(skm.nifti_to_h5_shape(label_geometry["shape"])) == list(seg_shape)
+            geometry_rows.append({"source": pair["source"], "case_id": pair["case_id"], "image_role": "dicom_track_vs_h5_seg",
+                                  "image_relpath": pair["h5_relpath"], "label_relpath": rel,
+                                  "same_shape": same, "same_spacing": None, "same_affine": None, "same_axis_codes": None,
+                                  "status": "pass" if same else "fail", "reasons": [] if same else ["SHAPE_MISMATCH"],
+                                  "label_shape": label_geometry["shape"], "label_spacing_mm": label_geometry["spacing_mm"]})
+        if label_values and rel:
+            labels, meta = read_categorical_nifti(root / rel)
+            values = label_value_report(labels, A6_ALLOWED)
+            label_rows.append({"source": pair["source"], "case_id": pair["case_id"], "label_relpath": rel,
+                               "label_value_qc": meta["label_value_qc"], "reason": meta["label_value_reason"],
+                               "values_present": values["values_present"], "unexpected_values": values["unexpected_values"],
+                               "scl_slope": meta["scl_slope"], "dtype_on_disk": meta["dtype_on_disk"]})
         if index < skm_channel_cases and pair["h5_relpath"]:
             channel_reports.append(skm.channel_check(root, pair))
     out.mkdir(mode=0o700, parents=True, exist_ok=True)

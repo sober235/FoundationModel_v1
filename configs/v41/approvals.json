@@ -1,0 +1,8 @@
+{
+  "target_abnormality_definition": {
+    "definition_ref": "configs/v41/target_abnormality_definition.yaml",
+    "definition_version": "tad_v1",
+    "approved_by": null,
+    "approved_at": null
+  }
+}

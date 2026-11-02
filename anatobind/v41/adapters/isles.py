@@ -1,8 +1,13 @@
-"""ISLES-2022 pairing of per-case mask with DWI/ADC/FLAIR assets (read-only)."""
+"""ISLES-2022 pairing of per-case mask with DWI/ADC assets (read-only).
+
+FLAIR is not registered as a model input (researcher decision 2026-11-02):
+it is not on the mask grid in 250/250 cases and the target U class is the
+DWI-defined acute/sub-acute infarct.
+"""
 from __future__ import annotations
 
 SOURCE = "ISLES_ltr"
-ROLES = {"dwi": "_dwi.nii.gz", "adc": "_adc.nii.gz", "flair": "_flair.nii.gz"}
+ROLES = {"dwi": "_dwi.nii.gz", "adc": "_adc.nii.gz"}
 
 
 def pair_assets(assets: list[dict]) -> list[dict]:

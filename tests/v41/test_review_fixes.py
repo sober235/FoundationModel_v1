@@ -62,7 +62,7 @@ def test_expert_voxel_requires_voxel_accepted_complete(sample_dict, good_audits,
         publish_manifest([validate_sample(sample_dict)], good_audits, tmp_path)
 
 
-def test_isles_release_masks_register_as_unverified():
+def test_isles_release_masks_register_as_expert_after_protocol_verification():
     from anatobind.v41.audits import build_registration_records
 
     assets = [{"source": "ISLES_ltr", "kind": "label", "case_id": "sub-0001",
@@ -72,7 +72,7 @@ def test_isles_release_masks_register_as_unverified():
                        "relpath": f"ISLES_ltr/ISLES-2022/sub-0001/ses-0001/{sub}/sub-0001_ses-0001_{role}.nii.gz"})
     records = build_registration_records("isles_u", assets, None)
     record = validate_sample(records[0])
-    assert record.annotation_records[0].reference_role == "unverified"
+    assert record.annotation_records[0].reference_role == "expert_voxel"
     # 12. partial modality sets stay schema-valid and aligned
     assert len(record.image_paths) == len(record.modality_names) == len(record.available_modality_mask) == 2
 

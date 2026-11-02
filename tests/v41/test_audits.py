@@ -55,8 +55,8 @@ def test_isles_records_validate_and_carry_exposure():
         validated = validate_sample(record)
         assert validated.split == "unassigned"
         assert validated.exposure_history[0]["role"] == "unknown"
-        assert validated.annotation_records[0].reference_role == "unverified"
-        assert validated.annotation_records[0].completeness == "unknown"
+        assert validated.annotation_records[0].reference_role == "expert_voxel"
+        assert validated.annotation_records[0].completeness == "target_complete"
         assert validated.image_geometry is None
         assert validated.geometry_status == "not_checked"
 
@@ -81,12 +81,12 @@ def test_provenance_visibility_eligibility_rows():
     records = build_registration_records("skm_a", _skm_assets(), _skm_annotations())
     prov = provenance_rows(records)
     assert summarize(prov, "task", "reference_role") == {
-        "A, expert_voxel": 4, "U, weak_localization": 2}
+        "A, expert_voxel": 2, "U, weak_localization": 2}
     vis = visibility_rows(records)
     assert all(row["image_count"] == 1 for row in vis)
     elig = eligibility_rows(records)
     by_role = summarize(elig, "task", "role")
-    assert by_role["A, qualified"] == 4
+    assert by_role["A, qualified"] == 2
     assert by_role["U, qualified"] == 1
     assert by_role["U, none"] == 1
     assert all(row["localization_only"] for row in elig if row["task"] == "U" and row["role"] == "qualified")
@@ -94,11 +94,11 @@ def test_provenance_visibility_eligibility_rows():
     assert all(len(row["negative_classes"]) == 6 for row in neg)
 
 
-def test_isles_eligibility_has_no_supervision_until_protocol_verified():
+def test_isles_eligibility_is_qualified_after_protocol_verification():
     records = build_registration_records("isles_u", _isles_assets())
     elig = eligibility_rows(records)
-    assert {row["role"] for row in elig} == {"none"}
-    assert {row["reason"] for row in elig} == {"COMPLETENESS_UNKNOWN"}
+    assert {row["role"] for row in elig} == {"qualified"}
+    assert {row["reason"] for row in elig} == {None}
 
 
 def test_write_scope_audit_outputs_and_immutability(tmp_path):
