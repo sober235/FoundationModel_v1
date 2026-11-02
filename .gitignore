@@ -1,0 +1,29 @@
+# executing-plans scratch workspace
+.superpowers/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# private medical outputs never enter Git
+outputs/
+private/
+*.nii
+*.nii.gz
+*.h5
+*.dcm
+*.npy
+*.npz
+*.pt
+*.pth
+*.ckpt
+
+# local env / editor
+.env
+.venv/
+.vscode/
+.idea/
