@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python ≥3.9（本机 `.venv` 为 3.9.6；数据服务器为 3.11），NumPy、SciPy、PyTorch、PyYAML、pytest（均已安装）；Google DeepMind surface-distance 源码按固定提交内置（仅 T06a）。不新增运行时依赖。
 
-**Spec:** [Proposal_v5.md](Proposal_v5.md)，v5.1（2026-11-07 修订），SHA256 `007850125c31cbebaf04e1cac673e25c7772554e5e93cad46dbb5b3176959992`。其 §1–12 是本计划的约束依据；本计划与之冲突时以 Proposal 为准。
+**Spec:** [Proposal_v5.md](Proposal_v5.md)，v5.1（2026-11-07 修订），SHA256 `c4657d7ba2b335db9a57e3a24c1d7a938e3054ee81e2e77ef8979a0c01e4efa7`。其 §1–12 是本计划的约束依据；本计划与之冲突时以 Proposal 为准。
 
 **本次修订（相对提交 `8dc38be` 的上一版）：**
 - 执行基线改为 GitHub `sober235/FoundationModel_v1` 当前内容（本地 `restart-dev`，代码与 `main`/`d7cbd5b` 相同）。上一版依赖的 `02a2447`、`9c972f9` 不在仓库内，相关“复用/适配”假设全部取消，缺失模块改为新建。远端 `docs/skm-a-200step-summary-20261106` 报告的服务器实现与试训结果不作为本计划任何任务的完成证据。
@@ -21,6 +21,11 @@
   - B1 遗留项中会污染下一次真实运行的，指派到明确的关闭点（§1.6）。
   - B2 先冻结模型输入/输出接口，避免 T16 迁移双模式时返工（§1.7）。
   - 写明 v5.1 相对长期“MRI 基础模型”目标的定位，新增待决定事项 D5（§1.3、§1.5）。
+- **2026-11-07 研究者决定（D3 修订，Proposal §0.5、§5.0）：**
+  - 前期不引入医生，联合参照只用 FM_data 原有标注。核查见 `reports/v5/same_case_label_check_amax.md`。
+  - SKM-TEA 为主场景（框级/组织级），SPIDER 为第二场景（组织级）。
+  - X0 专家试点移到后期；上一条中“X0 与 B2 同级并行”改为后期启动后才适用。T11 改为先导入原标签（§1.1、§1.2、§1.4）。
+  - 体素级核心目标不变；前期结果进 `early_phase_status`，`core_target_validated` 保持 `null`。
 
 ## Global Constraints
 
@@ -95,11 +100,10 @@ flowchart TD
   B1 --> RUN[真实 T07/T08 运行]
   B1 --> B2[阶段B2 T09-T10]
   RUN -.真实训练.-> B2
-  B1 --> T11
-  RUN -.开发划分扫描.-> X0[X0 专家线与试点]
-  T11 -.导出/导入.-> X0
+  B1 --> T11[T11 原标签导入]
+  RUN -.原标签.-> T11
   T11 --> T12
-  X0 -.真实参照.-> T12
+  X0[X0 专家试点（后期）] -.体素级参照（后期）.-> T12
   T12 --> T13
   B2 --> T13
   T13 --> T14
@@ -119,7 +123,7 @@ flowchart TD
   - 联合模型与接受/拒判策略的开发集校准（T13–T14）；
   - 共享权重双模式（T16）；
   - 八项指标及对应冻结条件。
-  F1 产出 `capability_status` 与 `core_target_validated`。
+  F1 产出 `capability_status` 与 `core_target_validated`。前期只有框级/组织级参照（§1.4），T17 另产出 `early_phase_status`。`core_target_validated` 要等后期体素级参照，前期保持 `null`。
 - **F2 研究包终点** 由 T18c 的 `study_package_complete` 组成。它在 F1 之外还要等 H1/H2/H3 全部预定实验与完整证据（含 T15）。
 - 依据：
   - Proposal §11：“H2 尚未完成可以不阻止已有核心能力结论，但 `study_package_complete=false`”。
@@ -129,9 +133,9 @@ flowchart TD
 **并行线：**
 - B1 交付后，以下两条线同级并行（§1.4）：
   - B2：先用合成预测桩打通链路，Proposal §6.1 允许这样做；
-  - T11 / X0。
-- 真实训练和 X0 试点抽样，都要先完成真实 T07/T08 运行。真实运行需要：
-  - 对应来源的 G-DATA 批准；
+  - T11 原标签导入（SKM-TEA、SPIDER）。X0 移到后期（§1.4）。
+- 真实训练和原标签参照导入，都要先完成真实 T07/T08 运行。真实运行需要：
+  - 对应来源的 G-DATA 批准（含 SPIDER）；
   - 研究者同意写 amax 服务器。
 - B2 的模块结果只按模块报告。ISLES 的 U 与 SKM 的 A 各自成功，不能相加为同例联合成功（Proposal §1.3）。
 
@@ -144,30 +148,50 @@ flowchart TD
 | B | T08 曝光与划分 | 扩展 `identity.py`、`splits.py`；新建曝光账本 | 曝光/划分签核 | SKM 官方患者组优先；曝光 unknown 不因换 seed 消失；真实运行前登记种子与划分规则（§1.6 L8） |
 | B | T09a/b/c 登记、训练、推理 | 新建 `engine/registration_v5.py`、H5/NIfTI 读取、patch 采样、可恢复训练核、`perception.py`（调用 T01b 的 `derive_state_map_v5`）与 `perception_io.py`（ArrayRef 落盘 schema 在此建） | G-BASE-A/U | 训练只接收影像/FOV/模式；checkpoint 保存模型、优化器、调度器、scaler、RNG、采样器；关闭 §1.6 L2、L4–L6；冻结 §1.7 模型输入/输出接口 |
 | B | T10 模块基线 | 新建残差 U-Net 的 A-only、U-only、shared-AU | G-BASE-A/U、资源批准 | GPU 单 batch、小样本过拟合、显存/吞吐实测后再锁 patch/batch/精度（§6.3），实测结果写入 `reports/v5/`；首次真实训练前 L6 已接入；模型实现 §1.7 接口 |
-| C | T11 标注桥接 | 新建 `annotation_v5.py`（导出/导入、读者版本、仲裁字段） | B1 与 X0 人员落实（不等 B2） | 二维单层可判读字段；框不转体素；先满足 X0 试点所需的导出/导入与读者、用时记录 |
-| C | T12 联合参照发布 | 新建 `reference_release_v5.py`，复用 T04 `freeze_reference_set_v5`、T06b `build_state_reference_v5` | G-ANNOTATION | 辅助关系不能认证核心 R |
+| C | T11 标注桥接 | 新建 `annotation_v5.py`。前期：把 SKM-TEA 的框与 `tissue_id`、SPIDER 的分级导入为参照候选，带 `reference_granularity` 与原标注来源。后期再加导出/导入、读者版本、仲裁字段 | B1；SKM-TEA、SPIDER 的 G-DATA（不等 B2，不等 X0） | 框不转体素；SKM 无框记 annotation_unknown，不作阴性；类别与组织不符的框、低置信框按冻结规则排除并计数；SPIDER 的异常定义由研究者填（Global Constraint 7）；二维单层可判读字段 |
+| C | T12 联合参照发布 | 新建 `reference_release_v5.py`，复用 T04 `freeze_reference_set_v5`、T06b `build_state_reference_v5` | G-ANNOTATION | 辅助关系不能认证核心 R；前期发布框级/组织级参照（Proposal §5.0），粒度字段随参照集冻结 |
 | C | T13 联合模型与核心归属 | 新建共享编码器双解码器、AnatoBind 软融合、2D/3D 实例与归属 | G-JOINT | R 在 class-only / class+position / image-only / geometry-only / learned 信息条件下对照（§7.1） |
-| C | T14 H1 | 新建 `experiments/h1_v5.py` | G-JOINT | 接受/拒判策略的设计与开发集校准（§2.1、§8.4）；J 提高不能认证 S |
+| C | T14 H1 | 新建 `experiments/h1_v5.py` | G-JOINT | 接受/拒判策略的设计与开发集校准（§2.1、§8.4）；J 提高不能认证 S；前期 J 的 extent_ok 按预注册的框级准则，结果标注粒度 |
 | D | T15 H2（ISLES） | 新建缺标生成器与同信息臂 | G-H2；不依赖专家 | 按大小与按可见性两种偏置遗漏（§7.2） |
 | E | T16 双模式 | 新建观察适配模型（单 checkpoint 2D/3D） | G-H3-ENG | 二维只读当前平面 |
-| F1 | T17 八格能力/H3 | 新建 `evaluation/capability.py`、`experiments/h3_v5.py` | G-H3-SCI；D1；不等 T15 | 八格每格绑定 scope/checkpoint/支持/门槛/区间 |
+| F1 | T17 八格能力/H3 | 新建 `evaluation/capability.py`、`experiments/h3_v5.py` | G-H3-SCI；D1；不等 T15 | 八格每格绑定 scope/checkpoint/支持/门槛/区间；前期另出 `early_phase_status`（每格带 `reference_granularity`），不写入八格表 |
 | F1/F2 | T18a/b/c 锁定评价与证据 | 新建批次账本、锁定评分、完成判定 | G-LOCKED(scope) | 能力/假设/研究包三类状态分开；核心 scope 的 T18a/b 与 T18c 的 `capability_status`、`core_target_validated` 属于 F1，不等 T15；`study_package_complete` 属于 F2；正式测试准入前关闭 §1.6 L7 |
 
-### 1.3 研究者决定事项（D1–D4 于 2026-11-06 决定，D5 待决定；实现与运行状态见 `reports/v5/status.md` `decisions`）
+### 1.3 研究者决定事项（D1–D4 于 2026-11-06 决定，D3 于 2026-11-07 修订，D5 待决定；实现与运行状态见 `reports/v5/status.md` `decisions`）
 
 | ID | 事项 | 影响 | 决定（2026-11-06） |
 | --- | --- | --- | --- |
 | D1 | 能力标准：上一版要求每格同时满足“批准的绝对下限”和“相对专用模型非劣”；Proposal §8.5 允许绝对要求、读者容差、批准的参照比较三选一 | T17；T06b 模板字段 `standard_kind` 保持 `null` | `reference_comparison`，保留 H3 对同场景专用二维／三维系统的预注册非劣；容差与约束在独立测试前依据专家／开发证据冻结；政策实例待联合 scope 冻结后建立 |
 | D2 | `memory.md` 含服务器私有路径且被 Git 跟踪（文件头声明不得提交）。选项：仅移出索引并加入 `.gitignore`；另行重写历史；保留 | T00 只登记 blocker，不改文件 | 移出索引并忽略（FX3 已实施）；历史不改写，另行审查 |
-| D3 | 专家资源与替代场景（X0） | 阶段 C 的真实部分与核心目标验证 | 保留 SKM 联合场景，先准备 20–30 次非锁定开发扫描试点；人员未落实前保持 `BLOCKED_EXPERT_REVIEW` |
+| D3 | 专家资源与替代场景（X0） | 阶段 C 的真实部分与核心目标验证 | **2026-11-07 修订：** 前期不引入医生，联合参照只用 FM_data 原有标注；SKM-TEA 为主场景（框级/组织级），SPIDER 为第二场景（组织级）；X0 专家试点移到后期，`BLOCKED_EXPERT_REVIEW` 只约束后期体素级目标。原决定（SKM 联合场景，20–30 次开发扫描试点）留作后期方案 |
 | D4 | 真实数据执行主机（数据服务器）与该主机上的解释器 | 阶段 B 起的真实数据步骤 | 选定 amax 数据服务器；只读预检通过前不登记为就绪 |
 | D5 | 长期目标定位：v5.1 是否作为“可迁移 MRI 基础模型”长期目标中的一个能力验证阶段；若是，是否在 v5.1 之后另立复用/迁移/泛化里程碑（§1.5） | 不改变 v5.1 的任务与完成判定；影响 v5.1 之后的路线和对外表述 | 待研究者决定（2026-11-07 提出） |
 
-### 1.4 X0：专家资源线（非代码，现在即可并行）
+### 1.4 前期原标签场景与 X0（2026-11-07 研究者决定）
 
-按 Proposal §5.1–5.2：指定标注负责人、主读者、独立复读者、仲裁者、工具和预算；书面写出 E1/E2 上所选软骨异常的体素边界与不确定带规则；在 20–30 次非锁定开发扫描上试点，记录每例用时、可判读率和复读一致性；若无法形成可靠体素场景，由研究者决定替代场景或保持未完成。未落实前，阶段 C 的真实数据部分为 `BLOCKED_EXPERT_REVIEW`。
+**前期（现在）：** 不引入医生，只用 FM_data 原有标注（Proposal §0.5、§5.0）。核查见 `reports/v5/same_case_label_check_amax.md`。
 
-**2026-11-07 修订：X0 与 B2 同级，现在落实。** 同例参照能否建立，决定主线能否成立；B2 的训练、保存、统计做得再完善，也补不了这一项。
+- **SKM-TEA 主场景：**
+  - A：6 类人工分割，体素级。
+  - U：原有 3D 框，框级。
+  - R：框的 `tissue_id`，组织级。
+  - S：只评价目标阳性；无框记 annotation_unknown，不作阴性。
+- **SPIDER 第二场景：**
+  - A：椎体、椎管、椎间盘分割。
+  - S、R：每个椎间盘的组织级状态与归属。
+  - 无 U。
+- **由研究者填写（Agent 不代填，Global Constraint 7）：**
+  - SKM：启用的异常类别；排除规则（类别与组织不符的框、低置信阈值）。
+  - SPIDER：序列选择；“目标异常”的分级阈值；终板分级的归属语义。
+  - 两个场景的 scope 字段。
+- **结果去向：** 前期结果进 `early_phase_status`，不进八格表；`core_target_validated` 保持 `null`。
+- **需要的批准：** SKM-TEA 与 SPIDER 的 G-DATA，按来源与版本。
+
+**X0（后期）：** 以下安排保留为后期体素级方案，前期不启动。
+
+按 Proposal §5.1–5.2：指定标注负责人、主读者、独立复读者、仲裁者、工具和预算；书面写出 E1/E2 上所选软骨异常的体素边界与不确定带规则；在 20–30 次非锁定开发扫描上试点，记录每例用时、可判读率和复读一致性；若无法形成可靠体素场景，由研究者决定替代场景或保持未完成。未落实前，阶段 C 的后期体素级部分为 `BLOCKED_EXPERT_REVIEW`。
+
+**2026-11-07 修订（核心目标复核）：X0 启动后与 B2 同级。** 体素级同例参照能否建立，决定后期体素级主线能否成立；B2 的训练、保存、统计做得再完善，也补不了这一项。同日研究者决定前期不引入医生，X0 移到后期（见上）。
 
 - **试点要回答的五个问题：**
   1. 目标异常在 E1/E2 上的书面定义，以及体素边界与不确定带规则；
@@ -1845,10 +1869,10 @@ git commit -m "Record D1-D4 decisions and sync status documents"
 B1（§2B）已内联执行，经独立终审并完成修复。2026-11-07 核心目标对齐修订后，下一步如下：
 
 1. 把 B2（T09a–c、T10）细化到 B1 的粒度，纳入 §1.6 的 L2、L4–L6 与 §1.7 的接口。
-2. 与 B2 同级并行推进 X0 和 T11（§1.4）。
-3. 真实 T07/T08 运行要等两件事：G-DATA(ISLES、SKM) 批准，研究者同意写 amax 服务器。运行前关闭 L1–L3、L8。
+2. 与 B2 同级并行推进 T11 原标签导入（SKM-TEA、SPIDER，§1.4）。X0 移到后期。
+3. 真实 T07/T08 运行要等两件事：G-DATA(ISLES、SKM-TEA、SPIDER) 批准，研究者同意写 amax 服务器。运行前关闭 L1–L3、L8。
 
 下一轮的检验标准，是开始产生真实数据与模型产物，而不是更多合成测试：
 - 真实 batch、小样本过拟合、恢复训练、原网格预测；
 - A-only、U-only 模块结果；
-- X0 试点记录。
+- 前期框级/组织级参照的脱敏汇总。

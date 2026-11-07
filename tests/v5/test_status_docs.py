@@ -53,6 +53,22 @@ def test_decisions_recorded_with_separate_statuses():
             "EXECUTION_HOST_UNVERIFIED"} == set(meta["blockers"])
 
 
+def test_d3_early_phase_uses_original_fm_data_labels():
+    meta = _front_matter()
+    d3 = meta["decisions"]["D3"]
+    assert d3["choice"] == "fm_data_original_labels_skm_primary_spider_secondary"
+    assert d3["decided_at"] == "2026-11-07"
+    assert d3["implementation_status"] == "TODO" and d3["run_status"] == "NOT_RUN"
+    assert meta["core_target_validated"] is None
+
+
+def test_same_case_label_check_is_redacted_and_not_an_approval():
+    report = Path("reports/v5/same_case_label_check_amax.md").read_text(encoding="utf-8")
+    assert not re.search(PRIVATE_PATH_PATTERN, report) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", report)
+    assert not re.search(r"MTR_\d|\b\d+_t[12]\b", report)
+    assert "不是 G-DATA 批准" in report and "不是体素级" in report
+
+
 def test_memory_md_untracked_and_ignored():
     tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "memory.md"], capture_output=True)
     ignored = subprocess.run(["git", "check-ignore", "-q", "memory.md"])
