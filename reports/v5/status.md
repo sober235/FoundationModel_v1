@@ -106,13 +106,13 @@ tasks:
     scientific_conclusion: NOT_EVALUATED
   T07:
     code_status: PASS
-    test_evidence: "tests/v5/test_source_policy.py: 7 passed; test_migrate_v41.py: 14 passed; test_geometry_v5.py: 9 passed; test_source_check.py: 4 passed"
+    test_evidence: "tests/v5/test_source_policy.py: 9 passed; test_migrate_v41.py: 20 passed; test_geometry_v5.py: 11 passed; test_source_check.py: 9 passed"
     data_run_status: NOT_STARTED
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T08:
     code_status: PASS
-    test_evidence: "tests/v5/test_exposure_v5.py: 6 passed; test_splits_v5.py: 10 passed"
+    test_evidence: "tests/v5/test_exposure_v5.py: 7 passed; test_splits_v5.py: 11 passed"
     data_run_status: NOT_STARTED
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED

@@ -1610,7 +1610,7 @@ git commit -m "Record D1-D4 decisions and sync status documents"
 - Modify: `tests/v5/factories.py`（新增 `make_source_policy(**overrides) -> SourcePolicy`）
 
 **Interfaces:**
-- Produces: `SourcePolicy`（frozen dataclass）：`source_id: str, source_version: str, source_dataset: str, scope_id: str, reference_policy_id: str, model_modalities: tuple[str, ...], annotation_modalities: dict[str, tuple[str, ...] | None], index_evidence: str | None, physical_units_policy: str | None`（`"trust_header"` 或 `None`）。
+- Produces: `SourcePolicy`（frozen dataclass）：`source_id: str, source_version: str, source_dataset: str, scope_id: str, reference_policy_id: str, model_modalities: tuple[str, ...], annotation_modalities: dict[str, tuple[str, ...] | None], index_evidence: str | None, physical_units_policy: str | None`（`"trust_header"` 或 `None`）, `physical_units_evidence: str | None`（单位策略非空时必填；终审 I5 补）。
 - `load_source_policies_v5(path: Path) -> dict[str, SourcePolicy]`（键为 `source_id`）；`source_binding_v5(policy) -> dict`（`{"source_id", "source_version"}`，供 FX1 的 `evaluate_gate_v5(..., source=...)`）。
 - `migrate_v41_record_v5(record: SampleRecord, policy: SourcePolicy, scope: ActiveScope) -> SampleV5`；`migrate_v41_records_v5(records, policy, scope) -> tuple[list[SampleV5], list[dict]]`，失败行只含 `{"index", "code", "path"}`，不含 sample_uid 或病例标识。
 
@@ -1638,9 +1638,9 @@ git commit -m "Record D1-D4 decisions and sync status documents"
 
 **Interfaces:**
 - `affine_roundtrip_error_v5(points_vox: np.ndarray, affine: np.ndarray) -> float`：`inverse(transform(points))` 的最大绝对体素误差（复用 v41 `geometry.transform_points`/`inverse_transform_points`）。
-- `resample_labels_v5(labels: np.ndarray, src_affine, dst_affine, dst_shape) -> np.ndarray`：最近邻；非整数 dtype → `DTYPE_MISMATCH`；输出取值 ⊆ 输入取值。
+- `resample_labels_v5(labels: np.ndarray, src_affine, dst_affine, dst_shape) -> np.ndarray`：最近邻（平局按 half-up 取整，`floor(x + 0.5)`；终审 I1）；非整数 dtype → `DTYPE_MISMATCH`；输出取值 ⊆ 输入取值。
 - `pad_or_crop_v5(array, target_shape, fill) -> tuple[np.ndarray, np.ndarray]`（数组与 `valid_mask`）；`restore_grid_v5(array, valid_mask, original_shape) -> np.ndarray`（精确逆操作）。
-- `downsample_loss_report_v5(mask: np.ndarray, factor: tuple[int, ...], class_names: list[str]) -> dict`：`mask` 为 bool `[C, *spatial]`；降采样为步长取样；逐类给 `voxels_before`、`voxels_after`、`components_before`、`components_vanished`（降采样后在其覆盖块内无阳性的连通域，26 邻接）；另给 bool `lost_positive_mask`（降采样网格上，消失连通域所在块为 True），调用方必须把它从阴性资格中去掉。
+- `downsample_loss_report_v5(mask: np.ndarray, factor: tuple[int, ...], class_names: list[str]) -> dict`：`mask` 为 bool `[C, *spatial]`；降采样为步长取样；逐类给 `voxels_before`、`voxels_after`、`components_before`、`components_vanished`（降采样后在其覆盖块内无阳性的连通域，26 邻接）；另给 bool `lost_positive_mask`（降采样网格上，块内有阳性而步长取样为阴性的块为 True——含连通域整体保留、但薄结构部分块丢失的情形；终审 C1 修正，原定义只标消失连通域），调用方必须把它从阴性资格中去掉。
 
 - [ ] **Step 1: 写失败测试**：`test_affine_roundtrip_within_1e-4_voxel`（各向异性加旋转仿射，1000 个随机点，误差 `< 1e-4`）、`test_label_resampling_is_discrete`（float 输入报错；恒等仿射输出相等；取值子集）、`test_original_grid_write_back_is_exact`（pad 再还原逐元素相等，padding 处 `valid_mask` 为 False）、`test_downsample_reports_vanished_small_lesion`（单体素病灶在 factor 2 下 `components_vanished == 1` 且 `lost_positive_mask` 在其块为 True；8×8×8 病灶保留）、`test_downsample_rejects_non_bool_or_bad_factor`。
 - [ ] **Step 2: 运行确认失败** —— `pytest_cpu tests/v5/test_geometry_v5.py`，Expected: `ImportError`。
@@ -1696,6 +1696,17 @@ git commit -m "Record D1-D4 decisions and sync status documents"
 - [ ] **Step 1: 写失败测试**：`test_official_split_is_mapped`、`test_missing_official_group_stays_unassigned`、`test_stratified_split_is_deterministic_and_group_consistent`、`test_small_strata_are_merged_by_rule`、`test_exposure_survives_reseeding`（参数化 3 个种子，曝光组从不进 `locked_test`）、`test_policy_without_seed_or_rule_raises`。
 - [ ] **Step 2–4:** RED → 实现 → GREEN。
 - [ ] **Step 5: 提交** `Add v5 official and stratified splits with exposure exclusion`。
+
+### B1 终审修复（2026-11-06）
+
+独立终审（opus）结论“修复后可合并”。一轮修复，每项先写复现测试（RED→GREEN），全套 414 passed：
+- C1 `lost_positive_mask` 漏标存活薄结构的丢失块 → 按块判定（`test_downsample_reports_lost_blocks_of_surviving_thin_structure`）。
+- I1 重采样平局 half-to-even 使奇数标签消失 → half-up（`test_resample_half_voxel_tie_rounds_half_up`）。
+- I2 已迁移的 v5 记录可被再次迁移并升级几何状态 → 只接受 v41 记录（`test_only_v41_records_are_migrated`）。
+- I5 Proposal §3.2 要求的 `geometry_evidence` 未登记 → v5 样本新增必填 `geometry_evidence {index_alignment, physical_geometry}`，`verified` 必须带证据；来源政策新增 `physical_units_evidence`（`test_migration_records_geometry_evidence`、`test_verified_geometry_needs_evidence`）。
+- I3 分组映射可把同一患者/泄漏组拆到不同划分 → `LEAKAGE_GROUP_SPLIT`（`test_group_mapping_cannot_split_a_patient_or_leakage_group`）。
+- I4 来源核验把 CSV 读回的 JSON 字符串 reasons 按字符计数 → 畸形行报 `INVALID_TYPE`（`test_malformed_rows_raise_v5_errors`）。
+- 原 M3（按影响上调）空白 lineage 的训练曝光不阻断 → 视同未命名（`test_blank_lineage_entry_blocks_like_null`）。
 
 ### B1 完成判定
 
