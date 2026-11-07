@@ -34,11 +34,16 @@ def test_every_task_has_five_separate_statuses():
         assert row["scientific_conclusion"] == "NOT_EVALUATED"
 
 
-def test_known_blockers_are_recorded():
+def test_decisions_recorded_with_separate_statuses():
     meta = _front_matter()
-    assert {"D1", "D2", "D3", "D4"} <= set(meta["open_decisions"])
-    assert "PRIVATE_PATHS_TRACKED:memory.md" in meta["blockers"]
-    assert "BLOCKED_EXPERT_REVIEW" in meta["blockers"]
+    assert meta["open_decisions"] == []
+    assert list(meta["decisions"]) == ["D1", "D2", "D3", "D4"]
+    for row in meta["decisions"].values():
+        assert set(row) == {"choice", "decided_at", "implementation_status", "run_status", "scientific_conclusion"}
+    assert meta["decisions"]["D1"]["choice"] == "reference_comparison_with_h3_noninferiority"
+    assert meta["decisions"]["D4"]["run_status"] == "NOT_RUN"
+    assert {"PRIVATE_PATHS_IN_HISTORY:memory.md", "BLOCKED_EXPERT_REVIEW",
+            "EXECUTION_HOST_UNVERIFIED"} == set(meta["blockers"])
 
 
 def test_memory_md_untracked_and_ignored():

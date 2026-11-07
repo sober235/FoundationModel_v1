@@ -115,14 +115,14 @@ flowchart TD
 | F | T17 八格能力/H3 | 新建 `evaluation/capability.py`、`experiments/h3_v5.py` | G-H3-SCI；D1 | 八格每格绑定 scope/checkpoint/支持/门槛/区间 |
 | F | T18a/b/c 锁定评价与证据 | 新建批次账本、锁定评分、完成判定 | G-LOCKED | 能力/假设/研究包三类状态分开 |
 
-### 1.3 待研究者决定事项
+### 1.3 研究者决定事项（2026-11-06 已决定；实现与运行状态见 `reports/v5/status.md` `decisions`）
 
-| ID | 事项 | 影响 |
-| --- | --- | --- |
-| D1 | 能力标准：上一版要求每格同时满足“批准的绝对下限”和“相对专用模型非劣”；Proposal §8.5 允许绝对要求、读者容差、批准的参照比较三选一 | T17；T06b 模板字段 `standard_kind` 保持 `null` |
-| D2 | `memory.md` 含服务器私有路径且被 Git 跟踪（文件头声明不得提交）。选项：仅移出索引并加入 `.gitignore`；另行重写历史；保留 | T00 只登记 blocker，不改文件 |
-| D3 | 专家资源与替代场景（X0） | 阶段 C 的真实部分与核心目标验证 |
-| D4 | 真实数据执行主机（数据服务器）与该主机上的解释器 | 阶段 B 起的真实数据步骤 |
+| ID | 事项 | 影响 | 决定（2026-11-06） |
+| --- | --- | --- | --- |
+| D1 | 能力标准：上一版要求每格同时满足“批准的绝对下限”和“相对专用模型非劣”；Proposal §8.5 允许绝对要求、读者容差、批准的参照比较三选一 | T17；T06b 模板字段 `standard_kind` 保持 `null` | `reference_comparison`，保留 H3 对同场景专用二维／三维系统的预注册非劣；容差与约束在独立测试前依据专家／开发证据冻结；政策实例待联合 scope 冻结后建立 |
+| D2 | `memory.md` 含服务器私有路径且被 Git 跟踪（文件头声明不得提交）。选项：仅移出索引并加入 `.gitignore`；另行重写历史；保留 | T00 只登记 blocker，不改文件 | 移出索引并忽略（FX3 已实施）；历史不改写，另行审查 |
+| D3 | 专家资源与替代场景（X0） | 阶段 C 的真实部分与核心目标验证 | 保留 SKM 联合场景，先准备 20–30 次非锁定开发扫描试点；人员未落实前保持 `BLOCKED_EXPERT_REVIEW` |
+| D4 | 真实数据执行主机（数据服务器）与该主机上的解释器 | 阶段 B 起的真实数据步骤 | 选定 148 数据服务器；只读预检通过前不登记为就绪 |
 
 ### 1.4 X0：专家资源线（非代码，现在即可并行）
 
@@ -1303,11 +1303,11 @@ git commit -m "Add lesion-level detection metrics for U"
 
 ---
 
-## 2A. 阶段 A 补修（2026-11-07，外部审查后）
+## 2A. 阶段 A 补修（2026-11-06，外部审查后）
 
 **Goal:** 关闭外部审查在 `6231fbb` 上复现的两处缺口，落实研究者对 D1–D4 的决定，并同步状态文档；不新增科学结论。
 
-**依据：** 研究者 2026-11-07 采纳外部审查建议——D1 选 `reference_comparison` 并保留 H3 对同场景专用二维/三维系统的预注册非劣；D2 停止跟踪 `memory.md` 并忽略，历史另审；D3 保留 SKM 联合场景，先准备 20–30 次非锁定开发扫描试点，人员未落实前保持 `BLOCKED_EXPERT_REVIEW`；D4 优先 148 数据服务器，“已选定”与“已核验就绪”分开登记。
+**依据：** 研究者 2026-11-06 采纳外部审查建议——D1 选 `reference_comparison` 并保留 H3 对同场景专用二维/三维系统的预注册非劣；D2 停止跟踪 `memory.md` 并忽略，历史另审；D3 保留 SKM 联合场景，先准备 20–30 次非锁定开发扫描试点，人员未落实前保持 `BLOCKED_EXPERT_REVIEW`；D4 优先 148 数据服务器，“已选定”与“已核验就绪”分开登记。
 
 **约束：** Global Constraints 全部适用；§2.0 共用约定适用。四个任务串行：FX1 → FX2 → FX3 → FX4。
 
@@ -1536,7 +1536,7 @@ git commit -m "Stop tracking memory.md and add a redacted example"
 | D3 | `skm_joint_pilot_20_30_dev_scans` | `TODO`（人员、预算未落实） | `NOT_RUN` | `NOT_EVALUATED` |
 | D4 | `server_148` | `TODO`（只读预检未做） | `NOT_RUN` | `NOT_EVALUATED` |
 
-`decided_at` 取执行当天日期。`blockers` 改为 `["PRIVATE_PATHS_IN_HISTORY:memory.md", "BLOCKED_EXPERT_REVIEW", "EXECUTION_HOST_UNVERIFIED"]`。正文“待研究者决定事项”改为“研究者决定（2026-11-07）”，逐条写选择、未完成部分，并新增“阶段 A 补修”表（FX1–FX4，各附提交号与测试）。
+`decided_at` 取执行当天日期。`blockers` 改为 `["PRIVATE_PATHS_IN_HISTORY:memory.md", "BLOCKED_EXPERT_REVIEW", "EXECUTION_HOST_UNVERIFIED"]`。正文“待研究者决定事项”改为“研究者决定（2026-11-06）”，逐条写选择、未完成部分，并新增“阶段 A 补修”表（FX1–FX4，各附提交号与测试）。
 
 **D1 正文须写明：** 患者间等权；J 为患者内冻结病灶集合的成功数/支持数；A/U/S 观测级指标先观测、再患者内汇总、再患者等权；逐指标登记支持集合、患者内权重与空值原因；预测为空或全部弃权造成的 `None` 不得记作“参照无支持”（当前 `summarize_state_by_patient_v5` 的 `n_patients_without_support` 混记 precision 的这两种情形，修订放入阶段 C 汇总任务）；不得按测试结果选择聚合方式。
 
@@ -1560,7 +1560,7 @@ def test_decisions_recorded_with_separate_statuses():
 Run: `pytest_cpu tests/v5/test_status_docs.py`
 Expected: FAIL（`KeyError: 'decisions'`）
 
-- [ ] **Step 3: 按上文改 status.md；plan §1.3 表格加“决定（2026-11-07）”列；§4 写明补修后下一步为阶段 B 细化与 148 只读预检；README “当前边界”首段写明执行基线与当前实现提交、科学结论仍为 `NOT_EVALUATED`；traceability 状态列按 status.md 实际填写（V5-02–V5-06、V5-14–V5-16 写“阶段 A 软件已交付，真实数据未运行”，其余照实）**
+- [ ] **Step 3: 按上文改 status.md；plan §1.3 表格加“决定（2026-11-06）”列；§4 写明补修后下一步为阶段 B 细化与 148 只读预检；README “当前边界”首段写明执行基线与当前实现提交、科学结论仍为 `NOT_EVALUATED`；traceability 状态列按 status.md 实际填写（V5-02–V5-06、V5-14–V5-16 写“阶段 A 软件已交付，真实数据未运行”，其余照实）**
 
 - [ ] **Step 4: 运行确认通过**
 
@@ -1606,3 +1606,5 @@ git commit -m "Record D1-D4 decisions and sync status documents"
 ## 4. 执行交接
 
 执行方式沿用研究者已选的 subagent-driven-development。阶段 A 共 11 个任务，按 §1.1 顺序串行；每个任务结束后做任务审查，阶段 A 结束后做一次整分支审查。阶段 B 的细化在阶段 A 整分支审查之后进行，并先处理 D4。
+
+阶段 A 实际由 executing-plans 内联执行并经整分支独立审查；§2A 补修（FX1–FX4）同样内联执行。补修完成后的下一步：把阶段 B（T07–T10）细化到阶段 A 的粒度；148 服务器只读预检与 X0 专家试点准备可并行。真实 G-DATA 放行与真实 StateReference 发布分别以 FX1、FX2 为前提。

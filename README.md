@@ -15,7 +15,7 @@
 
 ## 当前边界
 
-执行基线：GitHub 当前内容（`restart-dev`，代码与 `d7cbd5b` 相同），见 plan_v5.md 2026-11-06 修订；`9bef283`/`02a2447` 不再作为执行依据。
+执行基线：GitHub `restart-dev`（自 `d7cbd5b` 起），见 plan_v5.md 2026-11-06 修订；`9bef283`/`02a2447` 不再作为执行依据。v5.1 阶段 A（T00–T06c：契约、签名资格、评价器）与 §2A 补修（FX1–FX4）已在合成数据上实现并通过测试，详见 [阶段 A 完成报告](reports/v5/stage_a_report.md) 与 [任务状态](reports/v5/status.md)；尚未接触真实数据，全部科学结论仍为 `NOT_EVALUATED`，`core_target_validated` 为 `null`。D1–D4 已由研究者决定，但能力容差未冻结、148 主机未核验、专家资源未落实。
 
 历史G0报告登记ISLES 250条U和SKM 155条A，SKM异常仍主要是框；405 admitted不等于405个同例精标病例。历史144项测试通过不等于v5全部验收通过。实际状态见 [G0 v3历史报告](reports/v41/g0_decisions_v3.md) 与v5任务核对结果。
 

@@ -9,12 +9,37 @@ historical_evidence:
   v41_local_tests: "144 passed, Python 3.9.6, 2026-11-06"
   v41_engineering_execution_1094_tests: "historical; code not in this repository"
   skm_a_200step_trial: "historical; code not in this repository"
-open_decisions: [D1, D2, D3, D4]
-blockers: ["PRIVATE_PATHS_TRACKED:memory.md", "BLOCKED_EXPERT_REVIEW"]
+open_decisions: []
+decisions:
+  D1:
+    choice: reference_comparison_with_h3_noninferiority
+    decided_at: "2026-11-06"
+    implementation_status: TODO   # margins and constraints frozen before independent test; policy instance waits for a frozen joint scope
+    run_status: NOT_RUN
+    scientific_conclusion: NOT_EVALUATED
+  D2:
+    choice: untrack_and_ignore_history_review_pending
+    decided_at: "2026-11-06"
+    implementation_status: PASS   # FX3: memory.md untracked + ignored; history not rewritten
+    run_status: NOT_APPLICABLE
+    scientific_conclusion: NOT_APPLICABLE
+  D3:
+    choice: skm_joint_pilot_20_30_dev_scans
+    decided_at: "2026-11-06"
+    implementation_status: TODO   # readers, adjudicator, budget not yet in place
+    run_status: NOT_RUN
+    scientific_conclusion: NOT_EVALUATED
+  D4:
+    choice: server_148
+    decided_at: "2026-11-06"
+    implementation_status: TODO   # read-only host precheck not yet done
+    run_status: NOT_RUN
+    scientific_conclusion: NOT_EVALUATED
+blockers: ["PRIVATE_PATHS_IN_HISTORY:memory.md", "BLOCKED_EXPERT_REVIEW", "EXECUTION_HOST_UNVERIFIED"]
 tasks:
   T00:
     code_status: PASS
-    test_evidence: "tests/v5/test_status_docs.py: 3 passed"
+    test_evidence: "tests/v5/test_status_docs.py: 4 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
@@ -191,6 +216,23 @@ tasks:
 | `losses.py` | 全 ignore 时返回 `logits.sum() * 0.0`，logit 含 inf 时得 NaN | T02 |
 | `evaluation/segmentation.py` | NSD 为无权边界体素比例，HD95 为两向距离合并后的普通分位数 | T06a |
 
-## 待研究者决定事项
+## 研究者决定（2026-11-06）
 
-D1 能力标准（T17）、D2 `memory.md` 私有路径被跟踪、D3 专家资源与替代场景、D4 真实数据执行主机。详见 plan_v5.md §1.3。
+“决定已作出”不等于“实现已完成”“实际运行已完成”或“科学验证已完成”；四者在 YAML 头 `decisions` 中分别登记。
+
+- **D1 能力标准：** 采用 `reference_comparison`，参照为同一联合场景、同患者划分、同合法信息条件下的专用二维／三维完整系统；保留 H3 的同 checkpoint 双模式、A/U/S/R 八项能力及预注册非劣要求。不给每格叠加尚无依据的绝对临床阈值。非劣容差、最低参照支持、覆盖率、FP 与 false-normal 约束依据专家／开发证据形成，在独立测试前冻结；未冻结前不生成最终能力 PASS。政策实例待 SKM 联合 scope 冻结（有 scope_hash）后建立，`configs/v5/capability_policy.template.yaml` 保持模板。
+  - 聚合：患者间等权；J 为患者内冻结病灶集合的成功数／支持数；A/U/S 观测级指标先按观测计算、再患者内汇总、再患者等权；逐指标登记支持集合、患者内权重与空值原因；不得按测试结果选择聚合方式。
+  - 预测为空或全部弃权造成的 `None` 不得记作“参照无支持”。当前 `summarize_state_by_patient_v5` 的 `n_patients_without_support` 对 precision 混记了这两种情形，修订放入阶段 C 汇总任务。
+  - D1 不阻塞阶段 B 工程；它阻塞最终能力判定与 G-H3-SCI。
+- **D2 `memory.md`：** 已停止 Git 跟踪并加入 `.gitignore`（FX3），公开仓库保留脱敏的 `memory.example.md`。Git 历史未改写：历史中有私有路径；按 token 格式扫描未发现凭证字符串，但这不是完整的敏感性审查。是否清理历史由研究者另行决定（blocker `PRIVATE_PATHS_IN_HISTORY:memory.md`）。其他机器上的旧克隆 `git pull` 前须先备份本机 `memory.md`。
+- **D3 专家资源：** 保留 SKM 联合场景；先准备 20–30 次非锁定开发扫描试点，明确主读、独立复读、仲裁责任，以及异常边界、不确定带与单层可判读规则。人员与预算未落实前 X0 不标完成，相关科学验证保持 `BLOCKED_EXPERT_REVIEW`。框、分级或伪标签不能替代原定联合验证；试点不能形成稳定体素参照时，再按实际资源提出替代场景。
+- **D4 执行主机：** 选定 148 数据服务器。尚未连接核验（blocker `EXECUTION_HOST_UNVERIFIED`）：执行端在该主机上只读核验代码提交、解释器与依赖、数据版本与可读性、可分配 GPU／内存／磁盘，形成脱敏预检报告后才登记为正式执行环境；解释器路径以实测为准，真实路径只进本地配置。
+
+## 阶段 A 补修（plan_v5.md §2A，外部审查后）
+
+| 任务 | 内容 | 测试 |
+| --- | --- | --- |
+| FX1 | 准入证据绑定 scope_hash、来源（id、版本）与任务；测试专用批准人在非 fixture 模式下被拒 | `tests/v5/test_gates_v5.py` |
+| FX2 | StateReference 按参照组织身份应用 A 的输入可见性（新原因位 `a_not_visible`=128） | `tests/v5/test_tissue_state_metrics.py` |
+| FX3 | `memory.md` 停止跟踪、加入忽略，新增 `memory.example.md` | `tests/v5/test_status_docs.py::test_memory_md_untracked_and_ignored` |
+| FX4 | D1–D4 决定登记；README、traceability、plan 同步 | `tests/v5/test_status_docs.py::test_decisions_recorded_with_separate_statuses` |
