@@ -29,7 +29,7 @@ def resample_labels_v5(labels: np.ndarray, src_affine: np.ndarray, dst_affine: n
         raise V5Error("GRID_MISMATCH", "$.labels")
     grid = np.indices(tuple(dst_shape)).reshape(3, -1).T
     source = inverse_transform_points(transform_points(grid, dst_affine), src_affine)
-    nearest = np.rint(source)
+    nearest = np.floor(source + 0.5)  # ties round half up, never half to even
     valid = np.all((nearest >= 0) & (nearest <= np.asarray(labels.shape) - 1), axis=1)
     out = np.zeros(len(grid), dtype=labels.dtype)
     idx = nearest[valid].astype(np.int64)
@@ -62,8 +62,22 @@ def restore_grid_v5(array: np.ndarray, valid_mask: np.ndarray, original_shape: t
     return out, represented
 
 
+def _block_any(mask: np.ndarray, factor: tuple) -> np.ndarray:
+    """Any-positive per downsampling block (blocks anchored at the origin, edge blocks padded with False)."""
+    padded_shape = tuple(-(-s // f) * f for s, f in zip(mask.shape, factor))
+    padded = np.zeros(padded_shape, dtype=bool)
+    padded[tuple(slice(0, s) for s in mask.shape)] = mask
+    blocks = padded.reshape([n for p, f in zip(padded_shape, factor) for n in (p // f, f)])
+    return blocks.any(axis=tuple(range(1, blocks.ndim, 2)))
+
+
 def downsample_loss_report_v5(mask: np.ndarray, factor: tuple, class_names: list) -> dict:
-    """Strided downsampling of bool [C, *spatial]; reports components (26-connected) that vanish."""
+    """Strided downsampling of bool [C, *spatial].
+
+    ``lost_positive_mask`` marks every downsampled voxel whose block holds a positive but whose
+    lattice sample is negative, including blocks of thin structures whose component survives
+    elsewhere; ``components_vanished`` counts 26-connected components with no lattice voxel.
+    """
     if not isinstance(mask, np.ndarray) or mask.dtype != np.bool_ or mask.ndim < 2:
         raise V5Error("DTYPE_MISMATCH", "$.mask")
     spatial = mask.shape[1:]
@@ -73,20 +87,14 @@ def downsample_loss_report_v5(mask: np.ndarray, factor: tuple, class_names: list
         raise V5Error("CLASS_COUNT_MISMATCH", "$.class_names")
     steps = tuple(slice(None, None, int(f)) for f in factor)
     down_shape = tuple(-(-s // int(f)) for s, f in zip(spatial, factor))
-    lattice = np.zeros(spatial, dtype=bool)
-    lattice[steps] = True
+    factors = tuple(int(f) for f in factor)
     structure = ndimage.generate_binary_structure(len(spatial), len(spatial))
     lost = np.zeros((mask.shape[0], *down_shape), dtype=bool)
     classes = {}
     for c, name in enumerate(class_names):
+        lost[c] = _block_any(mask[c], factors) & ~mask[c][steps]
         components, count = ndimage.label(mask[c], structure=structure)
-        vanished = 0
-        for label in range(1, count + 1):
-            component = components == label
-            if not (component & lattice).any():
-                vanished += 1
-                blocks = np.argwhere(component) // np.asarray(factor, dtype=np.int64)
-                lost[(c, *blocks.T)] = True
+        vanished = count - int(np.count_nonzero(np.unique(components[steps])))
         classes[name] = {"voxels_before": int(mask[c].sum()), "voxels_after": int(mask[c][steps].sum()),
                          "components_before": int(count), "components_vanished": vanished}
     return {"factor": [int(f) for f in factor], "classes": classes, "lost_positive_mask": lost}

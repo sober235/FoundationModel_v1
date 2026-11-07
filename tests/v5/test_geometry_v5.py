@@ -84,3 +84,21 @@ def test_downsample_rejects_non_bool_or_bad_factor(mask, factor, names, code):
     with pytest.raises(V5Error) as error:
         downsample_loss_report_v5(mask, factor, names)
     assert error.value.code == code
+
+
+def test_downsample_reports_lost_blocks_of_surviving_thin_structure():
+    mask = np.zeros((1, 8, 8, 8), dtype=bool)
+    mask[0, 1, :, :] = True  # 1-voxel plate at odd x: never on the stride-2 lattice
+    mask[0, 0, 0, 0] = True  # one lattice voxel keeps the component alive
+    report = downsample_loss_report_v5(mask, (2, 2, 2), ["cartilage"])
+    assert report["classes"]["cartilage"]["components_vanished"] == 0
+    lost = report["lost_positive_mask"][0]
+    assert lost.sum() == 15 and not lost[0, 0, 0] and not lost[1:].any()
+
+
+def test_resample_half_voxel_tie_rounds_half_up():
+    labels = np.arange(8, dtype=np.int16).reshape(8, 1, 1)
+    dst = np.eye(4)
+    dst[0, 3] = 0.5
+    out, valid = resample_labels_v5(labels, np.eye(4), dst, (7, 1, 1))
+    assert out.ravel().tolist() == [1, 2, 3, 4, 5, 6, 7] and valid.all()
