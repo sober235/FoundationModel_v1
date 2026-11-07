@@ -1,7 +1,8 @@
 """v5.1 group-level splits (Proposal_v5 §3.3; plan_v5 T08b).
 
-Splits are assigned per leakage group, so all records of a group share one
-split. Official source splits come first; otherwise groups are ordered within
+Splits are assigned per group, so all records of a group share one split; a
+group mapping that puts one patient or leakage group into two groups is
+rejected. Official source splits come first; otherwise groups are ordered within
 each stratum by a seeded hash and cut by the policy fractions. Every value
 comes from the policy (no defaults). A group whose exposure ledger blocks the
 lineage's locked test is moved out of ``locked_test`` to the policy's
@@ -45,6 +46,7 @@ def _record_groups(records: list, groups: dict) -> dict[str, list[SampleV5]]:
         raise V5Error("INVALID_TYPE", "$.groups")
     seen: set[str] = set()
     members: dict[str, list[SampleV5]] = {}
+    owner: dict[tuple[str, str], str] = {}
     for index, record in enumerate(records):
         path = f"$.records[{index}]"
         if not isinstance(record, SampleV5):
@@ -57,6 +59,9 @@ def _record_groups(records: list, groups: dict) -> dict[str, list[SampleV5]]:
             raise V5Error("MISSING_GROUP", path)
         if not isinstance(group, str) or not group.strip():
             raise V5Error("INVALID_GROUP", path)
+        for field in ("leakage_group_uid", "patient_uid"):
+            if owner.setdefault((field, getattr(record, field)), group) != group:
+                raise V5Error("LEAKAGE_GROUP_SPLIT", f"{path}.{field}")
         members.setdefault(group, []).append(record)
     return members
 

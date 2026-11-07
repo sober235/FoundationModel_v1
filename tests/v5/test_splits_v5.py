@@ -22,7 +22,9 @@ def _records(n_groups, per_group=2, exposed=()):
         for k in range(per_group):
             uid = f"s-{g}-{k}"
             history = [_exposure("training")] if g in exposed and k == 0 else []
-            records.append(validate_sample_v5(make_sample_v5(sample_uid=uid, exposure_history=history)))
+            records.append(validate_sample_v5(make_sample_v5(
+                sample_uid=uid, exposure_history=history,
+                patient_uid=f"synthetic:p{g:04d}", leakage_group_uid=f"synthetic:p{g:04d}")))
             groups[uid] = f"g{g}"
     return records, groups
 
@@ -148,3 +150,20 @@ def test_records_need_groups_and_unique_uids():
     with pytest.raises(V5Error) as err:
         freeze_splits_v5(records + records[:1], groups, policy, "lin-a")
     assert (err.value.code, err.value.path) == ("DUPLICATE_SAMPLE", "$.records[2]")
+
+
+def test_group_mapping_cannot_split_a_patient_or_leakage_group():
+    policy = {"kind": "official", "official_split": {"g0": "train", "g1": "test"}, "exposed_groups": "train"}
+    records, groups = _records(2)
+    groups["s-0-1"] = "g1"
+    with pytest.raises(V5Error) as err:
+        freeze_splits_v5(records, groups, policy, "lin-a")
+    assert (err.value.code, err.value.path) == ("LEAKAGE_GROUP_SPLIT", "$.records[1].leakage_group_uid")
+    assert "p0000" not in str(err.value)
+    records, groups = _records(2)
+    records[1] = validate_sample_v5(make_sample_v5(sample_uid="s-0-1", patient_uid="synthetic:p0000",
+                                                   leakage_group_uid="synthetic:other"))
+    groups["s-0-1"] = "g1"
+    with pytest.raises(V5Error) as err:
+        freeze_splits_v5(records, groups, policy, "lin-a")
+    assert (err.value.code, err.value.path) == ("LEAKAGE_GROUP_SPLIT", "$.records[1].patient_uid")
