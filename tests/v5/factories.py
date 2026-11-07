@@ -9,6 +9,7 @@ import numpy as np
 from anatobind.v41.contracts_v5 import validate_sample_v5
 from anatobind.v41.evaluation.reference import ReferenceLesion
 from anatobind.v41.gates_v5 import gate_task_v5
+from anatobind.v41.source_policy_v5 import validate_source_policy_v5
 from anatobind.v41.state_rule_v5 import REASON_BITS, derive_state_map_v5
 from tests.v41.conftest import _sample
 
@@ -280,3 +281,13 @@ def make_state_reference_inputs(scope, **overrides) -> dict:
                                if "a_visibility_region" in overrides else {}),
     }
     return {"record": validate_sample_v5(sample), "arrays": arrays}
+
+
+def make_source_policy(**overrides):
+    """Synthetic SourcePolicy matching tests.v41.conftest._sample() and make_module_scope("U")."""
+    entry = {"source_version": "v0", "source_dataset": "synthetic", "scope_id": "synthetic_u",
+             "reference_policy_id": "synthetic_policy_v1", "model_modalities": ["qdess_e1"],
+             "annotation_modalities": {"U": ["qdess_e1"]}, "index_evidence": "synthetic",
+             "physical_units_policy": "trust_header"}
+    entry.update(overrides)
+    return validate_source_policy_v5("synthetic_source", entry)
