@@ -5,7 +5,9 @@ outside its requirement row are ignored. Approvals are bound to scope_hash;
 evidence is bound to scope_hash and also to the data source (id, version) and
 task, so evidence produced for one source or scope cannot open another gate
 (G-DATA is per (source, task), §9). Test-only approvers are rejected unless the
-caller explicitly runs in fixture mode. This module neither reads nor writes files.
+caller explicitly runs in fixture mode; decisions record fixture_mode and the approvals a fixture granted,
+and evidence marked fixture_mode is rejected outside fixture mode. G-DATA approvals (data use is a
+per-source sign-off) are also bound to source_id and source_version. This module neither reads nor writes files.
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ _BASE = ("g_data", "supervision_policy", "input_policy", "frozen_dev_split", "tr
 
 GATE_REQUIREMENTS: dict[str, dict] = {
     "G-DATA": {"evidence": ("readability", "semantics", "identity", "pairing", "task_geometry", "provenance"),
-               "approvals": ("data_use",), "scope_rule": None},
+               "approvals": ("data_use",), "scope_rule": None, "source_bound_approvals": True},
     "G-BASE-A": {"evidence": _BASE, "approvals": ("resources",), "scope_rule": "anatomy"},
     "G-BASE-U": {"evidence": _BASE, "approvals": ("resources",), "scope_rule": "abnormality"},
     "G-ANNOTATION": {"evidence": ("readers", "quality", "review_regions", "visibility_regions", "voxel_u_reference",
@@ -88,12 +90,15 @@ def evaluate_gate_v5(gate_id: str, scope: ActiveScope, evidence: dict, approvals
                 "source_version": source["source_version"], "task": task}
     blockers = []
     hashes = []
+    fixture_approvals = []
     for key in requirement["evidence"]:
         item = evidence.get(key)
         if not (isinstance(item, dict) and item.get("status") == "PASS" and _is_sha256(item.get("sha256"))):
             blockers.append(f"EVIDENCE_MISSING:{key}")
         elif any(item.get(field) != expected[field] for field in _BINDING_FIELDS):
             blockers.append(f"EVIDENCE_BINDING_MISMATCH:{key}")
+        elif item.get("fixture_mode") is True and not fixture_mode:
+            blockers.append(f"EVIDENCE_FIXTURE_NOT_ALLOWED:{key}")
         else:
             hashes.append(item["sha256"])
     for key in requirement["approvals"]:
@@ -105,6 +110,11 @@ def evaluate_gate_v5(gate_id: str, scope: ActiveScope, evidence: dict, approvals
             blockers.append(f"APPROVAL_FIXTURE_NOT_ALLOWED:{key}")
         elif item.get("scope_hash") != scope.scope_hash:
             blockers.append(f"APPROVAL_SCOPE_MISMATCH:{key}")
+        elif requirement.get("source_bound_approvals") and (item.get("source_id") != source["source_id"]
+                                                            or item.get("source_version") != source["source_version"]):
+            blockers.append(f"APPROVAL_SOURCE_MISMATCH:{key}")
+        elif item["approved_by"] in FIXTURE_APPROVERS:
+            fixture_approvals.append(key)
     blockers.extend(_scope_blockers(requirement["scope_rule"], scope))
     return {
         "gate_id": gate_id,
@@ -113,6 +123,8 @@ def evaluate_gate_v5(gate_id: str, scope: ActiveScope, evidence: dict, approvals
         "source_id": source["source_id"],
         "source_version": source["source_version"],
         "task": task,
+        "fixture_mode": fixture_mode,
+        "fixture_approvals": sorted(fixture_approvals),
         "engineering_status": "BLOCKED" if blockers else "PASS",
         "scientific_conclusion": "NOT_EVALUATED",
         "blockers": sorted(blockers),

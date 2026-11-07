@@ -12,6 +12,7 @@ from tests.v5.factories import SYNTH_SOURCE, make_approvals, make_evidence, make
 
 A_SCOPE = validate_scope_v5(make_module_scope("A"))
 U_SCOPE = validate_scope_v5(make_module_scope("U"))
+OTHER_A = validate_scope_v5(make_module_scope("A", scope_id="other_a"))
 BASE_KEYS = ["g_data", "supervision_policy", "input_policy", "frozen_dev_split", "training_smoke"]
 
 
@@ -110,3 +111,44 @@ def test_invalid_source_raises(source):
     with pytest.raises(V5Error) as error:
         evaluate_gate_v5("G-DATA", A_SCOPE, {}, {}, source)
     assert error.value.code == "INVALID_SOURCE"
+
+
+def test_same_task_evidence_from_other_scope_is_rejected():
+    decision = _gate("G-BASE-A", A_SCOPE, make_evidence(BASE_KEYS, OTHER_A), make_approvals(A_SCOPE, ["resources"]))
+    assert decision["blockers"] == sorted(f"EVIDENCE_BINDING_MISMATCH:{k}" for k in BASE_KEYS)
+
+
+def test_evidence_for_other_task_is_rejected():
+    evidence = {k: {**v, "task": "U"} for k, v in make_evidence(BASE_KEYS, A_SCOPE).items()}
+    decision = _gate("G-BASE-A", A_SCOPE, evidence, make_approvals(A_SCOPE, ["resources"]))
+    assert decision["blockers"] == sorted(f"EVIDENCE_BINDING_MISMATCH:{k}" for k in BASE_KEYS)
+
+
+def test_data_use_approval_is_bound_to_source():
+    keys = list(GATE_REQUIREMENTS["G-DATA"]["evidence"])
+    other = {"source_id": "other_source", "source_version": "v0"}
+    approvals = make_approvals(U_SCOPE, ["data_use"], source=SYNTH_SOURCE)
+    assert _gate("G-DATA", U_SCOPE, make_evidence(keys, U_SCOPE), approvals)["engineering_status"] == "PASS"
+    moved = evaluate_gate_v5("G-DATA", U_SCOPE, make_evidence(keys, U_SCOPE, other), approvals, other,
+                             fixture_mode=True)
+    assert moved["blockers"] == ["APPROVAL_SOURCE_MISMATCH:data_use"]
+    unbound = _gate("G-DATA", U_SCOPE, make_evidence(keys, U_SCOPE), make_approvals(U_SCOPE, ["data_use"]))
+    assert unbound["blockers"] == ["APPROVAL_SOURCE_MISMATCH:data_use"]
+
+
+def test_fixture_decisions_are_marked():
+    args = ("G-BASE-A", A_SCOPE, make_evidence(BASE_KEYS, A_SCOPE), make_approvals(A_SCOPE, ["resources"]),
+            SYNTH_SOURCE)
+    fixture = evaluate_gate_v5(*args, fixture_mode=True)
+    assert fixture["fixture_mode"] is True and fixture["fixture_approvals"] == ["resources"]
+    blocked = evaluate_gate_v5(*args)
+    assert blocked["fixture_mode"] is False and blocked["fixture_approvals"] == []
+
+
+def test_fixture_evidence_rejected_outside_fixture_mode():
+    evidence = make_evidence(BASE_KEYS, A_SCOPE)
+    evidence["g_data"] = {**evidence["g_data"], "fixture_mode": True}
+    approvals = make_approvals(A_SCOPE, ["resources"])
+    blocked = evaluate_gate_v5("G-BASE-A", A_SCOPE, evidence, approvals, SYNTH_SOURCE)
+    assert "EVIDENCE_FIXTURE_NOT_ALLOWED:g_data" in blocked["blockers"]
+    assert _gate("G-BASE-A", A_SCOPE, evidence, approvals)["engineering_status"] == "PASS"

@@ -213,9 +213,11 @@ def make_evidence(keys, scope, source=SYNTH_SOURCE) -> dict:
     return {key: {"status": "PASS", "sha256": hashlib.sha256(key.encode()).hexdigest(), **binding} for key in keys}
 
 
-def make_approvals(scope, keys) -> dict:
+def make_approvals(scope, keys, source=None) -> dict:
+    """Fixture approvals bound to scope_hash; with source, also to source_id/source_version (G-DATA)."""
+    binding = {} if source is None else {"source_id": source["source_id"], "source_version": source["source_version"]}
     return {key: {"approved_by": FIXTURE_APPROVER, "approved_at": "2026-11-06T00:00:00Z",
-                  "scope_hash": scope.scope_hash} for key in keys}
+                  "scope_hash": scope.scope_hash, **binding} for key in keys}
 
 
 def make_reference_lesion(**overrides) -> ReferenceLesion:
@@ -231,7 +233,8 @@ def make_state_reference_inputs(scope, **overrides) -> dict:
 
     Overrides: review (array; makes the U annotation region_complete on path "review/r1"), u_completeness,
     u_visibility, u_reference_role, a_reference_role, a_class_scope, single_slice_readable, a_visibility,
-    a_visibility_region (array; registered as "visibility/a1" and used when a_visibility is "limited").
+    a_visibility_region (array; registered as "visibility/a1" and used when a_visibility is "limited"),
+    a_tissue_visibility ({tissue: visibility}; replaces the single A annotation with one per tissue).
     """
     shape = (2, 2) if scope.observation_mode == "2d" else (1, 2, 2)
     review = overrides.get("review")
@@ -254,7 +257,16 @@ def make_state_reference_inputs(scope, **overrides) -> dict:
                               visibility_evidence=None if a_visibility == "unknown" else "synthetic",
                               visibility_region_path="visibility/a1" if a_visibility == "limited" else None,
                               reference_role=overrides.get("a_reference_role", "expert_voxel"))
-    sample["annotation_records"].insert(0, anatomy_annotation)
+    if "a_tissue_visibility" in overrides:
+        # One A annotation per tissue, each with its own visibility (per-tissue A visibility, FX2).
+        for name, tissue_visibility in reversed(list(overrides["a_tissue_visibility"].items())):
+            per_tissue = copy.deepcopy(anatomy_annotation)
+            per_tissue.update(annotation_uid=f"ann-v5-a-{name}", class_scope=[name], input_visibility=tissue_visibility,
+                              visibility_evidence=None if tissue_visibility == "unknown" else "synthetic",
+                              visibility_region_path=None)
+            sample["annotation_records"].insert(0, per_tissue)
+    else:
+        sample["annotation_records"].insert(0, anatomy_annotation)
     abnormality = np.zeros((len(scope.abnormality_classes), *shape), dtype=bool)
     positive = abnormality[0].reshape(-1, 2, 2)
     positive[0, 0, 0] = positive[0, 1, 0] = True

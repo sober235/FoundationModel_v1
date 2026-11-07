@@ -1,6 +1,6 @@
 # AnatoBind / FoundationModel 项目记忆（memory.example.md，脱敏示例）
 
-本文件是 `memory.md` 的脱敏示例；真实 `memory.md` 只在本地、已被 `.gitignore` 忽略（2026-11-07 起停止 Git 跟踪，研究者决定 D2）。
+本文件是 `memory.md` 的脱敏示例；真实 `memory.md` 只在本地、已被 `.gitignore` 忽略（2026-11-06 起停止 Git 跟踪，研究者决定 D2）。
 其他机器上的旧克隆在 `git pull` 前先备份本机 `memory.md`，否则拉取会把它从工作区删除。
 Git 历史中的旧版本未改写，另行审查（`reports/v5/status.md` blocker `PRIVATE_PATHS_IN_HISTORY:memory.md`）。
 

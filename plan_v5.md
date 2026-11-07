@@ -1574,6 +1574,10 @@ git add reports/v5/status.md tests/v5/test_status_docs.py plan_v5.md README.md r
 git commit -m "Record D1-D4 decisions and sync status documents"
 ```
 
+### 补修终审修复（2026-11-06）
+
+独立终审后追加：G-DATA 的批准另绑定 `source_id`、`source_version`（`APPROVAL_SOURCE_MISMATCH:<key>`）；决定增加 `fixture_mode` 与 `fixture_approvals`；证据条目带 `fixture_mode: true` 时在非 fixture 模式下报 `EVIDENCE_FIXTURE_NOT_ALLOWED:<key>`；4 个仍被跟踪的 v4.1 文档含私有路径，登记 blocker `PRIVATE_PATHS_TRACKED:v41_docs`，是否脱敏由研究者决定。
+
 ### 补修完成判定
 
 `pytest_cpu tests/v41 tests/v5` 全部通过；FX1–FX4 提交齐全；整段补修做一次独立审查；推送前征得研究者同意。补修只改软件行为与登记，不产生真实数据或科学结论。

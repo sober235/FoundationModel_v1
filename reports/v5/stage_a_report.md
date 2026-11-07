@@ -4,6 +4,7 @@
 - 分支：`restart-dev`，提交范围 `0ca68b5..14c8a9d`（任务提交 `79ad7ed`…`a9d9f73`，终审修复 `d791931`，plan T06b 同步 `14c8a9d`）
 - 科学结论：NOT_EVALUATED（阶段 A 只交付契约、资格与评估器，未接触真实数据）
 - 逐任务状态见 `reports/v5/status.md`
+- **2026-11-06 补记：** 本报告中的部分内容已被 `reports/v5/status.md` 与 plan_v5.md §2A 取代——第 33 项（gate 证据未绑定 scope）、M11（测试批准人）、M13（traceability 未更新）已由补修 FX1/FX4 处理；“待研究者决定 D1–D4”已由研究者决定。以 status.md 为准。
 
 ## 结果
 

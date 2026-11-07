@@ -42,7 +42,7 @@ def test_decisions_recorded_with_separate_statuses():
         assert set(row) == {"choice", "decided_at", "implementation_status", "run_status", "scientific_conclusion"}
     assert meta["decisions"]["D1"]["choice"] == "reference_comparison_with_h3_noninferiority"
     assert meta["decisions"]["D4"]["run_status"] == "NOT_RUN"
-    assert {"PRIVATE_PATHS_IN_HISTORY:memory.md", "BLOCKED_EXPERT_REVIEW",
+    assert {"PRIVATE_PATHS_IN_HISTORY:memory.md", "PRIVATE_PATHS_TRACKED:v41_docs", "BLOCKED_EXPERT_REVIEW",
             "EXECUTION_HOST_UNVERIFIED"} == set(meta["blockers"])
 
 
@@ -52,4 +52,33 @@ def test_memory_md_untracked_and_ignored():
     assert tracked.returncode != 0 and ignored.returncode == 0
     example = Path("memory.example.md").read_text(encoding="utf-8")
     assert "## 用户偏好/规则" in example
+    assert _front_matter()["decisions"]["D2"]["decided_at"] in example
     assert not re.search(r"/(Users|home|data|mnt|private|srv|opt)/", example)
+
+
+PRIVATE_PATH_PATTERN = r"/data[0-9]+/|/home/[a-z]"
+
+
+def _git(*args):
+    return subprocess.run(["git", *args], capture_output=True, text=True)
+
+
+def test_tracked_private_paths_are_recorded():
+    hits = _git("grep", "-l", "-E", PRIVATE_PATH_PATTERN, "--", ".", ":!derived").stdout.split()
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    if hits:
+        assert "PRIVATE_PATHS_TRACKED:v41_docs" in _front_matter()["blockers"]
+        assert all(f"`{path}`" in status for path in hits)
+
+
+def test_fix_pack_rows_cite_existing_commits():
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    for task in ("FX1", "FX2", "FX3", "FX4"):
+        row = next(line for line in status.splitlines() if line.startswith(f"| {task} |"))
+        commits = re.findall(r"`([0-9a-f]{7})`", row)
+        assert commits and all(_git("cat-file", "-e", f"{c}^{{commit}}").returncode == 0 for c in commits)
+
+
+def test_stage_a_report_points_to_current_status():
+    head = Path("reports/v5/stage_a_report.md").read_text(encoding="utf-8").split("\n## ")[0]
+    assert "reports/v5/status.md" in head and "已被" in head

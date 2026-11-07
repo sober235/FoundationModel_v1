@@ -168,3 +168,13 @@ def test_a_visibility_bit_only_on_state_tissue():
     reference = build_state_reference_v5(inputs["record"], inputs["arrays"], SCOPE, "obs-synth-1")
     assert reference.eligibility_reason[0, 0, 0] & STATE_ELIGIBILITY_BITS["a_not_visible"] == 0
     assert reference.eligibility_reason[0, 0, 0] & STATE_ELIGIBILITY_BITS["not_state_tissue"]
+
+
+def test_a_visibility_follows_reference_tissue():
+    inputs = make_state_reference_inputs(SCOPE, a_tissue_visibility={"tissue_a": "visible", "tissue_b": "unobservable"})
+    inputs["arrays"]["anatomy"][0, 1, :] = SCOPE.tissue_id("tissue_b")
+    reference = build_state_reference_v5(inputs["record"], inputs["arrays"], SCOPE, "obs-synth-1")
+    tissue_b = inputs["arrays"]["anatomy"] == SCOPE.tissue_id("tissue_b")
+    assert np.array_equal(reference.state_eligible, ~tissue_b)
+    a_bit = (reference.eligibility_reason & STATE_ELIGIBILITY_BITS["a_not_visible"]) != 0
+    assert np.array_equal(a_bit, tissue_b)

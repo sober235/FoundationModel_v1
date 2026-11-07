@@ -20,7 +20,7 @@ decisions:
   D2:
     choice: untrack_and_ignore_history_review_pending
     decided_at: "2026-11-06"
-    implementation_status: PASS   # FX3: memory.md untracked + ignored; history not rewritten
+    implementation_status: PARTIAL   # FX3: memory.md untracked + ignored; 4 tracked v4.1 docs still carry private paths; history not rewritten
     run_status: NOT_APPLICABLE
     scientific_conclusion: NOT_APPLICABLE
   D3:
@@ -35,7 +35,8 @@ decisions:
     implementation_status: TODO   # read-only host precheck not yet done
     run_status: NOT_RUN
     scientific_conclusion: NOT_EVALUATED
-blockers: ["PRIVATE_PATHS_IN_HISTORY:memory.md", "BLOCKED_EXPERT_REVIEW", "EXECUTION_HOST_UNVERIFIED"]
+blockers: ["PRIVATE_PATHS_IN_HISTORY:memory.md", "PRIVATE_PATHS_TRACKED:v41_docs", "BLOCKED_EXPERT_REVIEW",
+           "EXECUTION_HOST_UNVERIFIED"]
 tasks:
   T00:
     code_status: PASS
@@ -224,15 +225,17 @@ tasks:
   - 聚合：患者间等权；J 为患者内冻结病灶集合的成功数／支持数；A/U/S 观测级指标先按观测计算、再患者内汇总、再患者等权；逐指标登记支持集合、患者内权重与空值原因；不得按测试结果选择聚合方式。
   - 预测为空或全部弃权造成的 `None` 不得记作“参照无支持”。当前 `summarize_state_by_patient_v5` 的 `n_patients_without_support` 对 precision 混记了这两种情形，修订放入阶段 C 汇总任务。
   - D1 不阻塞阶段 B 工程；它阻塞最终能力判定与 G-H3-SCI。
-- **D2 `memory.md`：** 已停止 Git 跟踪并加入 `.gitignore`（FX3），公开仓库保留脱敏的 `memory.example.md`。Git 历史未改写：历史中有私有路径；按 token 格式扫描未发现凭证字符串，但这不是完整的敏感性审查。是否清理历史由研究者另行决定（blocker `PRIVATE_PATHS_IN_HISTORY:memory.md`）。其他机器上的旧克隆 `git pull` 前须先备份本机 `memory.md`。
+- **D2 `memory.md`：** 已停止 Git 跟踪并加入 `.gitignore`（FX3），公开仓库保留脱敏的 `memory.example.md`。**当前跟踪树并不干净**：以下 4 个仍被跟踪的 v4.1 文档含与旧 `memory.md` 相同的私有原始数据根与私有产物根（blocker `PRIVATE_PATHS_TRACKED:v41_docs`）：`AnatoBind_MRI_v4.1_Feasibility_Proposal.md`、`AnatoBind_MRI_v4.1_Supervision_Data_Contract.md`、`docs/archive/v4.1/plan.md`、`reports/v41/reuse_decisions.md`。是否脱敏这些归档文档由研究者决定；未处理前 D2 实现状态为 `PARTIAL`。Git 历史未改写：历史中有私有路径；按 token 格式扫描未发现凭证字符串，但这不是完整的敏感性审查。是否清理历史由研究者另行决定（blocker `PRIVATE_PATHS_IN_HISTORY:memory.md`）。其他机器上的旧克隆 `git pull` 前须先备份本机 `memory.md`。
 - **D3 专家资源：** 保留 SKM 联合场景；先准备 20–30 次非锁定开发扫描试点，明确主读、独立复读、仲裁责任，以及异常边界、不确定带与单层可判读规则。人员与预算未落实前 X0 不标完成，相关科学验证保持 `BLOCKED_EXPERT_REVIEW`。框、分级或伪标签不能替代原定联合验证；试点不能形成稳定体素参照时，再按实际资源提出替代场景。
 - **D4 执行主机：** 选定 148 数据服务器。尚未连接核验（blocker `EXECUTION_HOST_UNVERIFIED`）：执行端在该主机上只读核验代码提交、解释器与依赖、数据版本与可读性、可分配 GPU／内存／磁盘，形成脱敏预检报告后才登记为正式执行环境；解释器路径以实测为准，真实路径只进本地配置。
 
 ## 阶段 A 补修（plan_v5.md §2A，外部审查后）
 
-| 任务 | 内容 | 测试 |
-| --- | --- | --- |
-| FX1 | 准入证据绑定 scope_hash、来源（id、版本）与任务；测试专用批准人在非 fixture 模式下被拒 | `tests/v5/test_gates_v5.py` |
-| FX2 | StateReference 按参照组织身份应用 A 的输入可见性（新原因位 `a_not_visible`=128） | `tests/v5/test_tissue_state_metrics.py` |
-| FX3 | `memory.md` 停止跟踪、加入忽略，新增 `memory.example.md` | `tests/v5/test_status_docs.py::test_memory_md_untracked_and_ignored` |
-| FX4 | D1–D4 决定登记；README、traceability、plan 同步 | `tests/v5/test_status_docs.py::test_decisions_recorded_with_separate_statuses` |
+| 任务 | 提交 | 内容 | 测试 |
+| --- | --- | --- | --- |
+| FX1 | `c6427e9` | 准入证据绑定 scope_hash、来源（id、版本）与任务；测试专用批准人在非 fixture 模式下被拒 | `tests/v5/test_gates_v5.py` |
+| FX2 | `f246926` | StateReference 按参照组织身份应用 A 的输入可见性（新原因位 `a_not_visible`=128） | `tests/v5/test_tissue_state_metrics.py` |
+| FX3 | `fa15697` | `memory.md` 停止跟踪、加入忽略，新增 `memory.example.md` | `tests/v5/test_status_docs.py::test_memory_md_untracked_and_ignored` |
+| FX4 | `4a5ae80` | D1–D4 决定登记；README、traceability、plan 同步 | `tests/v5/test_status_docs.py::test_decisions_recorded_with_separate_statuses` |
+
+补修经独立终审（With fixes：Important 4、Minor 6）后一轮修复：G-DATA 批准另绑定来源与版本；fixture 模式的决定记录 `fixture_mode` 与 `fixture_approvals`，标记为 fixture 的证据在非 fixture 模式下被拒；补齐按组织的 A 可见性与同任务跨 scope 证据的守护测试；本节与 D2 记录更正。
