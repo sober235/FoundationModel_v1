@@ -8,14 +8,14 @@
 
 **Tech Stack:** Python ≥3.9（本机 `.venv` 为 3.9.6；数据服务器为 3.11），NumPy、SciPy、PyTorch、PyYAML、pytest（均已安装）；Google DeepMind surface-distance 源码按固定提交内置（仅 T06a）。不新增运行时依赖。
 
-**Spec:** [Proposal_v5.md](Proposal_v5.md)，v5.1，SHA256 `b25b0e1beae512320b29beeba2b0eac367cf62e94304d70c28100da1fb006dbf`。其 §1–12 是本计划的约束依据；本计划与之冲突时以 Proposal 为准。
+**Spec:** [Proposal_v5.md](Proposal_v5.md)，v5.1（2026-11-07 修订），SHA256 `5937627173942f3bc015cb2b5513fd6af3614fe973e1ba153f4dde0e5e1da972`。其 §1–12 是本计划的约束依据；本计划与之冲突时以 Proposal 为准。
 
 **本次修订（相对提交 `8dc38be` 的上一版）：**
 - 执行基线改为 GitHub `sober235/FoundationModel_v1` 当前内容（本地 `restart-dev`，代码与 `main`/`d7cbd5b` 相同）。上一版依赖的 `02a2447`、`9c972f9` 不在仓库内，相关“复用/适配”假设全部取消，缺失模块改为新建。远端 `docs/skm-a-200step-summary-20261106` 报告的服务器实现与试训结果不作为本计划任何任务的完成证据。
 - 拆成阶段：阶段 A（T00–T06c）在本文件详写；阶段 B–F 只保留路线图及必须纳入的审查项。
 - 吸收 2026-11-06 计划审查：缺陷探针改为本仓库实测值（§0.2）；未落实的 Proposal 要求逐项指派任务（§1.2 最后一列）；`memory.md` 私有路径、T17 能力标准、专家资源、执行主机列为待研究者决定事项（§1.3）；实例/关系字典结构在 T01b 定义；T03/T13 共用。
 - 上一版中 `migrate_v41` 移到 T07（真实记录迁移处），各 schema 移到首次使用它的任务，避免 T01 一次性建 18 个契约。
-- **2026-11-07 核心目标对齐修订**（依据 `reports/v5/core_goal_alignment_review_20261107.md`，审查基线 `aad3e5e`；Proposal 未改动）：
+- **2026-11-07 核心目标对齐修订**（依据 `reports/v5/core_goal_alignment_review_20261107.md`，审查基线 `aad3e5e`；随后 Proposal v5.1 同步修订，见其 §0.4）：
   - 拆开核心能力终点 F1 与研究包终点 F2，H2（T15）不再阻塞 T17（§1.1、§1.2）。
   - X0 专家试点与 T11 提到与 B2 同级并行，T11 不再等待 B2（§1.1、§1.4）。
   - B1 遗留项中会污染下一次真实运行的，指派到明确的关闭点（§1.6）。

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 from pathlib import Path
@@ -22,7 +23,13 @@ def test_historical_evidence_is_not_v51_pass():
     assert meta["scientific_conclusion"] == "NOT_EVALUATED"
     assert meta["core_target_validated"] is None
     assert meta["study_package_complete"] is False
-    assert meta["spec_sha256"] == "b25b0e1beae512320b29beeba2b0eac367cf62e94304d70c28100da1fb006dbf"
+
+
+
+def test_status_and_plan_pin_the_current_spec():
+    spec_sha = hashlib.sha256(Path("Proposal_v5.md").read_bytes()).hexdigest()
+    assert _front_matter()["spec_sha256"] == spec_sha
+    assert f"SHA256 `{spec_sha}`" in Path("plan_v5.md").read_text(encoding="utf-8")
 
 
 def test_every_task_has_five_separate_statuses():
@@ -36,7 +43,7 @@ def test_every_task_has_five_separate_statuses():
 
 def test_decisions_recorded_with_separate_statuses():
     meta = _front_matter()
-    assert meta["open_decisions"] == []
+    assert meta["open_decisions"] == ["D5"]
     assert list(meta["decisions"]) == ["D1", "D2", "D3", "D4"]
     for row in meta["decisions"].values():
         assert set(row) == {"choice", "decided_at", "implementation_status", "run_status", "scientific_conclusion"}
