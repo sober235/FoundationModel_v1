@@ -15,6 +15,12 @@
 - 拆成阶段：阶段 A（T00–T06c）在本文件详写；阶段 B–F 只保留路线图及必须纳入的审查项。
 - 吸收 2026-11-06 计划审查：缺陷探针改为本仓库实测值（§0.2）；未落实的 Proposal 要求逐项指派任务（§1.2 最后一列）；`memory.md` 私有路径、T17 能力标准、专家资源、执行主机列为待研究者决定事项（§1.3）；实例/关系字典结构在 T01b 定义；T03/T13 共用。
 - 上一版中 `migrate_v41` 移到 T07（真实记录迁移处），各 schema 移到首次使用它的任务，避免 T01 一次性建 18 个契约。
+- **2026-11-07 核心目标对齐修订**（依据 `reports/v5/core_goal_alignment_review_20261107.md`，审查基线 `aad3e5e`；Proposal 未改动）：
+  - 拆开核心能力终点 F1 与研究包终点 F2，H2（T15）不再阻塞 T17（§1.1、§1.2）。
+  - X0 专家试点与 T11 提到与 B2 同级并行，T11 不再等待 B2（§1.1、§1.4）。
+  - B1 遗留项中会污染下一次真实运行的，指派到明确的关闭点（§1.6）。
+  - B2 先冻结模型输入/输出接口，避免 T16 迁移双模式时返工（§1.7）。
+  - 写明 v5.1 相对长期“MRI 基础模型”目标的定位，新增待决定事项 D5（§1.3、§1.5）。
 
 ## Global Constraints
 
@@ -83,39 +89,71 @@ flowchart TD
   T04 --> T06b
   T05 --> T06b
   T06a --> T06b
-  T06b --> B[阶段B T07-T10]
-  T02 --> B
-  T01c --> B
-  B --> C[阶段C T11-T14]
-  B --> D[阶段D T15]
-  B --> E[阶段E T16]
-  C --> F[阶段F T17-T18]
-  D --> F
-  E --> F
-  X0[X0 专家资源线] -.真实参照.-> C
+  T06b --> B1[阶段B1 T07-T08]
+  T02 --> B1
+  T01c --> B1
+  B1 --> RUN[真实 T07/T08 运行]
+  B1 --> B2[阶段B2 T09-T10]
+  RUN -.真实训练.-> B2
+  B1 --> T11
+  RUN -.开发划分扫描.-> X0[X0 专家线与试点]
+  T11 -.导出/导入.-> X0
+  T11 --> T12
+  X0 -.真实参照.-> T12
+  T12 --> T13
+  B2 --> T13
+  T13 --> T14
+  B2 --> D[阶段D T15 H2]
+  B2 --> E[阶段E T16 双模式]
+  T14 --> F1[F1 核心能力终点]
+  E --> F1
+  F1 --> F2[F2 研究包终点]
+  D --> F2
 ```
 
 阶段 A 内部按 T00 → T01a → T01b → T01c → T02 → T03 → T04 → T05 → T06a → T06b → T06c 顺序串行执行。
+
+**两个终点（2026-11-07 修订）：**
+- **F1 核心能力终点** 由 T17 和核心 scope 的 G-LOCKED、T18a/b 组成。它只等待：
+  - 同例参照（T12）；
+  - 联合模型与接受/拒判策略的开发集校准（T13–T14）；
+  - 共享权重双模式（T16）；
+  - 八项指标及对应冻结条件。
+  F1 产出 `capability_status` 与 `core_target_validated`。
+- **F2 研究包终点** 由 T18c 的 `study_package_complete` 组成。它在 F1 之外还要等 H1/H2/H3 全部预定实验与完整证据（含 T15）。
+- 依据：
+  - Proposal §11：“H2 尚未完成可以不阻止已有核心能力结论，但 `study_package_complete=false`”。
+  - Proposal §9：`G-LOCKED(scope)` 不等待无关阶段，`G-JOINT` 不等待 H2/H3。
+- F1 不等待 T14 的 H1 结论，不论支持与否；它只需要 T14 中的接受策略校准。H1 不被支持时按 Proposal §11 登记 `hypothesis_supported[H1]=NOT_SUPPORTED`。
+
+**并行线：**
+- B1 交付后，以下两条线同级并行（§1.4）：
+  - B2：先用合成预测桩打通链路，Proposal §6.1 允许这样做；
+  - T11 / X0。
+- 真实训练和 X0 试点抽样，都要先完成真实 T07/T08 运行。真实运行需要：
+  - 对应来源的 G-DATA 批准；
+  - 研究者同意写 148 服务器。
+- B2 的模块结果只按模块报告。ISLES 的 U 与 SKM 的 A 各自成功，不能相加为同例联合成功（Proposal §1.3）。
 
 ### 1.2 各阶段范围
 
 | 阶段 | 任务 | 在当前基线上要新建或改造的内容 | 前置门/条件 | 必须纳入（含审查补齐项） |
 | --- | --- | --- | --- | --- |
 | A | T00–T06c | 见 §2 | 无 | 见 §2 |
-| B | T07 来源/可见性/几何 | `source_policy_v5.py`；`migrate_v41`；适配 `adapters/`、`geometry_qc` | 真实只读核验需数据访问批准 | 降采样对薄软骨/小病灶的信息损失报告（§3.2）；可逆仿射往返 `1e-4 voxel` 软件测试；离散标签重采样与原网格回写分别验证 |
-| B | T08 曝光与划分 | 扩展 `identity.py`、`splits.py`；新建曝光账本 | 曝光/划分签核 | SKM 官方患者组优先；曝光 unknown 不因换 seed 消失 |
-| B | T09a/b/c 登记、训练、推理 | 新建 `engine/registration_v5.py`、H5/NIfTI 读取、patch 采样、可恢复训练核、`perception.py`（调用 T01b 的 `derive_state_map_v5`）与 `perception_io.py`（ArrayRef 落盘 schema 在此建） | G-BASE-A/U | 训练只接收影像/FOV/模式；checkpoint 保存模型、优化器、调度器、scaler、RNG、采样器 |
-| B | T10 模块基线 | 新建残差 U-Net 的 A-only、U-only、shared-AU | G-BASE-A/U、资源批准 | GPU 单 batch、小样本过拟合、显存/吞吐实测后再锁 patch/batch/精度（§6.3），实测结果写入 `reports/v5/` |
-| C | T11 标注桥接 | 新建 `annotation_v5.py`（导出/导入、读者版本、仲裁字段） | X0 落实 | 二维单层可判读字段；框不转体素 |
+| B | T07 来源/可见性/几何 | `source_policy_v5.py`；`migrate_v41`；适配 `adapters/`、`geometry_qc` | 真实只读核验需数据访问批准 | 降采样对薄软骨/小病灶的信息损失报告（§3.2）；可逆仿射往返 `1e-4 voxel` 软件测试；离散标签重采样与原网格回写分别验证；真实运行前关闭 §1.6 L1–L3 |
+| B | T08 曝光与划分 | 扩展 `identity.py`、`splits.py`；新建曝光账本 | 曝光/划分签核 | SKM 官方患者组优先；曝光 unknown 不因换 seed 消失；真实运行前登记种子与划分规则（§1.6 L8） |
+| B | T09a/b/c 登记、训练、推理 | 新建 `engine/registration_v5.py`、H5/NIfTI 读取、patch 采样、可恢复训练核、`perception.py`（调用 T01b 的 `derive_state_map_v5`）与 `perception_io.py`（ArrayRef 落盘 schema 在此建） | G-BASE-A/U | 训练只接收影像/FOV/模式；checkpoint 保存模型、优化器、调度器、scaler、RNG、采样器；关闭 §1.6 L2、L4–L6；冻结 §1.7 模型输入/输出接口 |
+| B | T10 模块基线 | 新建残差 U-Net 的 A-only、U-only、shared-AU | G-BASE-A/U、资源批准 | GPU 单 batch、小样本过拟合、显存/吞吐实测后再锁 patch/batch/精度（§6.3），实测结果写入 `reports/v5/`；首次真实训练前 L6 已接入；模型实现 §1.7 接口 |
+| C | T11 标注桥接 | 新建 `annotation_v5.py`（导出/导入、读者版本、仲裁字段） | B1 与 X0 人员落实（不等 B2） | 二维单层可判读字段；框不转体素；先满足 X0 试点所需的导出/导入与读者、用时记录 |
 | C | T12 联合参照发布 | 新建 `reference_release_v5.py`，复用 T04 `freeze_reference_set_v5`、T06b `build_state_reference_v5` | G-ANNOTATION | 辅助关系不能认证核心 R |
 | C | T13 联合模型与核心归属 | 新建共享编码器双解码器、AnatoBind 软融合、2D/3D 实例与归属 | G-JOINT | R 在 class-only / class+position / image-only / geometry-only / learned 信息条件下对照（§7.1） |
 | C | T14 H1 | 新建 `experiments/h1_v5.py` | G-JOINT | 接受/拒判策略的设计与开发集校准（§2.1、§8.4）；J 提高不能认证 S |
 | D | T15 H2（ISLES） | 新建缺标生成器与同信息臂 | G-H2；不依赖专家 | 按大小与按可见性两种偏置遗漏（§7.2） |
 | E | T16 双模式 | 新建观察适配模型（单 checkpoint 2D/3D） | G-H3-ENG | 二维只读当前平面 |
-| F | T17 八格能力/H3 | 新建 `evaluation/capability.py`、`experiments/h3_v5.py` | G-H3-SCI；D1 | 八格每格绑定 scope/checkpoint/支持/门槛/区间 |
-| F | T18a/b/c 锁定评价与证据 | 新建批次账本、锁定评分、完成判定 | G-LOCKED | 能力/假设/研究包三类状态分开 |
+| F1 | T17 八格能力/H3 | 新建 `evaluation/capability.py`、`experiments/h3_v5.py` | G-H3-SCI；D1；不等 T15 | 八格每格绑定 scope/checkpoint/支持/门槛/区间 |
+| F1/F2 | T18a/b/c 锁定评价与证据 | 新建批次账本、锁定评分、完成判定 | G-LOCKED(scope) | 能力/假设/研究包三类状态分开；核心 scope 的 T18a/b 与 T18c 的 `capability_status`、`core_target_validated` 属于 F1，不等 T15；`study_package_complete` 属于 F2；正式测试准入前关闭 §1.6 L7 |
 
-### 1.3 研究者决定事项（2026-11-06 已决定；实现与运行状态见 `reports/v5/status.md` `decisions`）
+### 1.3 研究者决定事项（D1–D4 于 2026-11-06 决定，D5 待决定；实现与运行状态见 `reports/v5/status.md` `decisions`）
 
 | ID | 事项 | 影响 | 决定（2026-11-06） |
 | --- | --- | --- | --- |
@@ -123,10 +161,71 @@ flowchart TD
 | D2 | `memory.md` 含服务器私有路径且被 Git 跟踪（文件头声明不得提交）。选项：仅移出索引并加入 `.gitignore`；另行重写历史；保留 | T00 只登记 blocker，不改文件 | 移出索引并忽略（FX3 已实施）；历史不改写，另行审查 |
 | D3 | 专家资源与替代场景（X0） | 阶段 C 的真实部分与核心目标验证 | 保留 SKM 联合场景，先准备 20–30 次非锁定开发扫描试点；人员未落实前保持 `BLOCKED_EXPERT_REVIEW` |
 | D4 | 真实数据执行主机（数据服务器）与该主机上的解释器 | 阶段 B 起的真实数据步骤 | 选定 148 数据服务器；只读预检通过前不登记为就绪 |
+| D5 | 长期目标定位：v5.1 是否作为“可迁移 MRI 基础模型”长期目标中的一个能力验证阶段；若是，是否在 v5.1 之后另立复用/迁移/泛化里程碑（§1.5） | 不改变 v5.1 的任务与完成判定；影响 v5.1 之后的路线和对外表述 | 待研究者决定（2026-11-07 提出） |
 
 ### 1.4 X0：专家资源线（非代码，现在即可并行）
 
 按 Proposal §5.1–5.2：指定标注负责人、主读者、独立复读者、仲裁者、工具和预算；书面写出 E1/E2 上所选软骨异常的体素边界与不确定带规则；在 20–30 次非锁定开发扫描上试点，记录每例用时、可判读率和复读一致性；若无法形成可靠体素场景，由研究者决定替代场景或保持未完成。未落实前，阶段 C 的真实数据部分为 `BLOCKED_EXPERT_REVIEW`。
+
+**2026-11-07 修订：X0 与 B2 同级，现在落实。** 同例参照能否建立，决定主线能否成立；B2 的训练、保存、统计做得再完善，也补不了这一项。
+
+- **试点要回答的五个问题：**
+  1. 目标异常在 E1/E2 上的书面定义，以及体素边界与不确定带规则；
+  2. 单层与三维的可判读范围；
+  3. 主读与独立复读的一致性；
+  4. 每例标注用时与总预算；
+  5. 能否形成同例 A/U/S/核心 R 参照。
+- **扫描来源：** 试点扫描只取自真实 T08 冻结后的 SKM 开发划分，不得取 `locked_test`。
+- **工具：** 由 T11 提供导出/导入与读者、用时记录。
+- **结论回填：**
+  - 由负责人把试点结论填入 `configs/v5/scope_skm_joint.template.yaml` 的 `state_anatomy_classes`、`abnormality_classes`、`relation_type`、`relation_predicate`、`relation_contract`、`reference_policy_id`。
+  - Agent 不代填（Global Constraint 7），也不得按测试结果填写。
+- **定位：** 试点只回答参照能否建立，不是最终盲测。结果不达标时，按 Proposal §11 风险表处置。
+
+### 1.5 v5.1 的定位（2026-11-07）
+
+- v5.1 完成的含义以 Proposal §11 为准：`core_target_validated=true` 只要求至少一个预注册独立同例场景，由同一 checkpoint 通过二维、三维八项能力。
+  - 跨来源、跨部位泛化不是核心完成条件（Proposal §7.3）。
+  - 全库 SSL 不在一期（Proposal §1.3）。
+- 因此，v5.1 完成不等于通用或可迁移 MRI 基础模型完成。
+  - 复用表征、少样本迁移、跨协议/跨部位泛化都不在本计划的验收内。
+  - `reports/v5` 与对外表述不得把 v5.1 结论写成基础模型结论。
+- 这一收窄不是 B1 引入的。v4.1 已把“全身、全病种的基础模型”和“一期就做 SSL 预训练”列为非目标（`docs/archive/v4.1/spec.md` §1.4）。
+- A–F 是工程与验证阶段，不等同于审查报告提到的“表征预训练—结构化感知—解剖绑定”模型培养路线。
+  - 若长期目标保留基础模型，v5.1 对应其中“结构化感知 + 解剖绑定”在一个受限同例场景上的能力验证。
+  - 迁移与泛化需要另立里程碑，由 D5 决定。本计划不新增该里程碑的任务。
+
+### 1.6 B1 遗留项的关闭点（2026-11-07）
+
+**判定标准：** 会不会污染下一次真实运行。会污染的，指派到明确的关闭点。只影响格式、提示、汇总的，按实际影响处理，不升级为全项目阻塞。编号对应 `reports/v5/stage_b1_report.md`。
+
+| ID | 遗留项（B1 报告出处） | 不关闭的后果 | 关闭点 |
+| --- | --- | --- | --- |
+| L1 | 记录的 `source_release` 未与政策的 `source_version` 绑定（裁定 21） | 其他版本的记录按这个政策迁移 | 真实 T07 运行前 |
+| L2 | 政策的 `model_modalities` 未与 scope 的 `input_modalities` 核对（M2） | 训练与评价不在同一观察条件 | 真实 T07 运行前核对；T09 数据加载只按 scope 的 `input_modalities` 取通道 |
+| L3 | 几何为 pass 但 `image_geometry` 为 None 时抛 `AttributeError`，整批中断（M1） | 不污染，但会中断真实批次 | 与 L1 一起修 |
+| L4 | 迁移后保留的 v41 `split` 不是权威值（M4） | `locked_test` 或 `unassigned` 样本进入训练 | T09a/b 数据加载：只读 `freeze_splits_v5` 的 `assignment`，并核对 `split_sha256`；不读 `SampleV5.split` |
+| L5 | `lost_positive_mask` 未接入阴性资格（裁定 19） | 小病灶、薄软骨被当作正常背景学习 | T09b 的 patch 采样与损失 |
+| L6 | lineage 只精确匹配，不随权重继承传播（裁定 20） | 从已曝光 checkpoint 继续训练的模型换个新 ID，就获得“干净”的 locked_test | T09a 登记记录初始化 checkpoint 的父 lineage；曝光检查覆盖全部祖先 lineage；T10 首次真实训练前接入 |
+| L7 | 冻结划分未与测试独立性证据、人工确认连接（裁定 17） | 固定划分文件被当作合格独立测试 | G-LOCKED(scope) / T18a 正式测试准入前 |
+| L8 | 种子、比例、分层与小层规则未登记（裁定 18；B1 完成判定） | 反复换种子挑选有利划分 | 真实 T08 运行前，由研究者批准登记 |
+
+按实际影响继续延后的有 M5、M6、M7、M8。其中 M5（合并小层不报告）要在真实 T08 登记时人工核对各层大小。
+
+### 1.7 B2 先冻结的模型输入/输出接口（2026-11-07）
+
+在 T09a 定义并冻结以下接口。T10 的 A-only、U-only、shared-AU，以及 T13、T16 的模型，都实现同一接口。B2 不实现联合网络或双模式网络；先完成独立 3D H1 再迁入双模式骨干，是 Proposal §6.2 允许的路线。
+
+- **输入：**
+  - 按 scope `input_modalities` 顺序排列的影像通道；
+  - `valid_fov`；
+  - `observation_mode`（取值沿用 T01a 契约）；
+  - 有效切片掩膜；
+  - 模型网格几何，以及到原网格的变换。
+  - `strict_2d` 输入只含当前切片与合法元数据，不含邻层、全卷归一化或三维候选（Proposal §6.2）。
+- **输出：** 模型网格上的 A/U logits。经 T09c 恢复到原网格、应用接受策略后，构造 T01b 的 `ModuleOutput` 或 `PerceptionOutput`。
+- **模式不支持时：** 只支持 `3d` 的模型收到其他模式时报 `V5Error`，不得静默按三维运行。
+- **依赖边界：** 训练核、推理入口、保存与评价只依赖这一接口。T16 只替换骨干与深度聚合，不改这条链路。
 
 ---
 
@@ -1742,3 +1841,14 @@ git commit -m "Record D1-D4 decisions and sync status documents"
 执行方式沿用研究者已选的 subagent-driven-development。阶段 A 共 11 个任务，按 §1.1 顺序串行；每个任务结束后做任务审查，阶段 A 结束后做一次整分支审查。阶段 B 的细化在阶段 A 整分支审查之后进行，并先处理 D4。
 
 阶段 A 实际由 executing-plans 内联执行并经整分支独立审查；§2A 补修（FX1–FX4）同样内联执行。补修完成后的下一步：把阶段 B（T07–T10）细化到阶段 A 的粒度；148 服务器只读预检与 X0 专家试点准备可并行。真实 G-DATA 放行与真实 StateReference 发布分别以 FX1、FX2 为前提。
+
+B1（§2B）已内联执行，经独立终审并完成修复。2026-11-07 核心目标对齐修订后，下一步如下：
+
+1. 把 B2（T09a–c、T10）细化到 B1 的粒度，纳入 §1.6 的 L2、L4–L6 与 §1.7 的接口。
+2. 与 B2 同级并行推进 X0 和 T11（§1.4）。
+3. 真实 T07/T08 运行要等两件事：G-DATA(ISLES、SKM) 批准，研究者同意写 148 服务器。运行前关闭 L1–L3、L8。
+
+下一轮的检验标准，是开始产生真实数据与模型产物，而不是更多合成测试：
+- 真实 batch、小样本过拟合、恢复训练、原网格预测；
+- A-only、U-only 模块结果；
+- X0 试点记录。
