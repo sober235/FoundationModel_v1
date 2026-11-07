@@ -2,7 +2,7 @@
 
 A SourcePolicy names one data source (id + version) and the facts migration
 needs about it. Facts that need real-data evidence (annotation modalities,
-index-alignment evidence, unit policy) stay null until verified; migration of
+index-alignment evidence, unit policy and the evidence for it) stay null until verified; migration of
 real records then fails closed instead of guessing.
 """
 from __future__ import annotations
@@ -15,7 +15,7 @@ import yaml
 from .contracts_v5 import V5Error
 
 POLICY_FIELDS = ("source_version", "source_dataset", "scope_id", "reference_policy_id", "model_modalities",
-                 "annotation_modalities", "index_evidence", "physical_units_policy")
+                 "annotation_modalities", "index_evidence", "physical_units_policy", "physical_units_evidence")
 UNITS_POLICIES = ("trust_header",)
 _TASKS = ("A", "U")
 
@@ -31,6 +31,7 @@ class SourcePolicy:
     annotation_modalities: dict
     index_evidence: str | None
     physical_units_policy: str | None
+    physical_units_evidence: str | None
 
 
 def _is_name(value: object) -> bool:
@@ -58,12 +59,16 @@ def validate_source_policy_v5(source_id: str, entry: dict) -> SourcePolicy:
         raise V5Error("INVALID_SOURCE_POLICY", f"{path}.index_evidence")
     if entry["physical_units_policy"] is not None and entry["physical_units_policy"] not in UNITS_POLICIES:
         raise V5Error("INVALID_SOURCE_POLICY", f"{path}.physical_units_policy")
+    evidence = entry["physical_units_evidence"]
+    if (evidence is not None and not _is_name(evidence)) or (entry["physical_units_policy"] and evidence is None):
+        raise V5Error("INVALID_SOURCE_POLICY", f"{path}.physical_units_evidence")
     return SourcePolicy(
         source_id=source_id, source_version=entry["source_version"], source_dataset=entry["source_dataset"],
         scope_id=entry["scope_id"], reference_policy_id=entry["reference_policy_id"],
         model_modalities=tuple(entry["model_modalities"]),
         annotation_modalities={task: None if v is None else tuple(v) for task, v in modalities.items()},
         index_evidence=entry["index_evidence"], physical_units_policy=entry["physical_units_policy"],
+        physical_units_evidence=evidence,
     )
 
 

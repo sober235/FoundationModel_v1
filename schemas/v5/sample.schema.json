@@ -100,7 +100,8 @@
     "reference_policy_id",
     "model_modalities",
     "index_alignment_status",
-    "physical_geometry_status"
+    "physical_geometry_status",
+    "geometry_evidence"
   ],
   "properties": {
     "schema_version": {
@@ -363,6 +364,28 @@
         "failed",
         "unknown"
       ]
+    },
+    "geometry_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index_alignment",
+        "physical_geometry"
+      ],
+      "properties": {
+        "index_alignment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "physical_geometry": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     }
   }
 }

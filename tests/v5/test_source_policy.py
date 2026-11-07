@@ -25,6 +25,7 @@ def test_policies_load_and_bind_sources():
     assert source_binding_v5(policies["skm_tea"]) == {"source_id": "skm_tea",
                                                       "source_version": "skm_tea_annotations_v1.0.0"}
     assert isles.annotation_modalities == {"U": None} and isles.index_evidence is None
+    assert isles.physical_units_policy is None and isles.physical_units_evidence is None
 
 
 @pytest.mark.parametrize("mutate", [
@@ -34,6 +35,8 @@ def test_policies_load_and_bind_sources():
     lambda e: e.update(physical_units_policy="guess"),
     lambda e: e.update(annotation_modalities={"U": ["dwi", 3]}),
     lambda e: e.update(source_version=""),
+    lambda e: e.update(physical_units_policy="trust_header"),
+    lambda e: e.update(physical_units_policy="trust_header", physical_units_evidence=""),
 ])
 def test_policy_rejects_unknown_or_missing_fields(mutate):
     entry = yaml.safe_load(TEMPLATE.read_text())["isles_2022"]

@@ -1,7 +1,8 @@
 # v5.1 source policies TEMPLATE (Proposal_v5 §3.1-3.2; plan_v5.md T07a).
-# Keys are source_id. annotation_modalities, index_evidence and physical_units_policy stay null until
-# the T07c read-only check on the data server provides evidence; until then migrating real records
-# fails closed (ANNOTATION_MODALITY_UNKNOWN), and geometry is never marked verified.
+# Keys are source_id. annotation_modalities, index_evidence, physical_units_policy and
+# physical_units_evidence stay null until the T07c read-only check on the data server provides
+# evidence; until then migrating real records fails closed (ANNOTATION_MODALITY_UNKNOWN), and
+# geometry is never marked verified. A units policy without its evidence is rejected.
 isles_2022:
   source_version: isles2022_bids1.6.0
   source_dataset: ISLES_ltr
@@ -11,6 +12,7 @@ isles_2022:
   annotation_modalities: {U: null}
   index_evidence: null
   physical_units_policy: null
+  physical_units_evidence: null
 skm_tea:
   source_version: skm_tea_annotations_v1.0.0
   source_dataset: SKM-TEA_ltr
@@ -20,3 +22,4 @@ skm_tea:
   annotation_modalities: {A: null}
   index_evidence: null
   physical_units_policy: null
+  physical_units_evidence: null

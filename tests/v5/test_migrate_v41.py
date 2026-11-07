@@ -96,3 +96,36 @@ def test_template_unknowns_fail_closed():
     with pytest.raises(V5Error) as error:
         migrate_v41_record_v5(validate_sample(body), policy, scope)
     assert error.value.code == "ANNOTATION_MODALITY_UNKNOWN"
+
+
+def test_only_v41_records_are_migrated():
+    migrated = migrate_v41_record_v5(_record(), make_source_policy(), U_SCOPE)
+    with pytest.raises(V5Error) as error:
+        migrate_v41_record_v5(migrated, make_source_policy(), U_SCOPE)
+    assert (error.value.code, error.value.path) == ("SCHEMA_VERSION_MISMATCH", "$.schema_version")
+    with pytest.raises(V5Error) as error:
+        migrate_v41_record_v5(_sample(), make_source_policy(), U_SCOPE)
+    assert (error.value.code, error.value.path) == ("INVALID_TYPE", "$")
+
+
+@pytest.mark.parametrize("geometry_status,index_evidence,units_policy,expected", [
+    ("pass", "synthetic-index", "trust_header", {"index_alignment": "synthetic-index", "physical_geometry": "synthetic-units"}),
+    ("fail", "synthetic-index", "trust_header", {"index_alignment": "v41_geometry_status:fail",
+                                                 "physical_geometry": "v41_geometry_status:fail"}),
+    ("pass", None, None, {"index_alignment": None, "physical_geometry": None}),
+])
+def test_migration_records_geometry_evidence(geometry_status, index_evidence, units_policy, expected):
+    policy = make_source_policy(index_evidence=index_evidence, physical_units_policy=units_policy,
+                                physical_units_evidence="synthetic-units" if units_policy else None)
+    migrated = migrate_v41_record_v5(_record(geometry_status=geometry_status), policy, U_SCOPE)
+    assert migrated.geometry_evidence == expected
+
+
+@pytest.mark.parametrize("field,key", [("index_alignment_status", "index_alignment"),
+                                       ("physical_geometry_status", "physical_geometry")])
+def test_verified_geometry_needs_evidence(field, key):
+    from tests.v5.factories import make_sample_v5
+    from anatobind.v41.contracts_v5 import validate_sample_v5
+    with pytest.raises(V5Error) as error:
+        validate_sample_v5(make_sample_v5(**{field: "verified"}))
+    assert (error.value.code, error.value.path) == ("GEOMETRY_EVIDENCE_MISSING", f"$.geometry_evidence.{key}")

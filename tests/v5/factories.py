@@ -67,6 +67,7 @@ def make_sample_v5(annotation: dict | None = None, **overrides) -> dict:
         "model_modalities": ["qdess_e1"],
         "index_alignment_status": "unknown",
         "physical_geometry_status": "unknown",
+        "geometry_evidence": {"index_alignment": None, "physical_geometry": None},
     })
     record["annotation_records"][0].update({
         "annotation_uid": "ann-v5-0001",
@@ -288,6 +289,6 @@ def make_source_policy(**overrides):
     entry = {"source_version": "v0", "source_dataset": "synthetic", "scope_id": "synthetic_u",
              "reference_policy_id": "synthetic_policy_v1", "model_modalities": ["qdess_e1"],
              "annotation_modalities": {"U": ["qdess_e1"]}, "index_evidence": "synthetic",
-             "physical_units_policy": "trust_header"}
+             "physical_units_policy": "trust_header", "physical_units_evidence": "synthetic"}
     entry.update(overrides)
     return validate_source_policy_v5("synthetic_source", entry)
