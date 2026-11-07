@@ -1,0 +1,14 @@
+# v5.1 core tissue-state capability policy TEMPLATE (Proposal_v5 §8.5). All values stay null until the
+# researcher registers them before locked evaluation; none may be filled from test results.
+# standard_kind: one of absolute | reader_tolerance | reference_comparison (Proposal §8.5).
+#   Pending decision D1 (plan_v5.md §1.3): whether each cell also needs non-inferiority to a dedicated model.
+standard_kind: null
+required_tissues: null
+required_states: null
+min_reference_support: null
+metric_bounds: null
+min_coverage: null
+uncertainty_rule: null
+ci_level: null
+n_boot: null
+seed: null

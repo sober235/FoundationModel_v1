@@ -6,6 +6,7 @@ import hashlib
 
 import numpy as np
 
+from anatobind.v41.contracts_v5 import validate_sample_v5
 from anatobind.v41.evaluation.reference import ReferenceLesion
 from anatobind.v41.state_rule_v5 import REASON_BITS, derive_state_map_v5
 from tests.v41.conftest import _sample
@@ -216,3 +217,26 @@ def make_reference_lesion(**overrides) -> ReferenceLesion:
               "visibility_qualified": True, "exclusion_reason": None, "truth_relation_set": ("tissue_a",)}
     fields.update(overrides)
     return ReferenceLesion(**fields)
+
+
+def make_state_reference_inputs(scope, **overrides) -> dict:
+    """Default: every voxel reference tissue_a, target_a positive at (0,0,0) and (0,1,0), all reviewed/visible/in FOV."""
+    shape = (2, 2) if scope.observation_mode == "2d" else (1, 2, 2)
+    sample = make_sample_v5(annotation={"class_scope": list(scope.abnormality_classes),
+                                        "completeness": overrides.get("u_completeness", "target_complete")})
+    anatomy_annotation = copy.deepcopy(sample["annotation_records"][0])
+    anatomy_annotation.update(annotation_uid="ann-v5-a", task="A", class_scope=list(scope.anatomy_classes),
+                              completeness="target_complete")
+    sample["annotation_records"].insert(0, anatomy_annotation)
+    abnormality = np.zeros((len(scope.abnormality_classes), *shape), dtype=bool)
+    positive = abnormality[0].reshape(-1, 2, 2)
+    positive[0, 0, 0] = positive[0, 1, 0] = True
+    arrays = {
+        "anatomy": np.ones(shape, dtype=np.int64),
+        "abnormality": abnormality,
+        "review": overrides.get("review", np.ones(shape, dtype=bool)),
+        "visibility": np.ones(shape, dtype=bool),
+        "valid_fov": np.ones(shape, dtype=bool),
+        "single_slice_readable": overrides.get("single_slice_readable", True),
+    }
+    return {"record": validate_sample_v5(sample), "arrays": arrays}

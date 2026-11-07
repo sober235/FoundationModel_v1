@@ -124,7 +124,7 @@ TRACKS_V5 = ("observable_target", "released_reference")
 CHANNELS_V5 = ("expert", "pseudo")
 
 
-def _channel_v5(annotation, task: str) -> str | None:
+def annotation_channel_v5(annotation, task: str) -> str | None:
     """'expert', 'pseudo' or None (never supervises this task)."""
     if annotation.task != task or annotation.quality_status != "accepted":
         return None
@@ -182,7 +182,7 @@ def build_eligibility_v5(record, task: str, classes: list[str], targets: dict, r
     e_neg = np.zeros((len(classes), *shape), dtype=bool)
     for i, annotation in enumerate(record.annotation_records):
         path = f"$.annotation_records[{i}]"
-        if _channel_v5(annotation, task) != channel:
+        if annotation_channel_v5(annotation, task) != channel:
             continue
         indices = [k for k, name in enumerate(classes) if name in annotation.class_scope]
         if not indices:
