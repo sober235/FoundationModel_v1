@@ -8,6 +8,7 @@ import numpy as np
 
 from anatobind.v41.contracts_v5 import validate_sample_v5
 from anatobind.v41.evaluation.reference import ReferenceLesion
+from anatobind.v41.gates_v5 import gate_task_v5
 from anatobind.v41.state_rule_v5 import REASON_BITS, derive_state_map_v5
 from tests.v41.conftest import _sample
 
@@ -202,8 +203,14 @@ def make_module_output(scope, task: str, **fields) -> dict:
     return output
 
 
-def make_evidence(keys) -> dict:
-    return {key: {"status": "PASS", "sha256": hashlib.sha256(key.encode()).hexdigest()} for key in keys}
+SYNTH_SOURCE = {"source_id": "synthetic_source", "source_version": "v0"}
+
+
+def make_evidence(keys, scope, source=SYNTH_SOURCE) -> dict:
+    """PASS evidence bound to scope_hash, source and task (FX1)."""
+    binding = {"scope_hash": scope.scope_hash, "source_id": source["source_id"],
+               "source_version": source["source_version"], "task": gate_task_v5(scope)}
+    return {key: {"status": "PASS", "sha256": hashlib.sha256(key.encode()).hexdigest(), **binding} for key in keys}
 
 
 def make_approvals(scope, keys) -> dict:

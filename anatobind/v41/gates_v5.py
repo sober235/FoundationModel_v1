@@ -1,8 +1,11 @@
 """Task- and scope-specific admission gates (Proposal_v5 §9).
 
 A gate is blocked only by its own evidence, approvals and scope rule; keys
-outside its requirement row are ignored. Approvals are bound to scope_hash.
-This module neither reads nor writes files.
+outside its requirement row are ignored. Approvals are bound to scope_hash;
+evidence is bound to scope_hash and also to the data source (id, version) and
+task, so evidence produced for one source or scope cannot open another gate
+(G-DATA is per (source, task), §9). Test-only approvers are rejected unless the
+caller explicitly runs in fixture mode. This module neither reads nor writes files.
 """
 from __future__ import annotations
 
@@ -33,6 +36,8 @@ GATE_REQUIREMENTS: dict[str, dict] = {
                  "approvals": ("independence", "unseal"), "scope_rule": None},
 }
 
+FIXTURE_APPROVERS = ("synthetic-fixture",)
+_BINDING_FIELDS = ("scope_hash", "source_id", "source_version", "task")
 _HEX = set("0123456789abcdef")
 
 
@@ -56,23 +61,48 @@ def _scope_blockers(rule: str | None, scope: ActiveScope) -> list[str]:
     return []
 
 
-def evaluate_gate_v5(gate_id: str, scope: ActiveScope, evidence: dict, approvals: dict) -> dict:
+def gate_task_v5(scope: ActiveScope) -> str:
+    """Task a scope's gate evidence is issued for: "joint", or "A" / "U" / "A+U" for module scopes."""
+    if scope.scope_kind == "joint":
+        return "joint"
+    tasks = [task for task, classes in (("A", scope.anatomy_classes), ("U", scope.abnormality_classes)) if classes]
+    return "+".join(tasks)
+
+
+def _check_source(source: object) -> None:
+    if not (isinstance(source, dict) and _non_empty_string(source.get("source_id"))
+            and _non_empty_string(source.get("source_version"))):
+        raise V5Error("INVALID_SOURCE", "$.source")
+
+
+def evaluate_gate_v5(gate_id: str, scope: ActiveScope, evidence: dict, approvals: dict, source: dict,
+                     fixture_mode: bool = False) -> dict:
     if gate_id not in GATE_REQUIREMENTS:
         raise V5Error("UNKNOWN_GATE", "$.gate_id")
+    _check_source(source)
+    if not isinstance(fixture_mode, bool):
+        raise V5Error("INVALID_TYPE", "$.fixture_mode")
     requirement = GATE_REQUIREMENTS[gate_id]
+    task = gate_task_v5(scope)
+    expected = {"scope_hash": scope.scope_hash, "source_id": source["source_id"],
+                "source_version": source["source_version"], "task": task}
     blockers = []
     hashes = []
     for key in requirement["evidence"]:
         item = evidence.get(key)
-        if isinstance(item, dict) and item.get("status") == "PASS" and _is_sha256(item.get("sha256")):
-            hashes.append(item["sha256"])
-        else:
+        if not (isinstance(item, dict) and item.get("status") == "PASS" and _is_sha256(item.get("sha256"))):
             blockers.append(f"EVIDENCE_MISSING:{key}")
+        elif any(item.get(field) != expected[field] for field in _BINDING_FIELDS):
+            blockers.append(f"EVIDENCE_BINDING_MISMATCH:{key}")
+        else:
+            hashes.append(item["sha256"])
     for key in requirement["approvals"]:
         item = approvals.get(key)
         if not (isinstance(item, dict) and _non_empty_string(item.get("approved_by"))
                 and _non_empty_string(item.get("approved_at"))):
             blockers.append(f"APPROVAL_MISSING:{key}")
+        elif item["approved_by"] in FIXTURE_APPROVERS and not fixture_mode:
+            blockers.append(f"APPROVAL_FIXTURE_NOT_ALLOWED:{key}")
         elif item.get("scope_hash") != scope.scope_hash:
             blockers.append(f"APPROVAL_SCOPE_MISMATCH:{key}")
     blockers.extend(_scope_blockers(requirement["scope_rule"], scope))
@@ -80,6 +110,9 @@ def evaluate_gate_v5(gate_id: str, scope: ActiveScope, evidence: dict, approvals
         "gate_id": gate_id,
         "scope_id": scope.scope_id,
         "scope_hash": scope.scope_hash,
+        "source_id": source["source_id"],
+        "source_version": source["source_version"],
+        "task": task,
         "engineering_status": "BLOCKED" if blockers else "PASS",
         "scientific_conclusion": "NOT_EVALUATED",
         "blockers": sorted(blockers),
