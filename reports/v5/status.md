@@ -40,7 +40,7 @@ blockers: ["PRIVATE_PATHS_IN_HISTORY:memory.md", "PRIVATE_PATHS_TRACKED:v41_docs
 tasks:
   T00:
     code_status: PASS
-    test_evidence: "tests/v5/test_status_docs.py: 4 passed"
+    test_evidence: "tests/v5/test_status_docs.py: 8 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
@@ -58,7 +58,7 @@ tasks:
     scientific_conclusion: NOT_EVALUATED
   T01c:
     code_status: PASS
-    test_evidence: "tests/v5/test_gates_v5.py: 18 passed"
+    test_evidence: "tests/v5/test_gates_v5.py: 23 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
@@ -94,7 +94,7 @@ tasks:
     scientific_conclusion: NOT_EVALUATED
   T06b:
     code_status: PASS
-    test_evidence: "tests/v5/test_tissue_state_metrics.py: 24 passed"
+    test_evidence: "tests/v5/test_tissue_state_metrics.py: 25 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
@@ -105,8 +105,8 @@ tasks:
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
   T07:
-    code_status: TODO
-    test_evidence: null
+    code_status: PASS
+    test_evidence: "tests/v5/test_source_policy.py: 7 passed; test_migrate_v41.py: 14 passed; test_geometry_v5.py: 9 passed; test_source_check.py: 4 passed"
     data_run_status: NOT_STARTED
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
