@@ -1,0 +1,6 @@
+# v5.1 metric policy TEMPLATE (Proposal_v5 §8.3-8.4). Values stay null until the researcher registers them
+# before the evaluation they govern; a locked evaluation refuses any null value a listed metric needs.
+metrics: null
+surface_tolerance_mm: null
+iou_match_threshold: null
+fp_budget_per_scan: null

@@ -1,0 +1,14 @@
+# ActiveScope v5.1: ISLES U-only baseline (Proposal_v5 §2.2). No anatomy, no state, no relation claim.
+schema_version: "v5.1"
+scope_id: isles_u
+scope_kind: module
+anatomy_classes: []
+state_anatomy_classes: []
+abnormality_classes: [ischemic_infarct]
+relation_type: null
+relation_predicate: null
+relation_contract: null
+input_modalities: [dwi, adc]
+observation_mode: "3d"
+normal_claim_scope: no_target_infarct_seen_other_abnormalities_not_addressed
+reference_policy_id: isles_released_reference_v1

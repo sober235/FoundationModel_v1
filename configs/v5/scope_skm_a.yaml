@@ -1,0 +1,14 @@
+# ActiveScope v5.1: SKM-TEA A6 anatomy-only baseline (Proposal_v5 §2.2). No lesion exclusion is claimed.
+schema_version: "v5.1"
+scope_id: skm_a
+scope_kind: module
+anatomy_classes: [patellar_cartilage, femoral_cartilage, tibial_cartilage_medial, tibial_cartilage_lateral, meniscus_medial, meniscus_lateral]
+state_anatomy_classes: []
+abnormality_classes: []
+relation_type: null
+relation_predicate: null
+relation_contract: null
+input_modalities: [qdess_e1, qdess_e2]
+observation_mode: "3d"
+normal_claim_scope: anatomy_segmentation_only_no_lesion_exclusion
+reference_policy_id: skm_a6_released_reference_v1

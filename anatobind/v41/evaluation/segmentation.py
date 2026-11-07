@@ -91,3 +91,85 @@ def segmentation_metrics(pred: np.ndarray, truth: np.ndarray, eligible: np.ndarr
     }
     metrics["surface_defined"] = metrics["hd95_mm"] is not None
     return metrics
+
+
+# ---------------------------------------------------------------------------
+# v5.1 segmentation metrics (Proposal_v5 §8.3). v41 functions above are unchanged.
+# Empty or undefined values are None with a named reason, never 0, 1, NaN or inf.
+
+import math  # noqa: E402
+
+from ..contracts_v5 import V5Error  # noqa: E402
+from .policy import validate_metric_policy_v5  # noqa: E402
+from .surface_v5 import SURFACE_SOURCE_COMMIT, hd95_v5, nsd_v5, surface_distances_v5  # noqa: E402
+
+METRIC_VERSION_V5 = f"seg_v5.1/surface-distance@{SURFACE_SOURCE_COMMIT[:7]}"
+
+
+def _physical_spacing_v5(geometry: dict, ndim: int) -> tuple[float, ...] | None:
+    spacing = geometry.get("spacing_mm")
+    if geometry.get("physical_geometry_status") != "verified" or spacing is None:
+        return None
+    if len(spacing) != ndim or not all(isinstance(s, (int, float)) and not isinstance(s, bool)
+                                       and math.isfinite(s) and s > 0 for s in spacing):
+        raise V5Error("INVALID_SPACING", "$.geometry.spacing_mm")
+    return tuple(float(s) for s in spacing)
+
+
+def _touches_unreviewed_v5(pred: np.ndarray, truth: np.ndarray, eligible: np.ndarray) -> bool:
+    """True when a mask reaches the border of the non-evaluable region (its surface may be an artificial cut)."""
+    if eligible.all():
+        return False
+    structure = ndimage.generate_binary_structure(eligible.ndim, eligible.ndim)
+    ring = ndimage.binary_dilation(~eligible, structure=structure)
+    return bool(((pred | truth) & ring).any())
+
+
+def segmentation_metrics_v5(pred: np.ndarray, truth: np.ndarray, eligible: np.ndarray, geometry: dict,
+                            policy: dict) -> dict:
+    for name, array in (("pred", pred), ("truth", truth), ("eligible", eligible)):
+        if not isinstance(array, np.ndarray) or array.dtype != np.bool_:
+            # Probability or label maps are never thresholded here (Proposal §3.2).
+            raise V5Error("DTYPE_MISMATCH", f"$.{name}")
+    if pred.ndim not in (2, 3):
+        raise V5Error("UNSUPPORTED_NDIM", "$.pred")
+    if not (pred.shape == truth.shape == eligible.shape):
+        raise V5Error("GRID_MISMATCH", "$.pred")
+    requested = policy.get("metrics") or []
+    blocked = validate_metric_policy_v5(policy, "development")["blocked_metrics"]
+    pred, truth = pred & eligible, truth & eligible
+    truth_empty, pred_empty = not truth.any(), not pred.any()
+    result = {"dice": None, "hd95_mm": None, "nsd": None, "reasons": [], "surface_failure": False,
+              "truth_empty": truth_empty, "pred_empty": pred_empty, "metric_version": METRIC_VERSION_V5}
+    reasons = result["reasons"]
+    if not eligible.any():
+        reasons.append("NO_EVALUABLE_REGION")
+        return result
+    if truth_empty and pred_empty:
+        reasons.append("BOTH_EMPTY")
+        return result
+    result["dice"] = 2.0 * float((pred & truth).sum()) / float(pred.sum() + truth.sum())
+    if not ("hd95" in requested or "nsd" in requested):
+        return result
+    surface_ok = True
+    if truth_empty or pred_empty:
+        reasons.append("ONE_SIDED_EMPTY")
+        result["surface_failure"] = True
+        surface_ok = False
+    spacing = _physical_spacing_v5(geometry, pred.ndim)
+    if spacing is None:
+        reasons.append("PHYSICAL_GEOMETRY_UNKNOWN")
+        surface_ok = False
+    if _touches_unreviewed_v5(pred, truth, eligible):
+        reasons.append("SURFACE_REFERENCE_INCOMPLETE")
+        surface_ok = False
+    if "nsd" in blocked:
+        reasons.append("POLICY_VALUE_UNSET")
+    if not surface_ok:
+        return result
+    distances = surface_distances_v5(truth, pred, spacing)
+    if "hd95" in requested:
+        result["hd95_mm"] = hd95_v5(distances)
+    if "nsd" in requested and "nsd" not in blocked:
+        result["nsd"] = nsd_v5(distances, float(policy["surface_tolerance_mm"]))
+    return result

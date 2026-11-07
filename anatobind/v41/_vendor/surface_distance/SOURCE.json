@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/google-deepmind/surface-distance",
+  "commit": "1f805cea446805e559badc80dd27f34175e4173d",
+  "license": "Apache-2.0",
+  "files": {
+    "__init__.py": "4db2aa7eaae29333dbfaa88bd2b2d2e5c642ea7f5abd50120a8c43f96956fabf",
+    "metrics.py": "cadafae1aecda043dae2d526230a73f8b50fc4fd0fe0d0a28d86962eea49dad0",
+    "lookup_tables.py": "8e3572a6b0b8df19b7a975b9d708964aad875c37ca43a4746a1074d51df46bc2",
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  }
+}

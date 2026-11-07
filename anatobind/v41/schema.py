@@ -36,15 +36,17 @@ class SchemaError(ValueError):
         super().__init__(f"{code} at {path}")
 
 
-_SCHEMA_CACHE: dict[str, dict] = {}
+_SCHEMA_CACHE: dict[tuple[Path, str], dict] = {}
 
 
-def load_schema(name: str) -> dict:
-    if name not in _SCHEMA_CACHE:
-        document = json.loads((SCHEMA_DIR / f"{name}.schema.json").read_text())
+def load_schema(name: str, schema_dir: Path | None = None) -> dict:
+    directory = SCHEMA_DIR if schema_dir is None else Path(schema_dir)
+    key = (directory, name)
+    if key not in _SCHEMA_CACHE:
+        document = json.loads((directory / f"{name}.schema.json").read_text())
         _check_keywords(document, name)
-        _SCHEMA_CACHE[name] = document
-    return _SCHEMA_CACHE[name]
+        _SCHEMA_CACHE[key] = document
+    return _SCHEMA_CACHE[key]
 
 
 def _check_keywords(node: dict, where: str) -> None:

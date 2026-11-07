@@ -1,525 +1,1331 @@
-# AnatoBind-MRI v5 Implementation Plan
+# AnatoBind-MRI v5.1 实施计划（2026-11-06 修订：以 GitHub 仓库内容为基线）
 
-> **For agentic workers:** 依据 [Proposal_v5.md](Proposal_v5.md)，使用 `superpowers:executing-plans` 逐任务实施；仅在存在真实调度能力且已获执行授权时使用独立subagent。不得虚称独立评审。`- [ ]`仅在相应步骤实际完成后勾选。
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 在同一输入上正式交付并独立验证解剖A、异常范围U、组织状态S及核心组织归属R；最终同一checkpoint在严格二维与三维分别通过A/U/S/R八项能力验收。S可由A/U和接受策略组合，不强制新增预测头。
+**Goal:** 在 GitHub 现有 v4.1 代码上，分阶段交付 Proposal v5.1 要求的同一观察 A/U/S/核心 R 统一输出、独立参照评价、二维/三维八项能力和范围化结论链；本修订先交付可独立验收的阶段 A（契约、签名资格、可靠评价）。
 
-**Architecture:** 复用并修正现有数据治理与评价模块；先完成正确评价、输入/划分与强基线，并行落实SKM专家试点。精标合格后做普通联合与软解剖融合H1，H2在ISLES上可并行；双模式工程可提前，正式八项能力后续独立验收。
+**Architecture:** 代码继续放在 `anatobind/v41/` 包内，v5.1 以 `_v5` 后缀的新入口和新模块加入，v41 函数与 144 项旧测试保持原行为。阶段 A 只用合成数据和 CPU；阶段 B–F 在本文件 §1 列出路线图，各阶段开始前按本文件阶段 A 的粒度细化后写回本文件，再执行。
 
-**Tech Stack:** 现有Python/PyTorch/NumPy/SciPy/nibabel/h5py/pytest；沿用经核验环境，不自动升级或安装。nnU-Net与表面度量参考实现仅在版本、许可和适配核验后使用。
+**Tech Stack:** Python ≥3.9（本机 `.venv` 为 3.9.6；数据服务器为 3.11），NumPy、SciPy、PyTorch、PyYAML、pytest（均已安装）；Google DeepMind surface-distance 源码按固定提交内置（仅 T06a）。不新增运行时依赖。
 
-**Spec:** [Proposal_v5.md](Proposal_v5.md)，v5.1，2026-11-03（核心目标补齐；保留T00–T18）。  
-**代码审计基线：** `9bef2834ff72b8200465ff44c197bfcd38471305`。  
-**文档修订基线：** `66fe59139a676cc945fdbc80e16d92181f88d57b`。  
-**本文件性质：** 新版待执行计划；发布文档不表示代码已修、数据已重新认证、专家已到位、审批已完成或训练已启动。
+**Spec:** [Proposal_v5.md](Proposal_v5.md)，v5.1，SHA256 `b25b0e1beae512320b29beeba2b0eac367cf62e94304d70c28100da1fb006dbf`。其 §1–12 是本计划的约束依据；本计划与之冲突时以 Proposal 为准。
 
-## 0. 执行范围与状态
+**本次修订（相对提交 `8dc38be` 的上一版）：**
+- 执行基线改为 GitHub `sober235/FoundationModel_v1` 当前内容（本地 `restart-dev`，代码与 `main`/`d7cbd5b` 相同）。上一版依赖的 `02a2447`、`9c972f9` 不在仓库内，相关“复用/适配”假设全部取消，缺失模块改为新建。远端 `docs/skm-a-200step-summary-20261106` 报告的服务器实现与试训结果不作为本计划任何任务的完成证据。
+- 拆成阶段：阶段 A（T00–T06c）在本文件详写；阶段 B–F 只保留路线图及必须纳入的审查项。
+- 吸收 2026-11-06 计划审查：缺陷探针改为本仓库实测值（§0.2）；未落实的 Proposal 要求逐项指派任务（§1.2 最后一列）；`memory.md` 私有路径、T17 能力标准、专家资源、执行主机列为待研究者决定事项（§1.3）；实例/关系字典结构在 T01b 定义；T03/T13 共用。
+- 上一版中 `migrate_v41` 移到 T07（真实记录迁移处），各 schema 移到首次使用它的任务，避免 T01 一次性建 18 个契约。
 
-### 0.1 只做有证据的增量
+## Global Constraints
 
-旧T00–T08不是必须重写的空白工程。先核对已存在的模块、测试与审计，再补缺。新任务号是v5工作包，不沿用旧checkbox推断完成度；旧训练、失败、指标、schema和批准记录保留原版本。
+1. Proposal_v5 §1–12 约束所有任务；“正常”只指已复核范围内未见已启用目标异常（§1.1），不得扩成病理正常或全病种排除。
+2. v41 已有函数、CLI 与 `tests/v41` 行为不变；v5.1 一律新增 `_v5` 入口或新模块。每个任务结束时 `pytest_cpu tests/v41` 仍为 `144 passed`。
+3. Python 3.9 兼容：每个新模块首行 `from __future__ import annotations`；不用 `match`、运行时 `X | Y`（`isinstance` 用元组）、`dataclass(slots=/kw_only=)`、`zip(strict=)`。
+4. 不执行 pip/conda 安装或升级；只用已装包。surface-distance 只按 T06a 固定提交内置原文。
+5. v5 错误统一抛 `V5Error(code, path)`（T01a 定义）；`str(error)` 只含 code 与字段路径，绝不回显输入值、路径或病例标识。
+6. Git 只接纳代码、合成测试、脱敏汇总和模板。逐文件 `git add`（禁止 `git add .`、目录或通配），提交前运行 `git diff --cached --check`；提交信息不加 AI/Co-Authored-By 署名行；未经研究者明确同意不 push。
+7. 模板中的临床定义、批准人、阈值、容差、预算、种子保持 `null`；测试中的批准人只能是字符串 `"synthetic-fixture"`。
+8. 部署函数（`derive_state_map_v5` 及后续推理）只接收预测数组、接受/原因图和合法几何；GT、复核图、可见性真值、资格图不得成为其参数。
+9. `annotation_unknown`、`not_observable`、`predictive_uncertain` 分开；未知不等于阴性；框不产生密集正负资格；positive-only 不产生阴性资格；pseudo 与专家通道分开。
+10. 患者是统计单位；参照集在预测前冻结并带 hash；漏检、拒判、无预测关系不缩小分母；空分母返回 `None`（不是 0、1 或 NaN）。
+11. Proposal 中的候选值（训练种子 17/29/43、bootstrap 2000 次、置信水平 0.95、统计种子 20261101、划分 0.6/0.2/0.2）不得写成任何函数默认值，只能作为测试或登记的显式输入。
+12. 医学数组、逐例记录、权重和预测只能写入仓库外 `$PRIVATE_ROOT`（目录 700、文件 600）；阶段 A 不读真实数据。
+13. 测试一律经 `pytest_cpu`（§2.0）在 CPU 上运行。
 
-| 工作包 | 起点 | 本计划初始状态 |
-|---|---|---|
-| T00 | 已有v4.1代码、两轮复核、v5文档 | 待核对 |
-| T01–T06 | 已有契约、资格、评价基础，有明确缺口 | 待修复/重验 |
-| T07–T08 | 有匿名审计报告，私有实时证据尚待读取 | 待数据核验与冻结 |
-| T09–T10 | 部分来源适配器已存在，完整训练管线未认证 | 待实现/实测 |
-| T11–T12 | 尚未落实专家资源与同例精标 | 工程可做；临床执行BLOCKED_EXPERT_REVIEW |
-| T13–T14 | 依赖同例队列及基线 | 待依赖 |
-| T15 | 可基于ISLES完整参照并行 | 待运行基础与资格 |
-| T16–T17 | 双模式设计尚未验证 | 工程可先；科学验收待参照 |
-| T18 | 按主张范围分期调用 | 待相应协议冻结与解封授权 |
+## Review Focus
 
-每个任务记录 `task_id, code_status, test_evidence, data_run_status, approval_status, scientific_conclusion, input_hashes, output_hashes, command, exit_code, blockers, next_task`。代码状态使用TODO/IN_PROGRESS/PASS/FAIL/BLOCKED/DEFERRED；不将 `BLOCKED_EXPERT_REVIEW` 混作schema未定义的枚举，作为blocker code记录。科学状态为NOT_EVALUATED/SUPPORTED/NOT_SUPPORTED/INCONCLUSIVE。
+1. 空情形（无病灶患者、空 mask、零合格体素）应返回 `None` 并附原因，不能补 0/1/NaN —— T04 `test_no_positive_patients_returns_none`、T05 `test_empty_returns_none`、T06a `test_both_empty_dice_is_none`、T06b `test_empty_state_class_returns_none`。
+2. 非有限数值（NaN/inf 的 logit、差值、单边空表面距离）应显式报错或给 `None`，不能静默传播 —— T02 `test_nonfinite_supported_logit_raises`、T05 `test_non_finite_value_rejected`、T06a `test_one_sided_empty_is_failure_not_inf`。
+3. 输出与参照之间身份漂移（mode、网格、scope、checkpoint 不一致）应拒绝 —— T01b `test_joint_output_rejects`、T06b `test_identity_mismatch_rejected`。
+4. 实例、结果行或病灶中出现重复或未知 ID 应拒绝 —— T03 `test_duplicate_ids_rejected`、T04 `test_unknown_or_duplicate_outcome_rejected`、T05 `test_duplicate_row_rejected`。
+5. 各向异性或未知体素间距：毫米指标按真实间距计算或返回 `None`，绝不假设 1 mm —— T06a `test_anisotropic_matches_reference`、`test_unknown_geometry_does_not_block_dice_or_invent_mm`、T06c `test_volume_error_needs_physical_volume`。
 
-本轮补齐是规格与实施任务修订，不执行这些代码任务。状态报告增加 `capability_status`、`core_target_validated`、`hypothesis_supported`、`study_package_complete`；字段语义以Proposal§11为准，不能因文档提交或软件测试PASS预填能力通过。
+---
 
-### 0.2 Global Constraints
+## 0. 基线事实（2026-11-06 在本仓库核实）
 
-- 原始数据和旧派生只读；医学数据、逐例记录、权重与输出仅写获准仓库外 `$PRIVATE_ROOT`，目录700、文件600。实际路径不写公共配置。
-- 同例联合目标不变；框填充、自动A、几何伪R不能升级专家体素/临床参照。未复核、不可观察、padding不当正常。
-- 训练可以不完整；正式评价至少一个同例合格队列。每run绑定ActiveScope与state_anatomy_classes，不以总本体替代启用范围。
-- 联合推理必须输出PerceptionOutput含tissue_state_map；A不确定保留U与实例，S/R可拒判，不得转成正常或清除异常。模块基线用ModuleOutput，不冒充完整结果。
-- 组织状态S的评价区域由同例独立参照决定，不随预测A/拒判裁去难例；核心R必须回答组织归属或明确累及问题，near等辅助描述不能替代。
-- 推理只用影像、有效FOV及合法几何/模式，不读GT、复核图、真实tissue_id、来源标签或隐藏参照。
-- 同患者及派生组不得跨划分；曝光与初始化谱系有证据，unknown不得改名清除。
-- 统计独立单位为患者；主J患者等权，病灶池化另报。漏检/拒判不改变冻结参照分母；无分母返回NA。
-- 只在开发角色选阈值；锁定测试不调参。仅按本任务必需的条件放行，不等待无关阶段的null参数。
-- 现有代码保留在 `anatobind/v41/`；新schema/config使用v5版本。禁止复制整个包、跨仓库动态import旧代码或静默覆盖旧实验。
-- 无训练、外部下载或测试解封授权时，只做获准只读检查、合成测试和登记dry-run；Agent不填写人类签名。
-- NaN、访问越权、OOM、预算耗尽停止并存证，不无限重试。未知GPU/耗时不编造。
-- 测试—证据—提交逐项完成；不使用 `git add .`，不自动push后续代码或重写Git历史。本次文档push授权不扩展为未来所有外部写操作授权。
+### 0.1 现有代码
 
-### 0.3 Review Focus
+`anatobind/v41/` 共约 2 844 行：`schema, paths, inventory, identity, splits, ontology, labels, geometry, geometry_qc, audits, overlays, registry, eligibility, losses, cli`，`adapters/{isles,skm}`，`evaluation/{instances,joint,relations,statistics,segmentation,selective}`。`tests/v41` 共 18 个测试文件，本机 `144 passed`（Python 3.9.6，1.38 s）。
 
-| 最易漏掉的情形 | 必须行为 | 责任任务 |
-|---|---|---|
-| unknown可见性与公开基准合法使用冲突 | 两轨道显式登记，不伪填visible；不可观察不进入主观察监督 | T01、T02、T07 |
-| 6个低IoU配对对5个高IoU配对 | 先最大基数，必须选6个 | T03 |
-| 漏检时预测关系为空 | 有参照病灶仍留在J分母 | T04 |
-| 一患者100病灶、另一患者1病灶 | 主终点患者等权，不随病灶重复加权 | T05 |
-| partial review裁边/二维偷看邻层 | 裁边不冒充真实表面；单层访问边界可检测 | T06、T16 |
-| A不确定但U已检出；某类U拒判 | 异常不消失；不能因缺类/拒判判正常 | T01、T09、T13 |
-| U正确但组织身份错；全拒判 | S直接指标反映错误，固定参照不变，全拒判不能通过 | T06、T14 |
-| 只有A/U/R六格或只有辅助空间关系 | 缺S/核心R不允许最终通过 | T12、T17、T18 |
-| H1无额外增益或H2支线完成 | 能力、假设、研究完成分开，不互相冒充 | T01、T18 |
+不存在、需在后续阶段新建：`engine/`（登记、训练、推理）、`models/`、`experiments/`、`annotation.py`、`datasets.py`、`legacy_exposure.py`，以及上一版引用的 20 个 `tests/v41` 文件。
 
-## 1. 依赖与文件布局
+### 0.2 已复现的 v41 缺陷（本仓库实测）
 
-```text
-T00 → T01 → T02
-          ├→ T03 → T04 → T05
-          └→ T06
-T01+T02 → T07 → T08
-T01+T02+T07+T08 → T09 → T10
-T01+T07+T08 → T11(标注包) → 专家实际试点 → T12
-T02–T06+T09+T10+T12 → T13 → T14(H1_READY)
-T02+T03+T05+T06+T09+T10(ISLES) → T15(H2_READY)
-T09 → T16工程；T13+T16+T12的二维参照 → T17(H3_READY)
-相应READY+独立性+授权 → T18(分期或统一锁定评价)
+| 位置 | 实测 | 由谁修复 |
+| --- | --- | --- |
+| `evaluation/instances.py` `match_instances` | 六对 IoU 1/9 合格匹配对五对 IoU 2/3 匹配，返回 5 对（代价 `-(2+IoU)`） | T03 |
+| `evaluation/joint.py` `joint_score` | 两个有参照病灶、第二个漏检且 `relation_ok=None` 时分母为 1，`patient_mean_j=1.0` | T04 |
+| `evaluation/statistics.py` `paired_patient_bootstrap` | 100 行值 1 的患者对 1 行值 0 的患者，估计为池化 0.990 而非患者等权 0.5；`n_boot=0` 抛 `IndexError` | T05 |
+| `eligibility.py` `build_eligibility` | positive-only 以 `target > 0` 给所有类别通道赋资格；正负资格未分开 | T02 |
+| `losses.py` | 全 ignore 时返回 `logits.sum() * 0.0`，logit 含 inf 时得 NaN | T02 |
+| `evaluation/segmentation.py` | NSD 为无权边界体素比例，HD95 为两向距离合并后的普通分位数 | T06a |
+
+### 0.3 环境
+
+本机：`.venv` Python 3.9.6、torch 2.8.0、numpy 2.0.2、scipy 1.13.1，无 CUDA、无医学数据。阶段 A 全部可在本机完成。阶段 B 起涉及真实数据或 GPU 的步骤需在数据服务器执行（决定事项 D4）。
+
+---
+
+## 1. 阶段路线图
+
+### 1.1 依赖
+
+```mermaid
+flowchart TD
+  T00 --> T01a --> T01b --> T01c
+  T01a --> T02
+  T01b --> T03 --> T04 --> T05
+  T01a --> T06a
+  T03 --> T06c
+  T06a --> T06c
+  T01b --> T06b
+  T04 --> T06b
+  T05 --> T06b
+  T06a --> T06b
+  T06b --> B[阶段B T07-T10]
+  T02 --> B
+  T01c --> B
+  B --> C[阶段C T11-T14]
+  B --> D[阶段D T15]
+  B --> E[阶段E T16]
+  C --> F[阶段F T17-T18]
+  D --> F
+  E --> F
+  X0[X0 专家资源线] -.真实参照.-> C
 ```
 
-T07/T08的只读审计可与指标修复并行；T11读者协调不应等所有模型代码。T16合成工程不等精标，真实模块开发须合法划分与许可。T13不依赖H2或外部扩展，T18不要求无关阶段都READY。
+阶段 A 内部按 T00 → T01a → T01b → T01c → T02 → T03 → T04 → T05 → T06a → T06b → T06c 顺序串行执行。
 
-### 1.1 复用与新增位置
+### 1.2 各阶段范围
 
-| 路径 | 策略 |
-|---|---|
-| `anatobind/v41/{schema,paths,inventory,identity,splits,ontology,labels,geometry,geometry_qc,overlays,audits,registry,cli}.py` | 先核对原实现；必要时小范围修改 |
-| `anatobind/v41/{eligibility,losses}.py`、`evaluation/*.py` | 修正语义与接口，添加v5严格入口；历史结果不变 |
-| `anatobind/v41/contracts_v5.py` | 新增本文各TypedDict/数据类型及公共枚举 |
-| `anatobind/v41/{annotation,observations,datasets}.py` | 缺失部分逐任务新增 |
-| `anatobind/v41/perception.py`、`evaluation/state.py` | T09实现无GT状态组合与统一输出；T06实现参照构造和直接评价，两条数据路径分离 |
-| `anatobind/v41/models/{core,anatomy_fusion,relation,observation_adapter}.py` | 经审计后最小实现，不先构建大模型 |
-| `anatobind/v41/engine/{registration,trainer,inference,access}.py` | 登记、训练/恢复、推理与读取边界 |
-| `anatobind/v41/experiments/{h1,missingness,h2,h3}.py` | 冻结比较矩阵与缺标/双模式实验 |
-| `schemas/v5/*.schema.json`、`configs/v5/*.yaml` | 显式新版本；真实批准在私有根 |
-| `tests/v5/test_*.py` | 合成/匿名fixture；保留并重跑受影响的tests/v41 |
-| `reports/v5/{status,traceability,CLAIMS,EVIDENCE_INDEX}.md` | 脱敏、实际证据；不预填PASS |
+| 阶段 | 任务 | 在当前基线上要新建或改造的内容 | 前置门/条件 | 必须纳入（含审查补齐项） |
+| --- | --- | --- | --- | --- |
+| A | T00–T06c | 见 §2 | 无 | 见 §2 |
+| B | T07 来源/可见性/几何 | `source_policy_v5.py`；`migrate_v41`；适配 `adapters/`、`geometry_qc` | 真实只读核验需数据访问批准 | 降采样对薄软骨/小病灶的信息损失报告（§3.2）；可逆仿射往返 `1e-4 voxel` 软件测试；离散标签重采样与原网格回写分别验证 |
+| B | T08 曝光与划分 | 扩展 `identity.py`、`splits.py`；新建曝光账本 | 曝光/划分签核 | SKM 官方患者组优先；曝光 unknown 不因换 seed 消失 |
+| B | T09a/b/c 登记、训练、推理 | 新建 `engine/registration_v5.py`、H5/NIfTI 读取、patch 采样、可恢复训练核、`perception.py`（调用 T01b 的 `derive_state_map_v5`）与 `perception_io.py`（ArrayRef 落盘 schema 在此建） | G-BASE-A/U | 训练只接收影像/FOV/模式；checkpoint 保存模型、优化器、调度器、scaler、RNG、采样器 |
+| B | T10 模块基线 | 新建残差 U-Net 的 A-only、U-only、shared-AU | G-BASE-A/U、资源批准 | GPU 单 batch、小样本过拟合、显存/吞吐实测后再锁 patch/batch/精度（§6.3），实测结果写入 `reports/v5/` |
+| C | T11 标注桥接 | 新建 `annotation_v5.py`（导出/导入、读者版本、仲裁字段） | X0 落实 | 二维单层可判读字段；框不转体素 |
+| C | T12 联合参照发布 | 新建 `reference_release_v5.py`，复用 T04 `freeze_reference_set_v5`、T06b `build_state_reference_v5` | G-ANNOTATION | 辅助关系不能认证核心 R |
+| C | T13 联合模型与核心归属 | 新建共享编码器双解码器、AnatoBind 软融合、2D/3D 实例与归属 | G-JOINT | R 在 class-only / class+position / image-only / geometry-only / learned 信息条件下对照（§7.1） |
+| C | T14 H1 | 新建 `experiments/h1_v5.py` | G-JOINT | 接受/拒判策略的设计与开发集校准（§2.1、§8.4）；J 提高不能认证 S |
+| D | T15 H2（ISLES） | 新建缺标生成器与同信息臂 | G-H2；不依赖专家 | 按大小与按可见性两种偏置遗漏（§7.2） |
+| E | T16 双模式 | 新建观察适配模型（单 checkpoint 2D/3D） | G-H3-ENG | 二维只读当前平面 |
+| F | T17 八格能力/H3 | 新建 `evaluation/capability.py`、`experiments/h3_v5.py` | G-H3-SCI；D1 | 八格每格绑定 scope/checkpoint/支持/门槛/区间 |
+| F | T18a/b/c 锁定评价与证据 | 新建批次账本、锁定评分、完成判定 | G-LOCKED | 能力/假设/研究包三类状态分开 |
 
-### 1.2 接口约定
+### 1.3 待研究者决定事项
 
-以下接口是**待实现合同**。不宣称当前仓库已有相应函数/CLI。
+| ID | 事项 | 影响 |
+| --- | --- | --- |
+| D1 | 能力标准：上一版要求每格同时满足“批准的绝对下限”和“相对专用模型非劣”；Proposal §8.5 允许绝对要求、读者容差、批准的参照比较三选一 | T17；T06b 模板字段 `standard_kind` 保持 `null` |
+| D2 | `memory.md` 含服务器私有路径且被 Git 跟踪（文件头声明不得提交）。选项：仅移出索引并加入 `.gitignore`；另行重写历史；保留 | T00 只登记 blocker，不改文件 |
+| D3 | 专家资源与替代场景（X0） | 阶段 C 的真实部分与核心目标验证 |
+| D4 | 真实数据执行主机（数据服务器）与该主机上的解释器 | 阶段 B 起的真实数据步骤 |
 
-在 `contracts_v5.py` 定义并经schema验证：`SampleV5`、`AnnotationV5`、`ActiveScope`、`VisibilityPolicy`、`ReferenceLesion`、`StateReference`、`LesionOutcome`、`PatientContrast`、`RunV5`、`PerceptionOutput`、`ModuleOutput`、`CompletionDecision`，均为字段明确的TypedDict。数组留在内存对象，manifest只记录私有引用和哈希。
+### 1.4 X0：专家资源线（非代码，现在即可并行）
 
-- `PerceptionOutput`: Proposal§2.1全部字段；`output_kind=joint, output_version=v5.1`。`anatomy_map/tissue_state_map`形状为3D `[Z,Y,X]`或2D `[Y,X]`，`abnormality_map`为`[C,*spatial]`；state取0/1/2。`acceptance`含anatomy、abnormality、state和relations，形状/ID各自匹配；`reason`使用Proposal§2.1原因码，不含参照资格。所有输出共享observation、scope、mode、grid与checkpoint。
-- `ModuleOutput`: `output_kind=module, output_version=v5.1`，记录同样的来源元数据、`enabled_tasks, disabled_tasks, predictions`；必须显式禁用无输出任务，不能作为核心联合结果。
-- `StateReference`: Proposal§4.1字段，reference_set_hash在预测前冻结；图与资格只供评价者，不进入模型或状态组合函数。
-- `ActiveScope`: 增加state_anatomy_classes及relation_contract；关系角色枚举core_host_binding/auxiliary_spatial。状态范围不能凭预测结果或测试成绩扩大/缩小。
-- `CompletionDecision`: `capability_status, core_target_validated, hypothesis_supported, study_package_complete, evidence_hashes, blockers`。core_target_validated为bool或null，八格能力状态和三项假设状态使用Proposal§11枚举，真实缺证据不能补PASS。
-- `VisibilityPolicy`: `track`为observable_target/released_reference；`unknown_action`为exclude/approved_reference；`approval_ref`可空但采用例外必须非空；不可将unobservable自动例外。
-- `ReferenceLesion`: `patient_uid, instance_uid, u_reference_available, r_reference_available, visibility_qualified, eligible, exclusion_reason, reference_set_hash`，以及私有GT引用。
-- `LesionOutcome`: `reference_instance_uid, detected, extent_ok, relation_correct, accepted, prediction_status`；不能决定参照可用性。
-- `PatientContrast`: `patient_uid, method_value, comparator_value, delta, seed_policy_id`；主统计每患者恰一行，delta必须等于两者差。
-- 训练Batch采用 `[B,C,Z,Y,X]`，字段为 `image, valid_fov, a_target, u_target, e_a_pos, e_a_neg, e_u_pos, e_u_neg, metadata`。二维外部输入只接受平面数组，内部适配为一个有效层。
-- `GateDecision`保留工程/科学双状态；新增 `scope_id, required_evidence, blockers`，审批绑定内容哈希与角色。
+按 Proposal §5.1–5.2：指定标注负责人、主读者、独立复读者、仲裁者、工具和预算；书面写出 E1/E2 上所选软骨异常的体素边界与不确定带规则；在 20–30 次非锁定开发扫描上试点，记录每例用时、可判读率和复读一致性；若无法形成可靠体素场景，由研究者决定替代场景或保持未完成。未落实前，阶段 C 的真实数据部分为 `BLOCKED_EXPERT_REVIEW`。
 
-## 2. 通用执行与验证规则
+---
 
-T00确定 `$PY`、仓库工作目录与获准私有根。不自动安装依赖；环境缺失先报告，不把依赖错误当目标红测。
+## 2. 阶段 A 任务
 
-每个代码任务使用：先写目标反例 → 确认正确失败原因 → 最小修复 → 本任务和受影响旧测试通过 → 记录命令/退出码/输出 → 提交指定文件。已有正确功能不故意破坏以制造红测。需要实际临床/训练工作时，软件完成和实际工作分别登记。
-
-示例测试命令（仅在解释器核验后）：
+### 2.0 共用约定
 
 ```bash
-PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES="" PYTHONPATH=. \
-  "$PY" -m pytest tests/v5 -q -p no:cacheprovider
-PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES="" PYTHONPATH=. \
-  "$PY" -m pytest tests/v41 -q -p no:cacheprovider
+PY=.venv/bin/python3   # 本机；数据服务器上改为已核验的解释器
+pytest_cpu() { env PYTHONNOUSERSITE=1 CUDA_VISIBLE_DEVICES= PYTHONPATH=. "$PY" -m pytest -q -p no:cacheprovider "$@"; }
 ```
 
-以上仅用于CPU测试，不得用覆盖CUDA变量的方式绕过实际训练资源约束。无独立审查工具时，完成自检并如实标self-review。
+- 每个任务提交前，把 `reports/v5/status.md` 中本任务行的 `code_status` 改为 `PASS`、`test_evidence` 填“测试文件: N passed”，并在同一提交中暂存该文件。
+- 合成工厂集中在 `tests/v5/factories.py`（T01a 创建，后续任务只追加函数）。合成名称只用 `tissue_a/tissue_b`、`target_a/target_b`。
+- 新功能的红测以 `ImportError`/`AttributeError` 失败为预期；行为修复的红测以断言失败为预期。
 
-## 3. 分任务实施
+### T00：基线状态与追踪登记
 
-### T00 — 接手、版本与既有资产核对
+**Files:**
+- Create: `reports/v5/status.md`、`reports/v5/traceability.md`、`tests/v5/__init__.py`（空文件）、`tests/v5/test_status_docs.py`
+- Modify: `README.md`「## 当前边界」下第一段
 
-**依赖：** 无。**Files:** 读取v5文档、历史报告、当前源码；新增 `reports/v5/status.md`、`reports/v5/traceability.md`。  
-**接口：** 私有 `task_record.json` 与脱敏状态表，不新增训练命令。
+**Interfaces:**
+- Produces: `reports/v5/status.md` 以 `---` 包围的 YAML 头，后续任务更新其中自己的行。
 
-- [ ] 读取Proposal/plan并记录哈希，查询当前HEAD、工作区和用户未提交修改；若非基线提交，只核对相关增量，不覆盖新工作。
-- [ ] 核对现有模块与复用来源，按“已存在/需修/缺失/未核实”记录；不重跑旧训练、旧推理来恢复上下文。
-- [ ] 核验解释器、依赖、存储和权限；只读取资源约束，不申请GPU作业，不读取凭据文件内容。
-- [ ] 审查memory与提交规则冲突，报告敏感字段类别而非值；历史重写/删除/凭据处置另行授权。
-- [ ] 生成v5任务与已有旧任务对照，分别列代码、测试、真实运行、批准和科学状态。
-- [ ] 自检脱敏与链接；获准工作区中仅提交两份状态文件。
-
-**验收：** 无已完成代码被误判成全新任务；旧144项测试仅记“历史报告”；服务器不可读则阻塞真实核验，不编造通过。
-
-### T01 — v5契约迁移、范围配置与任务级gate
-
-**依赖：** T00。  
-**Files:** Create `contracts_v5.py`、`schemas/v5/{sample,annotation,scope,reference,state_reference,outcome,perception_output,module_output,completion,run,approval}.schema.json`、`configs/v5/{scope_isles_u,scope_skm_a,scope_skm_joint,policy_observable,policy_released_reference,state_policy.template,capability_policy.template,approvals.template}.yaml`；Modify `schema.py,registry.py`；Test `tests/v5/test_contracts_gates.py`。本文未带目录前缀的Python文件均位于 `anatobind/v41/`。
-
-**接口：** `validate_sample_v5(record: dict) -> SampleV5`；`migrate_v41(record: dict, decisions: dict) -> SampleV5`；`evaluate_gate_v5(gate_id: str, scope: ActiveScope, evidence: dict, approvals: dict) -> dict`；`validate_perception_output_v5(output: dict) -> PerceptionOutput`；`validate_module_output_v5(output: dict) -> ModuleOutput`。
-
-- [ ] 写 `test_scope_is_not_master_ontology`：SKM软骨scope不能自动启用韧带/积液阴性；写 `test_quality_and_adjudication_are_distinct`：合法adjudicated+accepted通过，仲裁字段accepted拒绝。
-- [ ] 写gate反例：A-only缺U签核仍可按A必需条件放行；H1缺匹配/分母验证必须BLOCKED；H3缺容差不得科学放行；无关near_mm不阻塞overlap或A-only。
-- [ ] 写 `test_joint_requires_state_output`、`test_output_identity_and_grid_match`：joint缺S、shape/类别顺序/scope/mode/checkpoint不一致拒绝；module允许明确disabled但不能通过joint gate；GT或review字段进入输出拒绝。
-- [ ] 写 `test_core_relation_cannot_be_nearest_only`：仅auxiliary_spatial不通过核心R；写 `test_capability_is_not_hypothesis_status`：三类状态字段独立，null保持缺证据；仅校验schema，不在T01声称科学判定已经实现。
-- [ ] 运行 `tests/v5/test_contracts_gates.py`，记录预期缺功能/错误语义的FAIL。
-- [ ] 实现封闭字段校验、版本迁移与按任务required keys；旧missing可见性变unknown，不自动继承visible；审批模板签名保持null。
-- [ ] 运行新测试及 `tests/v41/test_schema.py tests/v41/test_registry.py`；验证旧记录未被覆盖、unknown字段不回显敏感值。
-- [ ] 保存迁移计数与gate规则版本，提交本任务明确文件。
-
-**验收：** 规格/批准/数据状态分别可追溯；新字段不是自由字典绕过验证；正式运行只消费已验证v5.1契约。新schema使用v5目录但版本号v5.1；旧结果经显式迁移，不能仅因新增必需字段而改写历史结果。
-
-### T02 — 正负资格、可见性与实际损失路径
-
-**依赖：** T01。  
-**Files:** Modify `eligibility.py,losses.py`；Test `tests/v5/test_eligibility_gradients.py`。
-
-**接口：** `build_eligibility_v5(record: SampleV5, task: str, classes: list[str], targets: dict, review_regions: dict, visibility_regions: dict, valid_fov: np.ndarray, policy: VisibilityPolicy, channel: str) -> tuple[np.ndarray,np.ndarray]`，返回按类正/负资格；`masked_objective_v5(logits, target, e_pos, e_neg, task_spec: dict) -> torch.Tensor`。
-
-- [ ] 写8体素测试：observable轨道unobservable/unknown全零资格与零梯度；limited仅独立可见区域有效；padding即使target_complete也无资格。
-- [ ] 写两类positive-only：类图[1,2]经显式映射后c1支持[1,0]、c2支持[0,1]，负资格全零；无映射的多类输入拒绝。写pseudo_only在显式pseudo训练可用、专家评价拒绝。
-- [ ] 写released_reference例外：unknown可见性只有绑定批准的基准政策才允许相应专家参照监督；字段仍是unknown，不能生成observable正常主张。
-- [ ] 运行上述测试确认红测；修正资格组合、FOV交集、按类目标和角色路由，不改变来源真实性。
-- [ ] 验证masked BCE/Dice与互斥A策略：ignore位置logit改变不改loss；无支持不稀释；全ignore有限零；零总权重/非有限输入明确拒绝；伪/人工分组归一化。
-- [ ] 重跑 `tests/v41/test_eligibility_losses.py`；记录每类正/负/pseudo支持及版本，提交。
-
-**验收：** 资格函数与实际反传均正确，不能只靠上游口头承诺。旧宽松入口只保留legacy用途，正式v5运行禁止绕过严格入口。
-
-### T03 — 最大基数优先的一对一实例匹配
-
-**依赖：** T01。  
-**Files:** Modify `evaluation/instances.py`；Test `tests/v5/test_matching_cardinality.py`。
-
-**接口：** `match_instances_v5(pred: list[dict], truth: list[dict], policy: dict) -> list[tuple[int,int]]`；返回索引对，稳定ID用于解平局，允许边须先满足类别/IoU政策。
-
-- [ ] 写下面的确定性反例，原实现在阈值0.1时只返回5，正确结果应为6：
+- [ ] **Step 1：写失败测试 `tests/v5/test_status_docs.py`**
 
 ```python
-truth, pred = [], []
-for i in range(6):
-    t = np.zeros((680, 1, 1), dtype=bool)
-    p = np.zeros_like(t)
-    t[100*i:100*i+100] = True
-    p[100*i+80:100*i+180] = True
-    truth.append({"id": f"t{i}", "mask": t})
-    pred.append({"id": f"p{i}", "mask": p})
-pairs = match_instances_v5(pred, truth, {"iou_match_threshold": 0.1})
-assert len(pairs) == 6
+TASK_IDS = ["T00", "T01a", "T01b", "T01c", "T02", "T03", "T04", "T05", "T06a", "T06b", "T06c",
+            "T07", "T08", "T09a", "T09b", "T09c", "T10", "T11", "T12", "T13", "T14", "T15",
+            "T16", "T17", "T18a", "T18b", "T18c"]
+
+def _front_matter() -> dict:
+    text = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    assert text.startswith("---\n")
+    return yaml.safe_load(text.split("---\n")[1])
+
+def test_historical_evidence_is_not_v51_pass():
+    meta = _front_matter()
+    assert meta["scientific_conclusion"] == "NOT_EVALUATED"
+    assert meta["core_target_validated"] is None
+    assert meta["study_package_complete"] is False
+    assert meta["spec_sha256"] == "b25b0e1beae512320b29beeba2b0eac367cf62e94304d70c28100da1fb006dbf"
+
+def test_every_task_has_five_separate_statuses():
+    tasks = _front_matter()["tasks"]
+    assert list(tasks) == TASK_IDS
+    for row in tasks.values():
+        assert set(row) == {"code_status", "test_evidence", "data_run_status",
+                            "approval_status", "scientific_conclusion"}
+        assert row["scientific_conclusion"] == "NOT_EVALUATED"
+
+def test_known_blockers_are_recorded():
+    meta = _front_matter()
+    assert {"D1", "D2", "D3", "D4"} <= set(meta["open_decisions"])
+    assert "PRIVATE_PATHS_TRACKED:memory.md" in meta["blockers"]
+    assert "BLOCKED_EXPERT_REVIEW" in meta["blockers"]
 ```
 
-- [ ] 运行 `tests/v5/test_matching_cardinality.py`确认正确红测；增加空集、分裂/合并、重复预测、类别不符、阈值相等、null/NaN/0/大于1阈值、形状不一致测试。
-- [ ] 实现先最大基数、再最优IoU的两阶段目标；若使用M权重，取 `min(n_pred,n_ref)+1` 并在注释给出基数优先证明，平局不能改变前两级最优性。
-- [ ] 对小规模合成图穷举匹配作oracle验证；输入顺序改变只改变索引表示，不改变配对ID集合或充分统计量。
-- [ ] 重跑新测试及 `tests/v41/test_metrics.py`，确认反例TP=6/FP=0/FN=0，不以调真实阈值绕开反例。
-- [ ] 保存匹配版本与验证输出，提交实现与测试。
+- [ ] **Step 2：运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_status_docs.py`
+Expected: 3 failed（`FileNotFoundError`）
+
+- [ ] **Step 3：写 `reports/v5/status.md`、`reports/v5/traceability.md`，改 README**
+
+YAML 头键：`plan_revision: "2026-11-06"`、`execution_base`（文字说明 GitHub `restart-dev`、代码与 `d7cbd5b` 相同）、`spec_sha256`、`scientific_conclusion: NOT_EVALUATED`、`core_target_validated: null`、`study_package_complete: false`、`historical_evidence`（`v41_local_tests: "144 passed, Python 3.9.6, 2026-11-06"`；1094 项与 SKM-A 200 步两份报告标为“historical; code not in this repository”）、`open_decisions: [D1, D2, D3, D4]`、`blockers: ["PRIVATE_PATHS_TRACKED:memory.md", "BLOCKED_EXPERT_REVIEW"]`、`tasks`（按 `TASK_IDS` 顺序；T00 `code_status: PASS`，其余 `TODO`；`data_run_status` 在 T00–T06c 为 `NOT_APPLICABLE`、其余为 `NOT_STARTED`；`approval_status` 在 T00–T06c 为 `NOT_REQUIRED`、其余为 `PENDING`）。YAML 头之后用表格复述 §0.2 的实测缺陷。`traceability.md` 复制 §3 的表并加一列“状态”。README 该段替换为：“执行基线：GitHub 当前内容（`restart-dev`，代码与 `d7cbd5b` 相同），见 plan_v5.md 2026-11-06 修订；`9bef283`/`02a2447` 不再作为执行依据。”不写任何私有路径或病例值。
+
+- [ ] **Step 4：运行确认通过**
+
+Run: `pytest_cpu tests/v5/test_status_docs.py tests/v41`
+Expected: `147 passed`
+
+- [ ] **Step 5：提交**
+
+```bash
+git add reports/v5/status.md reports/v5/traceability.md tests/v5/__init__.py tests/v5/test_status_docs.py README.md
+git diff --cached --check
+git commit -m "Record v5.1 baseline status on the GitHub code base"
+```
+
+### T01a：ActiveScope 与 v5.1 样本契约
+
+**Files:**
+- Modify: `anatobind/v41/schema.py:39-47`（`load_schema` 增加可选 `schema_dir`，缓存键改为 `(schema_dir, name)`）
+- Create: `anatobind/v41/contracts_v5.py`、`schemas/v5/scope.schema.json`、`schemas/v5/sample.schema.json`、`schemas/v5/annotation.schema.json`、`configs/v5/scope_isles_u.yaml`、`configs/v5/scope_skm_a.yaml`、`configs/v5/scope_skm_joint.template.yaml`、`tests/v5/factories.py`、`tests/v5/test_contracts_scope.py`
+
+**Interfaces:**
+- Consumes: `schema.validate_against`、`schema.SchemaError`、`schema.AnnotationRecord`/`SampleRecord` 字段。
+- Produces（`contracts_v5.py`）：
+  - `class V5Error(ValueError)`：属性 `code: str`、`path: str`；`str(e) == f"{code} at {path}"`。
+  - `SCHEMA_VERSION_V5 = "v5.1"`
+  - `canonical_sha256(value: object) -> str`：`json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")` 的 SHA256；含 ndarray 时抛 `V5Error("NON_JSON_VALUE")`。
+  - `array_sha256(array: np.ndarray) -> str`：SHA256 of `f"{array.dtype.str}|{list(array.shape)}|".encode() + np.ascontiguousarray(array).tobytes()`。
+  - `@dataclass(frozen=True) class ActiveScope`：`schema_version, scope_id, scope_kind, anatomy_classes, state_anatomy_classes, abnormality_classes, relation_type, relation_predicate, relation_contract, input_modalities, observation_mode, normal_claim_scope, reference_policy_id`；属性 `scope_hash`（全部字段的 `canonical_sha256`）、`state_tissue_ids -> tuple[int, ...]`；方法 `tissue_id(name: str) -> int`（`anatomy_classes` 下标 + 1，背景为 0）。
+  - `validate_scope_v5(record: dict) -> ActiveScope`
+  - `@dataclass(frozen=True) class AnnotationV5`：`AnnotationRecord` 全部字段 + `annotation_modalities: list[str]`、`visibility_region_path: str | None`。
+  - `@dataclass(frozen=True) class SampleV5`：`SampleRecord` 全部字段（`annotation_records: list[AnnotationV5]`）+ `active_scope_id, reference_policy_id, model_modalities, index_alignment_status, physical_geometry_status`。
+  - `validate_sample_v5(record: dict) -> SampleV5`
+- Produces（`tests/v5/factories.py`）：`FIXTURE_APPROVER = "synthetic-fixture"`、`make_scope(**overrides) -> dict`、`make_module_scope(task: str, **overrides) -> dict`、`make_sample_v5(annotation: dict | None = None, **overrides) -> dict`。
+
+**工厂默认值：**
+
+| 工厂 | 值 |
+| --- | --- |
+| `make_scope()` | `schema_version "v5.1"`，`scope_id "synthetic_joint"`，`scope_kind "joint"`，`anatomy_classes ["tissue_a","tissue_b"]`，`state_anatomy_classes ["tissue_a","tissue_b"]`，`abnormality_classes ["target_a","target_b"]`，`relation_type "host_binding"`，`relation_predicate "overlaps"`，`relation_contract {target_question "which tissue hosts the lesion", predicate "overlaps", reference_method "independent_expert_host", display_name "located_in", completion_role "core_host_binding"}`，`input_modalities ["synthetic_e1","synthetic_e2"]`，`observation_mode "3d"`，`normal_claim_scope "no_enabled_target_in_reviewed_state_tissues"`，`reference_policy_id "synthetic_policy_v1"` |
+| `make_module_scope("A")` | `scope_id "synthetic_a"`，`scope_kind "module"`，`anatomy_classes ["tissue_a","tissue_b"]`，`abnormality_classes []`，`state_anatomy_classes []`，`relation_type/relation_predicate/relation_contract` 均 `None`，其余同上 |
+| `make_module_scope("U")` | 同上但 `scope_id "synthetic_u"`、`anatomy_classes []`、`abnormality_classes ["target_a"]` |
+| `make_sample_v5()` | `tests/v41/conftest.py::_sample` 的字段与值，改 `schema_version "v5.1"`，加 `active_scope_id "synthetic_joint"`、`reference_policy_id "synthetic_policy_v1"`、`model_modalities ["qdess_e1"]`、`index_alignment_status "unknown"`、`physical_geometry_status "unknown"`；注释 `annotation_uid "ann-v5-0001"`、`class_scope ["target_a"]`，加 `annotation_modalities ["qdess_e1"]`、`visibility_region_path None` |
+
+**Schema 枚举：** `scope_kind {module, joint}`；`observation_mode {2d, 3d}`；`completion_role {core_host_binding, auxiliary_spatial}`；`index_alignment_status`、`physical_geometry_status {verified, failed, unknown}`；注释各枚举沿用 v41 annotation schema（`adjudication_status` 无 `accepted`）。
+
+- [ ] **Step 1：写失败测试 `tests/v5/test_contracts_scope.py`**
+
+```python
+def test_scope_hash_is_canonical_and_content_bound():
+    a, b = validate_scope_v5(make_scope()), validate_scope_v5(make_scope())
+    assert a.scope_hash == b.scope_hash and len(a.scope_hash) == 64
+    assert validate_scope_v5(make_scope(abnormality_classes=["target_a"])).scope_hash != a.scope_hash
+
+@pytest.mark.parametrize("override, code", [
+    ({"state_anatomy_classes": []}, "STATE_CLASSES_REQUIRED"),
+    ({"state_anatomy_classes": ["tissue_x"]}, "STATE_CLASSES_NOT_SUBSET"),
+    ({"abnormality_classes": []}, "JOINT_REQUIRES_U"),
+    ({"relation_contract": None}, "RELATION_CONTRACT_REQUIRED"),
+    ({"relation_predicate": "abuts"}, "PREDICATE_MISMATCH"),
+    ({"anatomy_classes": ["tissue_a", "tissue_a"]}, "DUPLICATE_CLASS"),
+    ({"observation_mode": "4d"}, "INVALID_ENUM"),
+])
+def test_joint_scope_rules(override, code):
+    with pytest.raises(V5Error) as error:
+        validate_scope_v5(make_scope(**override))
+    assert error.value.code == code
+
+def test_module_scope_cannot_claim_state_or_relation():
+    with pytest.raises(V5Error) as error:
+        validate_scope_v5(make_module_scope("A", state_anatomy_classes=["tissue_a"]))
+    assert error.value.code == "MODULE_SCOPE_CANNOT_CLAIM_STATE"
+    assert validate_scope_v5(make_module_scope("U")).anatomy_classes == []
+
+def test_tissue_ids_start_at_one():
+    scope = validate_scope_v5(make_scope())
+    assert (scope.tissue_id("tissue_a"), scope.tissue_id("tissue_b")) == (1, 2)
+    assert scope.state_tissue_ids == (1, 2)
+
+def test_errors_never_echo_values(secret_values):
+    record = make_scope(extra_field=secret_values[0])
+    with pytest.raises(V5Error) as error:
+        validate_scope_v5(record)
+    assert error.value.code == "UNKNOWN_FIELD" and secret_values[0] not in str(error.value)
+
+@pytest.mark.parametrize("annotation, code", [
+    ({"input_visibility": "visible", "visibility_evidence": None}, "VISIBILITY_EVIDENCE_REQUIRED"),
+    ({"input_visibility": "limited", "visibility_evidence": "synthetic"}, "LIMITED_VISIBILITY_REGION_REQUIRED"),
+    ({"adjudication_status": "accepted"}, "INVALID_ENUM"),
+])
+def test_sample_visibility_and_adjudication_rules(annotation, code):
+    with pytest.raises(V5Error) as error:
+        validate_sample_v5(make_sample_v5(annotation=annotation))
+    assert error.value.code == code
 
-**验收：** 配对数、IoU、稳定次序优先级有证据。保留旧指标历史，不重写既有报告。
+def test_model_modalities_must_be_declared():
+    with pytest.raises(V5Error) as error:
+        validate_sample_v5(make_sample_v5(model_modalities=["qdess_e2"]))
+    assert error.value.code == "MODEL_MODALITY_UNKNOWN"
 
-### T04 — 固定参照分母、关系集合与联合评价
+def test_joint_template_is_not_a_valid_scope_until_filled():
+    template = yaml.safe_load(Path("configs/v5/scope_skm_joint.template.yaml").read_text())
+    with pytest.raises(V5Error):
+        validate_scope_v5(template)
+    for name in ("scope_isles_u", "scope_skm_a"):
+        validate_scope_v5(yaml.safe_load(Path(f"configs/v5/{name}.yaml").read_text()))
+```
 
-**依赖：** T01、T03。  
-**Files:** Modify `evaluation/joint.py,evaluation/relations.py`；Test `tests/v5/test_joint_reference_denominator.py`。
+`secret_values` 是 `tests/v41/conftest.py` 的 fixture，不在 `tests/v5` 可见范围内，在 `tests/v5/test_contracts_scope.py` 内用同值 `"/private/zz_patient_root/case_000777"` 定义同名 fixture。
 
-**接口：** `freeze_reference_set(refs: list[ReferenceLesion], policy: dict) -> dict`；`joint_score_v5(refs: list[ReferenceLesion], outcomes: list[LesionOutcome], reference_hash: str) -> dict`。
+- [ ] **Step 2：运行确认失败**
 
-- [ ] 写固定两病灶均有R参照、仅一例成功测试：漏检/关系未输出/拒判变化均保持分母2、J=0.5或更低；不得借None降为分母1。
-- [ ] 写无R参照、真实空关系集合、无病灶患者分别处理；空分母 `None`，包含原因、覆盖和计数，不返回0/1。
-- [ ] 写预测结果不能改变reference_hash；未知/重复reference ID拒绝；没有outcome的合格病灶自动计未成功而非丢弃。
-- [ ] 运行红测，分离参照冻结与预测判定；患者J和池化J分别输出，阴性扫描不进入阳性J分母。
-- [ ] 同步关系评价：有参照但集合为空仍计参照覆盖；多组织集合正确性明确；GT/预测角色不混用。
-- [ ] 重跑metrics旧测试与新测试，发布充分统计量和参照覆盖摘要，提交。
+Run: `pytest_cpu tests/v5/test_contracts_scope.py`
+Expected: collection error（`ImportError: cannot import name 'validate_scope_v5'`）
 
-**验收：** 任意预测退化不改变固定G_i；没有参照与预测错误不是同一状态。函数接口不能再以relation_ok是否None推断参照存在。
+- [ ] **Step 3：实现**
 
-### T05 — 患者等权、配对统计与训练种子
+`load_schema(name: str, schema_dir: Path | None = None) -> dict`（`None` 即 v41 目录，旧调用不变）。`contracts_v5` 先用 `validate_against` 校验 `schemas/v5/*`，把 `SchemaError` 转为同 code/path 的 `V5Error`，再执行跨字段规则：joint 需非空 U 类、非空且为子集的 `state_anatomy_classes`、非空 `relation_contract` 且 `relation_predicate == relation_contract["predicate"]`；module 需 `state_anatomy_classes == []`（否则 `MODULE_SCOPE_CANNOT_CLAIM_STATE`）、`relation_contract is None`（否则 `MODULE_SCOPE_CANNOT_CLAIM_RELATION`）、A/U 类至少一个非空（否则 `EMPTY_SCOPE`）；任何类别列表重复抛 `DUPLICATE_CLASS`。样本规则：`input_visibility != "unknown"` 需非空 `visibility_evidence`；`limited` 需 `visibility_region_path`；`model_modalities ⊆ modality_names`。三份 scope 配置：`scope_isles_u`（module U，`abnormality_classes ["ischemic_infarct"]`，`input_modalities ["dwi","adc"]`，`reference_policy_id "isles_released_reference_v1"`）；`scope_skm_a`（module A，`anatomy_classes` 为 `configs/v41/ontology.yaml` 中 `skm_a6_v1` 的六个 `name`，按 1–6 顺序，`input_modalities ["qdess_e1","qdess_e2"]`）；`scope_skm_joint.template`（anatomy 同 A6，`state_anatomy_classes`、`abnormality_classes`、`relation_contract`、`relation_predicate` 均为 `null`）。
 
-**依赖：** T01、T04。  
-**Files:** Modify `evaluation/statistics.py`；Test `tests/v5/test_patient_estimand.py`。
+- [ ] **Step 4：运行确认通过**
 
-**接口：** `make_patient_contrasts(method_rows: list[dict], baseline_rows: list[dict], policy: dict) -> list[PatientContrast]`；`paired_patient_bootstrap_v5(rows: list[PatientContrast], seed: int, n_boot: int, ci_level: float) -> dict`。池化指标另用 `pooled_cluster_bootstrap(...)`，不可共用未标明的estimate。
+Run: `pytest_cpu tests/v5 tests/v41`
+Expected: 全部通过，0 failed；`tests/v41` 计 144 passed
 
-- [ ] 写患者A100病灶值1、患者B1病灶值0，患者均值0.5、池化100/101；复制A内等值记录不得改变患者均值。
-- [ ] 写两方法必须按patient UID配对，缺配对/重复患者行拒绝或按预注册缺失政策明确标缺；不得静默删难例。
-- [ ] 写重复种子不增加n_patients，n_boot<=0、ci_level不在(0,1)拒绝；空输入返回NA且不计算百分位。
-- [ ] 运行红测；先按冻结规则汇总同患者扫描/病灶/种子，再计算配对delta，bootstrap整患者；点估计与区间针对同一estimand。
-- [ ] 用已知小例验证置信区间、确定性种子、0.5结果；训练种子变异独立报告，不能把seed当患者。
-- [ ] 重跑旧metrics与新测试，记录统计版本、单位、区间与患者数，提交。
+- [ ] **Step 5：提交**
 
-**验收：** 主J点估计与区间均患者等权；现有按行池化行为不被误称主终点正确。
+```bash
+git add anatobind/v41/schema.py anatobind/v41/contracts_v5.py schemas/v5/scope.schema.json schemas/v5/sample.schema.json schemas/v5/annotation.schema.json configs/v5/scope_isles_u.yaml configs/v5/scope_skm_a.yaml configs/v5/scope_skm_joint.template.yaml tests/v5/factories.py tests/v5/test_contracts_scope.py reports/v5/status.md
+git diff --cached --check
+git commit -m "Add v5.1 scope and sample contracts"
+```
 
-### T06 — 分项指标、组织状态S直接评价与按任务政策
+### T01b：组织状态规则与 PerceptionOutput/ModuleOutput 契约
 
-**依赖：** T01；联合汇总另依赖T04/T05。  
-**Files:** Modify `evaluation/{segmentation,selective}.py`；Create `evaluation/{policy,state}.py`、`configs/v5/metrics.template.yaml`；Modify `configs/v5/capability_policy.template.yaml`；Test `tests/v5/test_metric_policy.py tests/v5/test_tissue_state_metrics.py`。
+**Files:**
+- Create: `anatobind/v41/state_rule_v5.py`、`tests/v5/test_contracts_outputs.py`
+- Modify: `anatobind/v41/contracts_v5.py`（追加）、`tests/v5/factories.py`（追加 `make_joint_output`、`make_module_output`）
 
-**接口：** `validate_metric_policy(task: str, stage: str, policy: dict) -> dict`；`segmentation_metrics_v5(pred, truth, eligible, geometry: dict, policy: dict) -> dict`；`normal_state_metrics(rows: list[dict], policy: dict) -> dict`；在evaluation/state.py实现 `build_state_reference_v5(record: SampleV5, reference_arrays: dict, scope: ActiveScope) -> StateReference` 和 `tissue_state_metrics_v5(pred: PerceptionOutput, reference: StateReference, policy: dict) -> dict`。状态预测组合由T09实现；本任务用显式合成PerceptionOutput测试评价，不依赖T09模型。
+**Interfaces:**
+- Consumes: T01a `ActiveScope`、`V5Error`。
+- Produces（`state_rule_v5.py`）：
+  - 常量 `TARGET_NEGATIVE = 0`、`TARGET_POSITIVE = 1`、`NOT_ASSESSABLE = 2`；`REASON_BITS = {"out_of_fov": 1, "out_of_scope": 2, "anatomy_uncertain": 4, "abnormality_uncertain": 8, "input_insufficient": 16}`。
+  - `derive_state_map_v5(anatomy_map, anatomy_accepted, anatomy_reason, abnormality_map, abnormality_accepted, abnormality_reason, state_tissue_ids: tuple[int, ...]) -> tuple[np.ndarray, np.ndarray]`，返回 `(state uint8, state_reason uint8)`。只接受这些预测/接受/原因数组，不接受任何参照参数。
+- Produces（`contracts_v5.py`）：
+  - `@dataclass(frozen=True) class PerceptionOutput`，字段即下表 17 个键；`validate_perception_output_v5(output: dict, scope: ActiveScope) -> PerceptionOutput`。
+  - `@dataclass(frozen=True) class ModuleOutput`；`validate_module_output_v5(output: dict, scope: ActiveScope) -> ModuleOutput`。
+- Produces（factories）：`make_joint_output(scope: ActiveScope, *, anatomy_map=None, abnormality_map=None, anatomy_accepted=None, abnormality_accepted=None, **fields) -> dict`：不给数组时返回下方固定样例；给任一数组时，未给的接受图默认全 True（`anatomy_map` 含 -1 时调用方必须同时给 `anatomy_accepted`），被拒位置的原因填 `anatomy_uncertain`/`abnormality_uncertain`，S 与 S 原因由 `derive_state_map_v5` 计算，实例与关系沿用固定样例。`make_module_output(scope: ActiveScope, task: str, **fields) -> dict`。
 
-- [ ] 写A-only Dice不因near_mm/H3容差缺失而阻塞，正式HD95缺物理几何返回NA，正式J缺extent规则阻塞；诊断参数与锁定参数版本分开。
-- [ ] 写空GT、单边空、全ignore、只有padding、贴边、部分复核裁边、不等距spacing反例；无参照不误计真阴性。
-- [ ] 写false-normal两个分母的手算例、全拒判NA+覆盖率、阴性扫描不足时仅报告实际n；risk-coverage正确性未知另报覆盖而非静默删。状态组合测试归T09，不把临时评价产物充作正式推理输出。
-- [ ] 写 `test_state_reference_requires_complete_review`：合格同例A/U及完整复核/可见性/FOV交集内可派生S阴性；positive-only、未复核及范围外不能变正常；reference_set_hash不受预测影响。
-- [ ] 写 `test_correct_u_wrong_a_fails_joint_state`：U和二值状态正确但组织身份全错时，正确U指标可保留，A–S联合对应类召回为0；预测把该组织标范围外仍保留GT分母。
-- [ ] 写 `test_rejection_does_not_shrink_state_reference`：增加拒判不改变每组织/状态的参照计数，固定分母正确率不增加；全拒判接受风险NA、覆盖0且不能通过S。写只含多数正常体素、漏掉全部异常时总体准确率高仍不可通过。
-- [ ] 红测后实现Proposal§8.5的G_kz/P_kz、每类Dice/precision/recall、正常区域FP、false-normal及覆盖；空类NA和支持数，患者等权汇总复用T05。必需组织/状态无支持或能力界限未冻结不能认证S。
-- [ ] 运行红测；固定表面提取/面积权重/HD95合并与插值政策；优先使用经锁定的参考实现或可验证适配，不无授权安装。[Proposal R6]
-- [ ] 对partial review采用显式surface eligibility：不确定/未复核界面不作已知表面，外部最近边界无法判定时该距离为NA；保留区域Dice及表面可评价覆盖。写裁切mask产生人工平面的反例确保不会虚高。
-- [ ] 与参考实现作合成差分，重跑旧metrics测试；保存metric_version、分母/失败/NA计数，提交。
-
-**验收：** 不将无权边界体素比例无说明称标准NSD；每指标只检查其必要参数，生产结果无隐含默认阈值。S按参照组织/资格直接评价，不被预测A裁边、接受集筛选、J改善或总体准确率替代。参照函数不能被部署推理入口调用。
-
-### T07 — 来源、输入可见性与真实空间链
-
-**依赖：** T01、T02；可并行准备只读审计。  
-**Files:** Modify `adapters/{isles,skm}.py,geometry_qc.py,audits.py,ontology.py`；Create `configs/v5/sources.yaml`；Test `tests/v5/test_source_visibility_geometry.py`。
-
-**接口：** `audit_source_v5(records: list[SampleV5], source_policy: dict) -> dict`；`resolve_geometry_chain(record: SampleV5) -> dict`。
-
-- [ ] 写相同shape但翻轴/方向错误不通过；缺affine仅可标索引对齐，不能获得physical pass；unknown单位必须有批准来源政策。
-- [ ] 写ISLES标注模态DWI/ADC/FLAIR与模型DWI/ADC分列；专家来源不自动把visibility设visible；released_reference与observable轨道各自计数。
-- [ ] 红测后实现显式E1/E2—H5 seg—参考轨道—框映射、NIfTI scaling与类别值QC；近整数容差1e-5，概率图拒绝，历史全零截断从原源新导出。
-- [ ] 在允许只读真实数据时，核对本地版本、hash、配对、标签值、空间链；导出私有叠加图供人审，覆盖小病变、边缘和变形，不只比较两份mask。
-- [ ] 若服务器不可读，保留synthetic PASS/data NOT_VERIFIED；不把历史155/155形状pass替代新物理证据。发布按来源/任务的匿名结果与例外。
-- [ ] 重跑新测试和 `tests/v41/test_geometry_labels.py tests/v41/test_geometry_qc.py tests/v41/test_adapters_pairing.py`，提交代码与匿名汇总。
-
-**验收：** 每条训练/评价空间路径有对应层级证据；不要求所有P2资产先通过才放行P0。
-
-### T08 — 曝光审计、患者分组与正式划分
-
-**依赖：** T01、T07。  
-**Files:** Modify `identity.py,splits.py`；Create `configs/v5/split_policy.template.yaml`；Test `tests/v5/test_exposure_split.py`。
-
-**接口：** `audit_exposure(records: list[SampleV5], evidence: list[dict]) -> list[dict]`；`freeze_splits_v5(records: list[SampleV5], policy: dict, approvals: dict, out: Path) -> dict`。
-
-- [ ] 写回波/轨道/随访/裁剪跨划分拒绝；SibBMS跨队列同号不盲合并；已知曝光不能因新随机种子变unexposed。
-- [ ] 写administrative_qc与训练/模型选择接触区分；unknown保持未知，锁定角色需相应独立性证据。历史队列属性不是未经定义的新split枚举。
-- [ ] 运行红测；实现来源内患者分组、明确别名和模型谱系曝光；读取旧运行manifest/初始化/结果使用记录，不重跑旧训练。
-- [ ] SKM核对官方划分；ISLES在管理员角色按已批准比例和可得分层变量抽样；稀疏层的合并规则先定，缺中心信息不猜测，不凭测试表现换种子。
-- [ ] 人工确认曝光与划分政策后冻结；发布患者支持数、实际阴性数和哈希，重新检查零已知跨split组。无法独立者进入历史/内部验证队列。
-- [ ] 重跑 `tests/v41/test_identity_splits.py`及新测试，提交实现；病例清单只存私有根。
-
-**验收：** 真正的划分冻结及泄漏检查，不把未分split时0泄漏当就绪。读者试点从非锁定病例抽取。
-
-### T09 — 输入管线、运行登记、资源与访问控制
-
-**依赖：** T01、T02、T07、T08；CPU合成开发可早于真实划分。  
-**Files:** Create/complete `observations.py,datasets.py,perception.py,engine/{registration,trainer,inference,access}.py`、`configs/v5/run.template.yaml`；Modify `cli.py,configs/v5/state_policy.template.yaml`；Test `tests/v5/test_run_pipeline.py tests/v5/test_perception_output.py`。
-
-**接口：** `build_observation_v5(record: SampleV5, scope: ActiveScope, roles: set[str]) -> dict`；`register_run_v5(config: dict, evidence: dict, approvals: dict) -> RunV5`；`run_training_v5(run: RunV5, resume: Path | None) -> dict`；`infer_v5(model, observation: dict, policy: dict) -> PerceptionOutput | ModuleOutput`。 公共 `freeze_protocol_v5(config: dict, evidence: dict, approvals: dict, out: Path) -> dict` 在 `engine/registration.py` 实现，供H1/H2/H3复用，不依赖任何实验已完成。
-
-**状态接口（perception.py）：** `compose_tissue_state_v5(anatomy_map: np.ndarray, abnormality_map: np.ndarray, acceptance: dict, valid_fov: np.ndarray, scope: ActiveScope) -> dict`，返回tissue_state_map、acceptance_state与reason；`assemble_perception_output_v5(raw_prediction: dict, observation: dict, scope: ActiveScope, policy: dict) -> PerceptionOutput`；`save_perception_output_v5(output: PerceptionOutput, out: Path) -> dict`。assemble负责原网格恢复、按policy阈值化、组合及T01验证，save复用私有路径策略。输入均不含参照或复核图。
-
-- [ ] 写无GT推理输入、缺模态拒绝、相同增广同时变换图像/标签/资格、有效FOV不当背景、缓存键含模式/源/变换/本体测试。
-- [ ] 写 `test_state_composition_truth_table`：A已接受且在state_anatomy_classes内时，至少一类已接受U阳性得到1；全部类别已接受阴性才得0；无已接受阳性但有类拒判则2；空C拒绝，不能由all(empty)得到正常。
-- [ ] 写 `test_uncertain_anatomy_preserves_abnormality`：同一预测U阳性，A未接受时S=2且reason含anatomy_uncertain，U通道和实例内容/数量不变，R不得默认no_host；测试一个U阳性已接受、另一类拒判时仍保留阳性。FOV外/状态本体外S=2且原因正确。
-- [ ] 用合成预测桩而非未实现T13网络做 `test_infer_save_reload_perception_output`：一次infer输出完整PerceptionOutput，保存/重载保留S类别、网格、scope/mode/checkpoint/state_policy哈希；module不可冒充joint；禁读GT，缺S或不一致须失败。
-- [ ] 写无预算/资源许可拒绝真实run；哈希不匹配拒绝resume；锁定/H2隐藏角色不可读；第二控制器不能覆盖第一run。
-- [ ] 红测后实现最小数据批次与控制器；记录参数/优化器/RNG/sampler等恢复状态。将数据读取经允许角色包装；能使用权限/最小挂载时加系统层隔离。
-- [ ] 做直接文件打开的负向访问测试，区分流程隔离与实际强制隔离；若不能证明OS拒绝读取，不声称强隔离。受限评价逐例输出不回流调参。
-- [ ] CPU合成单batch及确定性中断恢复测试；获得实际资源许可后才做GPU单batch和小样本过拟合，记录显存、吞吐和容差。OOM/NaN按策略退出，不擅自延长预算。
-- [ ] 补全并验证已实现的CLI帮助，保存匿名工程报告和run记录，提交指定文件。
-
-**验收：** 输入—损失—优化—保存—恢复—统一输出闭环按阶段实测。T09用合成桩验收输出链，真实模型端到端由T13完成；S不是只在评价器临时生成。预算字段非空且批准；不继承历史卡号或耗时。
-
-### T10 — ISLES U与SKM A强基线
-
-**依赖：** T02、T06–T09，相应G-BASE；实例评价另需T03。  
-**Files:** Create/complete `models/core.py`、`configs/v5/{isles_u,skm_a}.yaml`；Test `tests/v5/test_baselines.py`。
-
-**接口：** `build_model_v5(config: dict) -> torch.nn.Module`；`forward(image, valid_fov, mode: str) -> dict`，按任务输出a_logits/u_logits/image_features，不接受GT参数。
-
-- [ ] 写U-only无需A标签、A-only不读框、SKM输出7通道、ISLES输入2通道测试；训练统计不读取validation/test来拟合。
-- [ ] 红测后包装经核验的残差U-Net/nnU-Net；只支持相同资格/输入条件的对照，输出回原生网格。
-- [ ] 完成合成与获准真实小样本过拟合，检查loss、采样、量纲和反变换；性能异常先查管线，不以更大模型掩盖。
-- [ ] 获准后登记开发基线；候选seed17，仅在批准后使用。保存曲线、全体积开发结果、支持量、失败与实际资源使用。
-- [ ] 对ISLES标注released_reference轨道与可见性证据，不将U成绩称完整联合能力；对SKM未核物理几何项明确NA。模块基线返回ModuleOutput并显式disabled S/R，不为通过联合schema伪造组织状态。
-- [ ] 重跑软件测试，发布匿名基线证据并提交配置，不提交权重/逐例医学输出。
-
-**验收：** 实际A/U基线可运行且评价正确；不预设Dice阈值、不保证增益。
-
-### T11 — 标注工具接口与真实专家试点
-
-**依赖：** T01、T07、T08；读者协调可从T00开始。  
-**Files:** Create `annotation.py`、`configs/v5/annotation_protocol.template.yaml`；Test `tests/v5/test_annotation_roundtrip.py`。
-
-**接口：** `export_review_package(records: list[SampleV5], protocol: dict, out: Path) -> dict`；`import_review_package(package: Path, protocol: dict) -> list[AnnotationV5]`。
-
-- [ ] 写试点/锁定互斥、默认不带模型/几何预测、读者版本不可覆盖、纯框不能作为voxel GT导入、额外序列可见性单列测试。
-- [ ] 写正确仲裁字段用例：quality=accepted且adjudication=adjudicated在相应批准政策下可导入；无读者/质量依据不能自动升级。不使用旧T09的accepted仲裁枚举。
-- [ ] 红测后实现NIfTI+JSON往返、U/不确定带/复核区域/可见区域/A修订/关系记录的字段校验；标注工具转换与契约分离。记录每个启用组织的目标阴性复核依据，支持后续派生StateReference；二维读者资格与三维分开，不要求重复标一套冗余正常mask。
-- [ ] 落实负责人、读者、仲裁者和预算；未落实则临床BLOCKED，软件测试可PASS。由真实读者完成20–30次扫描规划起点，不由Agent/伪标签冒充。
-- [ ] 记录读者时间、一致性、不可判读比例、组织支持、阴性范围和实例拆并分歧；先导范围定义在扩展前书面化。
-- [ ] 验证标注导入及脱敏汇总，提交软件；实际标注与签核仅存私有根。
-
-**验收：** 软件完成与真实标注完成独立记录；体积不可稳定定义者单列表面支线，不宣布体素目标已达成。
-
-### T12 — 联合队列发布、参照冻结与精度设计
-
-**依赖：** T03–T08、T11专家试点。  
-**Files:** Modify `annotation.py,registry.py`；Create `configs/v5/joint_cohort.template.yaml`；Test `tests/v5/test_joint_cohort_release.py`。
-
-**接口：** `release_joint_cohort_v5(records: list[SampleV5], protocol: dict, approvals: dict, out: Path) -> dict`；消费T04参照冻结与T06的build_state_reference_v5。
-
-- [ ] 写缺同例A/U不发布联合资格；临床R无独立依据不能由几何补齐；独立合格A/U可按批准谓词生成R_geo参照。
-- [ ] 写 `test_state_and_core_binding_required_for_core_cohort`：无合格StateReference或仅auxiliary_spatial关系时，模块参照可发布但核心联合资格BLOCKED；core_host_binding需冻结target_question/predicate/reference_method/display_name且证据一致。near/nearest不能改名成临床累及通过。
-- [ ] 写参照可用性与不确定/排除原因预测前固定；试点病例和历史曝光不能进入独立盲测；空组织集合不等于缺R。
-- [ ] 红测后实现版本化发布与原始读者版本保留；质量/可见性/完整性按任务和区域，不以文件存在认证。
-- [ ] 根据试点可判读率和患者配对差异做精度情景计算，提交规模依据；60–100扫描与20–30测试患者仍是规划，不当统计学结论。若目标阴性不足，缩窄特异性主张。
-- [ ] 临床负责人批准ActiveScope、state_anatomy_classes、实例规则、核心R合同、不确定带和正式参照政策；按组织与阳性/阴性报告StateReference支持、排除原因与哈希。管理员保管测试，不向训练者开放。
-- [ ] 重跑新测试，发布G-ANNOTATION及匿名患者/病灶/参照覆盖数，提交软件与脱敏说明。
-
-**验收：** 至少一个真正可检验的同例队列，或明确阻塞；不依赖“所有训练样本必须完整精标”的不必要条件。
-
-### T13 — 普通联合、软解剖融合、组织状态与核心归属
-
-**依赖：** T02–T06、T09–T12，G-JOINT。  
-**Files:** Modify `models/core.py,engine/inference.py`；复用T09 `perception.py`；Create `models/{anatomy_fusion,relation}.py`、`configs/v5/joint_models.yaml`；Test `tests/v5/test_joint_models.py tests/v5/test_perception_end_to_end.py`。
-
-**接口：** `AnatomyResidualFusion.forward(features, anatomy_prob, uncertainty, enabled: bool)`；`extract_instances_v5(u_prob, geometry: dict, policy: dict) -> list[dict]`；`bind_geometry_v5(instances: list[dict], a_prob, policy: dict) -> list[dict]`；`RelationHead.forward(roi_features, anatomy_features, spatial_features)`。
-
-- [ ] 写shared/independent/AnatoBind均仅影像forward；缺某任务标签不产生其梯度；关闭融合为恒等，A漏分不硬删除U影像通路。
-- [ ] 写默认stop-gradient、显式联合反传、零残差初始化仍有可学习参数梯度；不要同时零初始化乘积两支导致永久零梯度。
-- [ ] 写多组织集合、无交叠不推出临床未累及、GT-A仅oracle、真实tissue_id不输入；GT ROI只属诊断轨道。只有通过核心关系合同的谓词可进入core R评价，辅助关系单列。
-- [ ] 写 `test_joint_models_emit_native_perception_output`：实际模型的shared-AU/AnatoBind经同一infer入口输出A/U/S/R并可保存回原网格；不允许“后处理理论可得到S”代替真实字段。错误/不确定A不能抹去U；无病灶也输出目标范围内状态图和明确空实例集合。
-- [ ] 红测后实现最小架构与几何R；轻量学习头只在数据支持时启用，不默认大模型或全库预训练。
-- [ ] 获批后比较普通联合与融合；全体积/预测ROI计入漏检、重复和分裂合并；固定候选与端到端结果分开。
-- [ ] 重跑软件测试，记录参数/计算/调参/监督曝光量及开发结果；不宣称必然优于简单基线，提交。
-
-**验收：** 可部署路径无GT泄漏；同次推理的组织身份、状态、范围和核心关系一致绑定并保存，S真实输出可直接评价。普通模型可以成为合格能力模型；融合无额外收益不自动判核心目标失败，缺S/核心R也不能靠A/U分数高替代。
-
-### T14 — H1比较、阈值校准与主协议冻结
-
-**依赖：** T05、T06、T12、T13。  
-**Files:** Create `experiments/h1.py`、`configs/v5/h1.template.yaml`；Modify `engine/registration.py,evaluation/selective.py`；Test `tests/v5/test_h1_protocol.py`。
-
-**接口：** `build_h1_matrix(config: dict) -> list[dict]`；`calibrate_working_point(dev_results: list[dict], policy: dict) -> dict`；复用T09的 `freeze_protocol_v5` 公共接口，不在H1模块另写一份。
-
-- [ ] 写非oracle数据/输入/预算可比、候选哈希一致、oracle不可primary、测试角色不能进入校准测试；改变冻结阈值必须使协议哈希失效。
-- [ ] 写FP约束无可行开发工作点时按预注册规则返回无可行/指定退化点并报告，不秘密使用测试找阈值。
-- [ ] 红测后登记Proposal§7矩阵与唯一主对照选择规则；分清需要重训的消融和推理扰动，控制预算。
-- [ ] 获批运行开发比较；H1保留1–2个主终点及患者J，冻结A保持性、FP判据、接受策略、extent与表面容差、核心关系语义及多重比较范围。另冻结Proposal§8.5的直接S能力标准，不把每项安全约束都另立成探索性显著性检验。
-- [ ] 写 `test_j_improvement_does_not_imply_state_pass`：J改善但正常组织误报/异常判正常/必需覆盖任一不符合冻结标准时，S不通过；总体准确率不能覆盖这些失败。所有臂同样计算S，组织分母基于GT而非预测A。
-- [ ] 冻结每模式/组织/状态的支持要求、metric_bounds、min_coverage和区间判据，以及开发选定最终能力模型的规则；不能看测试后改选普通模型或AnatoBind来制造通过。
-- [ ] 分析A纠错/引错与病灶大小/组织/边界破坏；不把置换下降当充分因果证明，不按测试结果选分层。
-- [ ] 保存H1_READY模型/协议/评价哈希，测试仍锁定；提交实现和脱敏开发证据。
-
-**验收：** 有可执行且可证伪的联合主比较，支持与否留待T18；临床必要阈值不能由Agent随意赋值。
-
-### T15 — H2现实缺标与公平比较
-
-**依赖：** T02、T03、T05、T06、T09、T10(ISLES)；协议冻结复用T09公共接口，不依赖H1实验完成。  
-**Files:** Create `experiments/{missingness,h2}.py`、`configs/v5/h2.template.yaml`；Modify `losses.py`；Test `tests/v5/test_h2_information_boundary.py`。
-
-**接口：** `create_missingness_release_v5(records, policy: dict, visible_out: Path, restricted_out: Path) -> dict`；`build_h2_arms(config: dict, visible_release: dict) -> list[dict]`；`box_presence_loss_v5(logits, boxes, policy: dict)`。
-
-- [ ] 写两个隐藏完整参照不同、公开上下文相同的整管线测试：公开资格相同，manifest无完整mask路径/删去实例ID/精确ignore洞；不能仅重复调用同函数充当验证。
-- [ ] 写所有非oracle组可见信息hash相同；完整标签/oracle资格标privileged；框MIL不把全框阳性或框外阴性。
-- [ ] 红测后实现区域复核、随机实例遗漏、大小/可见性偏置遗漏；候选25/50/75%明确为遗漏率，开发前登记。
-- [ ] 加入独立抽样的可信阴性区域或完整子集；隔离隐藏参照并负向测试直接读取，不根据删除mask反推阴性。类别先验不能来自隐藏或测试标签。
-- [ ] 必做缺标当背景、masked同资格、完整监督上限；新算法臂仅在机制不同且批准后启用。评价固定开发工作点，报告完整灵敏度—FP曲线、false-normal、接受覆盖与大小分层。
-- [ ] 使用公共freeze_protocol生成H2_READY，记录协议贡献与算法增益分别是否支持；测试留给T18，提交。
-
-**验收：** 更少负标签不能通过无限误报制造“改善”；没有新机制不另起新算法名称。
-
-### T16 — 双模式骨干与严格单切片边界
-
-**依赖：** T09；可先CPU合成。迁入完整联合结构需T13。  
-**Files:** Create `models/observation_adapter.py`；Modify `observations.py,datasets.py,engine/{trainer,inference}.py`；Test `tests/v5/test_dual_mode_boundary.py`。
-
-**接口：** `build_single_slice_v5(image_2d: np.ndarray, geometry: dict, policy: dict) -> dict`；`ObservationAdaptiveModel.forward(image, valid_fov, mode: str) -> dict`，mode仅2d/3d。
-
-- [ ] 写单层接口不接受volume/z索引；同一切片在不同邻层背景中产生完全相同合法输入；归一化不访问整卷/三维缓存。
-- [ ] 写文件访问拦截而非自报标志：禁止邻层、3D A/ROI与同病例缓存；补零/重复层observed_slices仍1；无可靠几何不输出伪毫米/左右结论。
-- [ ] 红测后实现共享平面编码/解码和带有效性mask的深度聚合；公布共享参数范围，不能只是把两个模型放进一个checkpoint。
-- [ ] 将A/U融合、核心R与同一状态组合/输出契约迁入；训练时两模式分别产生有效监督。S沿用本模式实际A/U输出，不缓存/复制另一模式状态图。3D教师如使用仅来自获准训练谱系，二维推理不读教师输出。
-- [ ] 同一checkpoint hash在两模式加载，完成合成forward/backward、原网格输出和资源smoke；合法模块开发可在SKM A/ISLES U先做。
-- [ ] 重跑输入和训练控制回归，保存工程状态，提交；不提前宣称八项科学能力完成。
-
-**验收：** 真实单层信息边界、同权重与共同模型结构有证据；无需等待全部精标才做工程测试。
-
-### T17 — 双模式同例训练、专用对照与A/U/S/R八项验收准备
-
-**依赖：** T12、T13、T16、T05/T06，且单层可见性参照合格；H1开发稳定后运行正式比较。  
-**Files:** Create `experiments/h3.py`、`configs/v5/h3.template.yaml`；Test `tests/v5/test_h3_protocol.py`。
-
-**接口：** `build_h3_matrix(config: dict) -> list[dict]`；`summarize_mode_coverage(results: dict, protocol: dict) -> dict`；复用freeze_protocol与患者统计。
-
-- [ ] 写2模式×4任务A/U/S/R八项独立状态；`summarize_mode_coverage`必须保留八个键及每格scope/checkpoint/支持/门槛/区间。旧六格结果缺S时标NOT_EVALUATED且不能通过核心目标，不自动填PASS。
-- [ ] 写 `test_3d_state_cannot_fill_2d_state`：3D-S结果不能填二维缺项，3D切片数学参照不能自动升级单层可见性；fastMRI框不能验收像素U；缺S参照或仅辅助R时对应核心格不通过。
-- [ ] 写独立2D、独立3D、共享双模式的来源/序列/患者split可比；预算与曝光量单列，不能将两checkpoint包装为一个。
-- [ ] 红测后实现预注册抽片（含阴性、非质心层）、模式参照与指标；二维只评价本层，跨来源原生二维单列。
-- [ ] 经临床/统计批准冻结每模式A/U/S/R能力标准、模式和任务特异非劣界、区间方向及总体八项判定策略；不以无显著差异当非劣，也不以相对低质量基线非劣替代必要能力下限。
-- [ ] 获批训练完整双模式模型及专用对照；开发校准后生成H3_READY。某项无参照或不达标如实保留，不删除目标。
-- [ ] 保存同权重哈希、八项支持/覆盖、未验证扩展；提交。正式结论留给相应T18评价批次。
-
-**验收：** 至少同一场景两模式均具合法A/U/S/R验证条件。八项有评价不等于全部达标；缺参照与实测不达标分别记录。原生二维泛化未完成不伪称已完成。
-
-### T18 — 范围化锁定评价、证据与发布
-
-**依赖：** 该批次所需H1/H2/H3_READY、T01–T09相关验证、独立性、一次性授权；不依赖无关阶段。  
-**Files:** Modify `registry.py,cli.py`；Create `reports/v5/{CLAIMS,EVIDENCE_INDEX}.md`；Test `tests/v5/test_locked_release.py`。
-
-**接口：** `evaluate_locked_v5(protocol_lock: Path, authorization: Path) -> dict`；`release_evidence_v5(protocol: dict, runs: list[dict], results: dict, out: Path) -> dict`；在registry.py实现 `assess_completion_v5(capability_results: dict, hypothesis_results: dict, study_evidence: dict, policy: dict) -> CompletionDecision`。
-
-- [ ] 写只有工程日志不能科学SUPPORTED、未授权不读测试、授权内容hash不匹配拒绝；一次性授权不可重放。
-- [ ] 写完成状态真值表：同checkpoint八格均VALIDATED且信息/语义约束通过，H1未支持可core=true；仅H2成功而S缺证据，core=null；必需S有合格实测失败，core=false；只有3D通过不能core=true；H2尚未完成时study_package_complete=false但不抹掉已有能力证据。
-- [ ] 写研究包已做完但能力失败时study=true/core=false可成立；DEFERRED不能算研究包完成；缺阈值/参照不能把core=null伪装false或true。全部判断必须绑定独立证据哈希，不从复核文字生成能力PASS。
-- [ ] 写按主张scope解封：允许H1先交付，不要求无关H3；首次结果曝光后，相同队列不得继续作为未曝光测试指导后续选择。
-- [ ] 红测后实现评价者角色、模型/阈值/参照/代码锁和一次预登记批次；多方法可在同批比较。逐例输出留受限根，不回流调参。
-- [ ] 实际评价后按患者配对汇总，报告A/U/S/R、直接组织身份—状态结果、FP、拒判、false-normal、参照覆盖、阴性n、种子变异和协议偏离；测试超FP预算不重新调阈值。
-- [ ] 输出八格capability_status及core_target_validated/hypothesis_supported/study_package_complete；无S/核心R/二维参照不能默认为通过，缺证据与实测失败分开。评价代码确有bug时新版本重算并保留旧输出、理由和曝光账本，不借机改模型。
-- [ ] 审核公共证据无患者ID/路径/权重；获得本次对外发布授权后提交/推送指定文件。生成commit、环境、协议、schema、数据与checkpoint哈希索引。
-
-**验收：** 证据可重放、失败保留、主张对应实际范围。H3未完成只能标三维里程碑；H1/H2不支持既不自动证明也不自动否定核心能力，能力按八格独立标准判定；研究包按实际实验完成判定。
-
-## 4. CLI合同、批准清单与交接
-
-### 4.1 CLI按实现逐步出现
-
-现有v41命令继续仅按当前帮助使用。新增命令建议采用明确的v5协议参数，只有其任务通过测试后才加入 `python -m anatobind.v41.cli --help`：
-
-| 命令/能力 | 责任任务 | 必需输入 |
-|---|---|---|
-| validate-v5 / gate-v5 | T01 | scope、数据/软件证据、审批 |
-| audit-v5 / freeze-splits-v5 | T07/T08 | 来源与曝光证据、划分政策 |
-| register-run-v5 / smoke-v5 / train-v5 / infer-v5 | T09/T10；联合模型接入T13 | 已批准run登记、角色/预算、output_kind和冻结state policy；joint必交完整PerceptionOutput |
-| annotation-pack-v5 / annotation-import-v5 | T11/T12 | 非锁定试点、读者协议 |
-| freeze-protocol-v5 | T09公共接口；T14/H2/H3使用 | 开发证据、相关阈值、人工批准 |
-| prepare-missingness-v5 / run-matrix-v5 | T15及实验任务 | 信息条件与隔离政策 |
-| evaluate-locked-v5 / release-evidence-v5 | T18 | 锁定协议、一次性授权 |
-
-不提供一个绕过审批的一键全训练脚本。没有实现的命令不能在交接里写成已经可用。
-
-### 4.2 需实际负责人决定的事项
-
-临床：软骨异常具体边界、可判读范围、核心关系合同、实例规则、读者仲裁和状态适用组织/正常范围。统计/研究：测试独立性、样本精度、主要终点、直接S能力标准/支持/覆盖、FP约束、表面容差、非劣界、切片抽样与分期测试安排。资源：GPU、预算、存储、外部授权与下载。数据管理：隐藏参照和测试角色隔离。
-
-未批准时模板null并返回对应blocker；可继续不依赖它的任务。工程默认如Python模块名和测试fixture由计划规定，不虚称临床负责人已认可。
-
-### 4.3 可直接交给Coding Agent的首轮指令
+**状态规则（Proposal §2.1，实现须与此逐位一致）：**
 
 ```text
-读取README.md、Proposal_v5.md、plan_v5.md，先执行T00，不从旧plan.md的TODO重新做一遍。
-本轮先核对/修复T01–T06并保存合成测试证据；在已有授权内并行准备T07–T08只读审计。
-不自动训练、不填人工签名、不解封测试、不下载外部数据、不改临床范围。
-修复实例匹配、固定参照分母、患者等权和监督资格必须先重现对应反例。
-T01冻结PerceptionOutput/StateReference；T06验证直接S指标；T09用合成桩闭合状态输出与保存，T13接真实模型。
-A不确定保留U；缺组织状态S或核心归属R不能通过最终八格验收；能力/假设/研究包分别记录。
-已有正确模块复用；真实资产不可读就记录未核实，不以旧报告替代。
-每任务分开报告代码、测试、实际数据运行、批准和科学结论；仅提交指定文件。
+in_state = anatomy_accepted & isin(anatomy_map, state_tissue_ids)
+pos      = any_c(abnormality_accepted & abnormality_map)
+all_neg  = all_c(abnormality_accepted) & ~any_c(abnormality_map)
+state    = 1 where in_state & pos; 0 where in_state & all_neg; else 2
+reason   = anatomy_reason                      where ~anatomy_accepted
+         | out_of_scope                        where anatomy_accepted & ~isin(anatomy_map, state_tissue_ids)
+         | OR_c(abnormality_reason[~accepted]) where in_state & ~pos & ~all_neg（结果为 0 时填 abnormality_uncertain）
 ```
 
-## 5. 需求覆盖与交付检查
+**PerceptionOutput 键与约束（`C = len(scope.abnormality_classes)`，空间形状 `sp` 在 2d 为 `[Y,X]`，在 3d 为 `[Z,Y,X]`）：**
 
-| Proposal要求 | 计划落实 |
-|---|---|
-| §0版本、状态和历史证据 | T00、T01、T18 |
-| §1–2目标、ActiveScope、统一A/U/S/R输出、未知与双轨道 | T01、T02、T07、T09、T13 |
-| §3数据、空间、身份/曝光 | T07、T08 |
-| §4契约、资格、损失 | T01、T02、T09 |
-| §5专家资源与同例队列 | T11、T12 |
-| §6模型、双模式与运行 | T09、T10、T13、T16 |
-| §7H1/H2/H3与扩展声明 | T14、T15、T17、T18 |
-| §8正确评价、直接S指标、阈值与统计 | T03–T06、T12、T14、T17、T18 |
-| §9按任务gate、分期解封 | T01、T09、T18 |
-| §10隐私、版本与资源 | T00、T01、T09、T18 |
-| §11完成定义与风险 | T12、T14、T15、T17、T18 |
+| 键 | 约束 |
+| --- | --- |
+| `output_kind`, `output_version` | `"joint"`, `"v5.1"` |
+| `observation_uid`, `mode`, `scope_id`, `scope_hash`, `checkpoint_sha256`, `state_policy_hash` | mode 等于 `scope.observation_mode`；scope 两项与 `scope` 一致；hash 为 64 位小写十六进制 |
+| `anatomy_map` | 整数 `sp`；值 ∈ {-1, 0, 1..K}；-1 当且仅当 `acceptance["anatomy"]` 为 False |
+| `abnormality_map` | bool `[C, *sp]` |
+| `tissue_state_map` | uint8 `sp`；值 ∈ {0,1,2}；必须等于 `derive_state_map_v5` 的结果 |
+| `abnormal_instances` | 列表；每项键恰为 `instance_uid, class_name, mask, bbox, candidate_set_hash, accepted`；mask 为 bool `sp`；`class_name ∈ scope.abnormality_classes`；`bbox` 为长度 `2*ndim` 的半开整数框；`instance_uid` 唯一 |
+| `tissue_relations` | 列表；每项键恰为 `instance_uid, predicate, tissue_ids, status, accepted, completion_role`；`instance_uid` 必须存在于实例；`predicate`、`completion_role` 等于 scope 的 `relation_contract`；`status ∈ {bound, no_host, unknown, out_of_scope}`，`bound` 需非空 `tissue_ids`，其余需空 |
+| `acceptance`, `reason` | 键恰为 `anatomy, abnormality, state, relations`；空间项形状同对应图；`reason` 为 uint8，值 < 32；每个位置 accepted ⇔ reason == 0；`acceptance["state"] == (tissue_state_map != 2)`；`relations` 键为有关系的 `instance_uid` |
+| `geometry` | 键恰为 `shape, axis_order, spacing_mm, affine, units_reliable, transform_chain`；`shape == list(sp)` |
+| `provenance` | 键恰为 `input_sha256, model_sha256, output_policy_version`；`model_sha256 == checkpoint_sha256` |
 
-交付前检查：A/U/S/R八格与PerceptionOutput均覆盖；S/核心R不被J或辅助关系替代；能力、假设和研究完成分离；接口/字段同名同义；所有反例有责任测试；临床阈值没有伪造默认；无病灶/无参照/无几何各自明确；没有把planned写成implemented；不编造独立reviewer；所有实际结果来自对应运行证据。本文与Proposal发布完成只代表**v5.1文档就绪**，不代表上述任务已执行。
+错误码：`MISSING_FIELD`、`UNKNOWN_FIELD`、`OUTPUT_KIND_MISMATCH`、`OUTPUT_VERSION_MISMATCH`、`SCOPE_MISMATCH`、`MODE_MISMATCH`、`GRID_MISMATCH`、`DTYPE_MISMATCH`、`ARRAY_REQUIRED`、`ANATOMY_ID_OUT_OF_RANGE`、`ANATOMY_REJECTION_MISMATCH`、`STATE_CODE_INVALID`、`REASON_CODE_INVALID`、`REASON_ACCEPTANCE_MISMATCH`、`STATE_COMPOSITION_VIOLATION`、`DUPLICATE_INSTANCE_ID`、`UNKNOWN_INSTANCE`、`PREDICATE_MISMATCH`、`RELATION_STATUS_INVALID`、`PROVENANCE_MISMATCH`、`INVALID_HASH`。
+
+**ModuleOutput：** 键为 `output_kind "module", output_version, observation_uid, mode, scope_id, scope_hash, checkpoint_sha256, enabled_tasks, disabled_tasks, anatomy_map, abnormality_map, acceptance, reason, geometry, provenance`；`scope.scope_kind == "module"`；`enabled_tasks` 为 `{A, U}` 的非空子集，`disabled_tasks == {A,U,S,R} − enabled`（否则 `MODULE_TASKS_INVALID`）；未启用任务的图为 `None`，`acceptance`/`reason` 只含启用任务的键。
+
+**固定样例**（`make_joint_output(scope)` 无数组参数时，形状 `[1,2,2]`，`observation_uid "obs-synth-1"`，`checkpoint_sha256 = model_sha256 = "b"*64`，`state_policy_hash "d"*64`，`input_sha256 "a"*64`）：
+
+| 体素 | anatomy | A 接受/原因 | U(a,b) | U 接受(a,b)/原因(a,b) | S | S 原因 |
+| --- | --- | --- | --- | --- | --- | --- |
+| (0,0,0) | 1 | T/0 | (1,0) | (T,T)/(0,0) | 1 | 0 |
+| (0,0,1) | 1 | T/0 | (0,0) | (T,T)/(0,0) | 0 | 0 |
+| (0,1,0) | -1 | F/4 | (1,0) | (T,T)/(0,0) | 2 | 4 |
+| (0,1,1) | 2 | T/0 | (0,0) | (T,F)/(0,8) | 2 | 8 |
+
+实例 `inst-1`（`target_a`，mask 为 (0,0,0) 与 (0,1,0)，`bbox [0,0,0,1,2,1]`，`candidate_set_hash "c"*64`，`accepted True`）；关系 `{instance_uid "inst-1", predicate "overlaps", tissue_ids [1], status "bound", accepted True, completion_role "core_host_binding"}`；`acceptance["relations"] {"inst-1": True}`，`reason["relations"] {"inst-1": 0}`；geometry `{shape [1,2,2], axis_order "zyx", spacing_mm None, affine None, units_reliable False, transform_chain []}`。
+
+- [ ] **Step 1：写失败测试 `tests/v5/test_contracts_outputs.py`**
+
+```python
+SCOPE = validate_scope_v5(make_scope())
+
+def test_fixture_is_valid_and_keeps_u_under_anatomy_rejection():
+    out = validate_perception_output_v5(make_joint_output(SCOPE), SCOPE)
+    assert out.tissue_state_map[0, 1, 0] == 2 and out.reason["state"][0, 1, 0] == 4
+    assert bool(out.abnormality_map[0, 0, 1, 0]) is True
+
+def test_rejected_class_blocks_negative_but_not_accepted_positive():
+    out = validate_perception_output_v5(make_joint_output(SCOPE), SCOPE)
+    assert out.tissue_state_map[0, 1, 1] == 2
+    assert out.tissue_state_map[0, 0, 0] == 1
+
+def _mutate(path, value):
+    out = make_joint_output(SCOPE)
+    target = out
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    return out
+
+@pytest.mark.parametrize("path, value, code", [
+    (("scope_hash",), "e" * 64, "SCOPE_MISMATCH"),
+    (("mode",), "2d", "MODE_MISMATCH"),
+    (("tissue_state_map",), np.zeros((1, 2, 3), np.uint8), "GRID_MISMATCH"),
+    (("reference_mask",), np.zeros((1, 2, 2), bool), "UNKNOWN_FIELD"),
+    (("provenance", "model_sha256"), "f" * 64, "PROVENANCE_MISMATCH"),
+    (("tissue_state_map",), np.array([[[0, 0], [2, 2]]], np.uint8), "STATE_COMPOSITION_VIOLATION"),
+])
+def test_joint_output_rejects(path, value, code):
+    with pytest.raises(V5Error) as error:
+        validate_perception_output_v5(_mutate(path, value), SCOPE)
+    assert error.value.code == code
+
+def test_joint_output_requires_state_map():
+    out = make_joint_output(SCOPE)
+    out.pop("tissue_state_map")
+    with pytest.raises(V5Error) as error:
+        validate_perception_output_v5(out, SCOPE)
+    assert error.value.code == "MISSING_FIELD"
+
+@pytest.mark.parametrize("status, tissue_ids", [("bound", []), ("unknown", [1])])
+def test_relation_status_rules(status, tissue_ids):
+    out = make_joint_output(SCOPE)
+    out["tissue_relations"][0].update(status=status, tissue_ids=tissue_ids)
+    with pytest.raises(V5Error) as error:
+        validate_perception_output_v5(out, SCOPE)
+    assert error.value.code == "RELATION_STATUS_INVALID"
+
+def test_module_output_cannot_carry_state():
+    scope = validate_scope_v5(make_module_scope("A"))
+    out = make_module_output(scope, "A")
+    validate_module_output_v5(out, scope)
+    out["tissue_state_map"] = np.zeros((1, 2, 2), np.uint8)
+    with pytest.raises(V5Error) as error:
+        validate_module_output_v5(out, scope)
+    assert error.value.code == "UNKNOWN_FIELD"
+    bad = make_module_output(scope, "A", disabled_tasks=["U", "R"])
+    with pytest.raises(V5Error) as error:
+        validate_module_output_v5(bad, scope)
+    assert error.value.code == "MODULE_TASKS_INVALID"
+
+def test_state_rule_signature_has_no_reference_inputs():
+    params = set(inspect.signature(derive_state_map_v5).parameters)
+    assert not params & {"truth", "reference", "review", "visibility", "eligible", "gt"}
+```
+
+- [ ] **Step 2：运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_contracts_outputs.py`
+Expected: collection error（`ImportError`）
+
+- [ ] **Step 3：实现 `derive_state_map_v5`、两个验证器与两个工厂**
+
+验证顺序：键集合 → kind/version → scope/mode → 数组类型与形状 → 取值范围 → 接受/原因一致 → 状态组合（调用 `derive_state_map_v5` 后逐元素比较）→ 实例与关系 → provenance。
+
+- [ ] **Step 4：运行确认通过**
+
+Run: `pytest_cpu tests/v5 tests/v41`
+Expected: 全部通过，0 failed
+
+- [ ] **Step 5：提交**
+
+```bash
+git add anatobind/v41/state_rule_v5.py anatobind/v41/contracts_v5.py tests/v5/factories.py tests/v5/test_contracts_outputs.py reports/v5/status.md
+git diff --cached --check
+git commit -m "Add tissue-state rule and closed v5.1 output contracts"
+```
+
+### T01c：按任务与 scope 的准入门
+
+**Files:**
+- Create: `anatobind/v41/gates_v5.py`、`configs/v5/approvals.template.yaml`、`tests/v5/test_gates_v5.py`
+- Modify: `tests/v5/factories.py`（追加 `make_evidence(keys) -> dict`、`make_approvals(scope, keys) -> dict`）
+
+**Interfaces:**
+- Consumes: T01a `ActiveScope`、`V5Error`。
+- Produces: `GATE_REQUIREMENTS: dict[str, dict]`；`evaluate_gate_v5(gate_id: str, scope: ActiveScope, evidence: dict, approvals: dict) -> dict`，返回键 `gate_id, scope_id, scope_hash, engineering_status ("PASS"|"BLOCKED"), scientific_conclusion ("NOT_EVALUATED"), blockers (sorted list[str]), evidence_hashes (sorted list[str])`。
+
+**门要求表（Proposal §9；表外的键一律忽略，不阻塞）：**
+
+| gate_id | evidence 键 | approval 键 | scope 规则（不满足即 blocker） |
+| --- | --- | --- | --- |
+| `G-DATA` | readability, semantics, identity, pairing, task_geometry, provenance | data_use | 无 |
+| `G-BASE-A` | g_data, supervision_policy, input_policy, frozen_dev_split, training_smoke | resources | `anatomy_classes` 非空 |
+| `G-BASE-U` | 同 G-BASE-A | resources | `abnormality_classes` 非空 |
+| `G-ANNOTATION` | readers, quality, review_regions, visibility_regions, voxel_u_reference, state_reference, core_relation_basis | clinical_definition, reader_policy | joint |
+| `G-JOINT` | qualified_same_case_cohort, unified_output_chain, state_counterexamples, corrected_evaluators | resources | joint 且 `completion_role == core_host_binding` |
+| `G-H2` | complete_dev_reference, public_information_hash, negative_support, isolation | resources | `abnormality_classes` 非空 |
+| `G-H3-ENG` | single_slice_boundary, shared_weights, synthetic_and_module_data | （无） | 无 |
+| `G-H3-SCI` | two_mode_references, shared_weights, dedicated_baselines, capability_standards, noninferiority_policy | capability_standards, noninferiority_margins | joint 且 core_host_binding |
+| `G-LOCKED` | frozen_models, frozen_metrics, frozen_thresholds, evaluator_validation, independence | independence, unseal | 无 |
+
+evidence 项合格条件：`{"status": "PASS", "sha256": <64 位小写十六进制>}`。approval 项合格条件：`approved_by`、`approved_at` 为非空字符串，且 `scope_hash == scope.scope_hash`。blocker 字符串：`EVIDENCE_MISSING:<键>`、`APPROVAL_MISSING:<键>`、`APPROVAL_SCOPE_MISMATCH:<键>`、`SCOPE_TASK_MISMATCH`、`CORE_RELATION_REQUIRED`（joint 但为 auxiliary_spatial）。未知 gate 抛 `V5Error("UNKNOWN_GATE")`。
+
+- [ ] **Step 1：写失败测试 `tests/v5/test_gates_v5.py`**
+
+```python
+A_SCOPE = validate_scope_v5(make_module_scope("A"))
+BASE_KEYS = ["g_data", "supervision_policy", "input_policy", "frozen_dev_split", "training_smoke"]
+
+def test_a_only_gate_ignores_unrelated_nulls():
+    evidence = {**make_evidence(BASE_KEYS), "near_mm": None}
+    approvals = {**make_approvals(A_SCOPE, ["resources"]), "noninferiority_margins": None,
+                 "u_clinical_signoff": None}
+    decision = evaluate_gate_v5("G-BASE-A", A_SCOPE, evidence, approvals)
+    assert decision["engineering_status"] == "PASS" and decision["blockers"] == []
+    assert decision["scientific_conclusion"] == "NOT_EVALUATED"
+
+def test_missing_evidence_and_null_approval_are_named():
+    evidence = make_evidence(BASE_KEYS[:-1])
+    decision = evaluate_gate_v5("G-BASE-A", A_SCOPE, evidence, {"resources": None})
+    assert decision["engineering_status"] == "BLOCKED"
+    assert decision["blockers"] == ["APPROVAL_MISSING:resources", "EVIDENCE_MISSING:training_smoke"]
+
+def test_approval_is_bound_to_scope_hash():
+    other = validate_scope_v5(make_module_scope("A", scope_id="other_a"))
+    decision = evaluate_gate_v5("G-BASE-A", A_SCOPE, make_evidence(BASE_KEYS), make_approvals(other, ["resources"]))
+    assert "APPROVAL_SCOPE_MISMATCH:resources" in decision["blockers"]
+
+def test_evidence_needs_pass_and_valid_hash():
+    evidence = make_evidence(BASE_KEYS)
+    evidence["training_smoke"] = {"status": "PASS", "sha256": "x"}
+    decision = evaluate_gate_v5("G-BASE-A", A_SCOPE, evidence, make_approvals(A_SCOPE, ["resources"]))
+    assert "EVIDENCE_MISSING:training_smoke" in decision["blockers"]
+
+def test_u_gate_rejects_anatomy_only_scope():
+    decision = evaluate_gate_v5("G-BASE-U", A_SCOPE, make_evidence(BASE_KEYS), make_approvals(A_SCOPE, ["resources"]))
+    assert "SCOPE_TASK_MISMATCH" in decision["blockers"]
+
+def test_joint_gate_requires_core_relation():
+    contract = {**make_scope()["relation_contract"], "completion_role": "auxiliary_spatial"}
+    scope = validate_scope_v5(make_scope(relation_contract=contract))
+    keys = ["qualified_same_case_cohort", "unified_output_chain", "state_counterexamples", "corrected_evaluators"]
+    decision = evaluate_gate_v5("G-JOINT", scope, make_evidence(keys), make_approvals(scope, ["resources"]))
+    assert "CORE_RELATION_REQUIRED" in decision["blockers"]
+
+def test_unknown_gate_and_null_template():
+    with pytest.raises(V5Error) as error:
+        evaluate_gate_v5("G-ALL", A_SCOPE, {}, {})
+    assert error.value.code == "UNKNOWN_GATE"
+    template = yaml.safe_load(Path("configs/v5/approvals.template.yaml").read_text())
+    assert template and all(value is None for gate in template.values() for value in gate.values())
+```
+
+- [ ] **Step 2：运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_gates_v5.py`
+Expected: collection error（`ImportError`）
+
+- [ ] **Step 3：实现 `gates_v5.py` 与模板**
+
+`GATE_REQUIREMENTS` 逐字照抄上表。`approvals.template.yaml` 只列出有 approval 键的 gate（`G-H3-ENG` 不出现），每个 gate 下列出其 approval 键，值全为 `null`。`evaluate_gate_v5` 不读文件、不写文件。
+
+- [ ] **Step 4：运行确认通过**
+
+Run: `pytest_cpu tests/v5 tests/v41`
+Expected: 全部通过，0 failed
+
+- [ ] **Step 5：提交**
+
+```bash
+git add anatobind/v41/gates_v5.py configs/v5/approvals.template.yaml tests/v5/factories.py tests/v5/test_gates_v5.py reports/v5/status.md
+git diff --cached --check
+git commit -m "Add scoped v5.1 admission gates"
+```
+
+### T02：可见性感知的正负签名资格与损失
+
+**Files:**
+- Modify: `anatobind/v41/eligibility.py`、`anatobind/v41/losses.py`（均为文件末尾追加，不改 v41 函数）
+- Create: `tests/v5/test_eligibility_gradients.py`
+
+**Interfaces:**
+- Consumes: T01a `SampleV5`、`V5Error`；`eligibility.QUALIFIED_PROVENANCE`、`PSEUDO_PROVENANCE`、`NEVER_SUPERVISE`、`LOCALIZATION_ONLY`。
+- Produces:
+  - `build_eligibility_v5(record: SampleV5, task: str, classes: list[str], targets: dict[str, np.ndarray], review_regions: dict[str, np.ndarray], visibility_regions: dict[str, np.ndarray], valid_fov: np.ndarray, policy: dict, channel: str) -> tuple[np.ndarray, np.ndarray]`：返回 bool `(e_pos, e_neg)`，形状 `[len(classes), *valid_fov.shape]`。`policy` 键：`track ("observable_target"|"released_reference")`、`reference_policy_id`、`class_values`（positive-only 必需，`{类名: 标签整数}`）、`allow_unknown_visibility`（仅 released_reference）。`channel ∈ {"expert","pseudo"}`。
+  - `masked_objective_v5(logits: torch.Tensor, target: torch.Tensor, e_pos: torch.Tensor, e_neg: torch.Tensor, task_spec: dict) -> torch.Tensor`。`task_spec = {"kind": "sigmoid"|"softmax", "ce_weight": float, "dice_weight": float}`。sigmoid：logits/target `[B,C,*sp]`，监督位置为 `(target==1 & e_pos) | (target==0 & e_neg)`，BCE 取均值，Dice 分子分母只计监督位置。softmax（互斥 A）：logits `[B,K+1,*sp]`（0 为背景），target `[B,*sp]` 类别下标，e_pos/e_neg `[B,K,*sp]`；只在 K 类正负资格全为 True 的位置计 CE 与 Dice。
+
+**资格规则：** 注释不合格（`quality_status != accepted`、`provenance_type ∈ NEVER_SUPERVISE`、`representation ∈ LOCALIZATION_ONLY`、`intended_role == "excluded"`、`task` 不符）→ 无资格；`channel == "expert"` 只收 `QUALIFIED_PROVENANCE` 且 `reference_role != "unverified"` 且 `intended_role != "pseudo_only"`；`channel == "pseudo"` 只收其余可监督注释。`target_complete` → 该注释类别在 FOV 内正负皆可；`region_complete` → 仅复核区域内正负；`positive_only` → 仅 `targets[annotation_uid] == class_values[类]` 处为正，无阴性，缺 `class_values` 抛 `POSITIVE_ONLY_CLASS_MAP_REQUIRED`。可见性在 `observable_target` 下：`visible` 全量、`limited` 仅 `visibility_regions[visibility_region_path]`、`unobservable`/`unknown` 无；在 `released_reference` 下：`visible`/`limited` 全量，`unknown` 仅当 `allow_unknown_visibility is True` 且 `policy["reference_policy_id"] == record.reference_policy_id`，`unobservable` 无。最后与 `valid_fov` 求交。
+
+**损失规则：** 无监督位置时返回 `logits.masked_fill(~mask, 0).sum() * 0.0`（有限、连在计算图上）；监督位置出现非有限 logit 抛 `NON_FINITE_LOGITS`；`ce_weight + dice_weight <= 0` 或任一为负抛 `INVALID_LOSS_WEIGHTS`。
+
+- [ ] **Step 1：写失败测试 `tests/v5/test_eligibility_gradients.py`**
+
+```python
+OBS = {"track": "observable_target", "reference_policy_id": "synthetic_policy_v1"}
+FOV = np.ones(8, bool)
+
+def _elig(annotation, policy=OBS, fov=FOV, targets=None, vis=None, channel="expert", classes=("target_a",)):
+    record = validate_sample_v5(make_sample_v5(annotation=annotation))
+    return build_eligibility_v5(record, "U", list(classes), targets or {}, {}, vis or {}, fov, policy, channel)
+
+@pytest.mark.parametrize("visibility, evidence", [("unknown", None), ("unobservable", "synthetic")])
+def test_observable_track_unknown_or_unobservable_has_no_support(visibility, evidence):
+    e_pos, e_neg = _elig({"input_visibility": visibility, "visibility_evidence": evidence})
+    assert not e_pos.any() and not e_neg.any()
+
+def test_limited_uses_only_visibility_region():
+    region = np.array([1, 1, 0, 0, 0, 0, 0, 0], bool)
+    e_pos, e_neg = _elig({"input_visibility": "limited", "visibility_evidence": "synthetic",
+                          "visibility_region_path": "vis/r1"}, vis={"vis/r1": region})
+    assert e_pos[0].tolist() == region.tolist() and e_neg[0].tolist() == region.tolist()
+
+def test_padding_outside_fov_has_no_support_even_if_complete():
+    fov = np.array([1, 1, 1, 1, 1, 1, 0, 0], bool)
+    e_pos, e_neg = _elig({}, fov=fov)
+    assert not e_pos[0, 6:].any() and not e_neg[0, 6:].any() and e_pos[0, :6].all()
+
+def test_positive_only_is_class_specific():
+    policy = {**OBS, "class_values": {"target_a": 1, "target_b": 2}}
+    targets = {"ann-v5-0001": np.array([1, 2, 0, 0, 0, 0, 0, 0])}
+    e_pos, e_neg = _elig({"completeness": "positive_only", "class_scope": ["target_a", "target_b"]},
+                         policy=policy, targets=targets, classes=("target_a", "target_b"))
+    assert e_pos[0, :2].tolist() == [True, False] and e_pos[1, :2].tolist() == [False, True]
+    assert not e_pos[:, 2:].any() and not e_neg.any()
+
+def test_positive_only_requires_class_map():
+    with pytest.raises(V5Error) as error:
+        _elig({"completeness": "positive_only"}, targets={"ann-v5-0001": np.ones(8, int)})
+    assert error.value.code == "POSITIVE_ONLY_CLASS_MAP_REQUIRED"
+
+def test_pseudo_only_needs_pseudo_channel():
+    pseudo = {"provenance_type": "automated", "intended_role": "pseudo_only", "reference_role": "pseudo_only"}
+    assert not _elig(pseudo)[0].any()
+    assert _elig(pseudo, channel="pseudo")[0].all()
+
+def test_released_reference_unknown_needs_bound_policy():
+    released = {"track": "released_reference", "reference_policy_id": "synthetic_policy_v1",
+                "allow_unknown_visibility": True}
+    unknown = {"input_visibility": "unknown", "visibility_evidence": None}
+    assert _elig(unknown, policy=released)[0].all()
+    assert not _elig(unknown, policy={**released, "reference_policy_id": "other"})[0].any()
+
+def test_box_never_gives_dense_support():
+    assert not _elig({"representation": "bbox"})[0].any()
+
+SIG = {"kind": "sigmoid", "ce_weight": 1.0, "dice_weight": 0.0}
+
+def test_signed_bce_ignores_unsupported_sign():
+    target = torch.tensor([[[1.0, 0.0, 0.0, 0.0]]])
+    e_pos = torch.tensor([[[True, False, False, False]]])
+    e_neg = torch.zeros_like(e_pos)
+    base = masked_objective_v5(torch.zeros(1, 1, 4), target, e_pos, e_neg, SIG)
+    moved = torch.zeros(1, 1, 4); moved[0, 0, 1:] = 50.0
+    assert torch.isclose(base, torch.tensor(math.log(2.0)))
+    assert torch.isclose(masked_objective_v5(moved, target, e_pos, e_neg, SIG), base)
+
+def test_all_ignored_is_finite_graph_connected_zero():
+    logits = torch.tensor([[[float("inf"), -float("inf"), 0.0]]], requires_grad=True)
+    none = torch.zeros(1, 1, 3, dtype=torch.bool)
+    loss = masked_objective_v5(logits, torch.zeros(1, 1, 3), none, none, SIG)
+    loss.backward()
+    assert loss.item() == 0.0 and torch.isfinite(logits.grad).all() and not logits.grad.any()
+
+def test_nonfinite_supported_logit_raises():
+    support = torch.ones(1, 1, 2, dtype=torch.bool)
+    with pytest.raises(V5Error) as error:
+        masked_objective_v5(torch.tensor([[[float("nan"), 0.0]]]), torch.zeros(1, 1, 2), support, support, SIG)
+    assert error.value.code == "NON_FINITE_LOGITS"
+
+def test_invalid_weights_raise():
+    support = torch.ones(1, 1, 2, dtype=torch.bool)
+    with pytest.raises(V5Error) as error:
+        masked_objective_v5(torch.zeros(1, 1, 2), torch.zeros(1, 1, 2), support, support,
+                            {"kind": "sigmoid", "ce_weight": 0.0, "dice_weight": 0.0})
+    assert error.value.code == "INVALID_LOSS_WEIGHTS"
+
+def test_softmax_requires_complete_class_support():
+    spec = {"kind": "softmax", "ce_weight": 1.0, "dice_weight": 1.0}
+    target = torch.tensor([[1, 2]])
+    e_pos = torch.ones(1, 2, 2, dtype=torch.bool)
+    e_neg = torch.tensor([[[True, True], [True, False]]])
+    base = masked_objective_v5(torch.zeros(1, 3, 2), target, e_pos, e_neg, spec)
+    moved = torch.zeros(1, 3, 2); moved[0, :, 1] = torch.tensor([9.0, -9.0, 3.0])
+    assert torch.isclose(masked_objective_v5(moved, target, e_pos, e_neg, spec), base)
+```
+
+- [ ] **Step 2：运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_eligibility_gradients.py`
+Expected: collection error（`ImportError`）
+
+- [ ] **Step 3：实现 `build_eligibility_v5` 与 `masked_objective_v5`**
+
+- [ ] **Step 4：运行确认通过**
+
+Run: `pytest_cpu tests/v5 tests/v41`
+Expected: 全部通过，0 failed；`tests/v41/test_eligibility_losses.py` 不变且通过
+
+- [ ] **Step 5：提交**
+
+```bash
+git add anatobind/v41/eligibility.py anatobind/v41/losses.py tests/v5/test_eligibility_gradients.py reports/v5/status.md
+git diff --cached --check
+git commit -m "Add visibility-aware signed supervision for v5.1"
+```
+
+### T03：最大基数优先的确定性一对一匹配
+
+**Files:**
+- Modify: `anatobind/v41/evaluation/instances.py`（追加，`match_instances` 保持原样）
+- Create: `tests/v5/test_matching_cardinality.py`
+
+**Interfaces:**
+- Consumes: T01a `V5Error`。实例字典键沿用 T01b 的实例结构，匹配只读取 `instance_uid`、`class_name`、`mask`。
+- Produces: `match_instances_v5(pred: list[dict], truth: list[dict], policy: dict) -> list[tuple[int, int]]`；`policy = {"iou_match_threshold": float, "class_aware": bool}`；返回原列表下标对，按预测下标升序。
+
+**算法：** 先校验 `0 < threshold <= 1` 且有限（否则 `INVALID_IOU_THRESHOLD`，空输入也校验）、mask 形状一致（否则 `MASK_SHAPE_MISMATCH`）、各侧 `instance_uid` 唯一（否则 `DUPLICATE_INSTANCE_ID`）。两侧按 `instance_uid` 排序后建矩阵；合格边为 `IoU >= threshold` 且（`class_aware` 时）同类；合格边权重 `M + IoU`，其中 `M = min(n_pred, n_truth) + 1`，非合格边权重 0；`scipy.optimize.linear_sum_assignment(weights, maximize=True)` 后丢弃非合格对，再映射回原下标。`M` 大于任何一组匹配的 IoU 总和差，故先最大化配对数、再最大化 IoU 和；先排序保证输入重排后结果的 ID 对不变。
+
+- [ ] **Step 1：写失败测试 `tests/v5/test_matching_cardinality.py`**
+
+```python
+def _interval(start, stop, uid, cls="target_a"):
+    mask = np.zeros((680, 1, 1), bool); mask[start:stop] = True
+    return {"instance_uid": uid, "class_name": cls, "mask": mask}
+
+TRUTH = [_interval(100 * i, 100 * i + 100, f"t{i}") for i in range(6)]
+PRED = [_interval(100 * i + 80, 100 * i + 180, f"p{i}") for i in range(6)]
+POLICY = {"iou_match_threshold": 0.1, "class_aware": True}
+
+def test_six_eligible_matches_beat_five_high_iou():
+    pairs = match_instances_v5(PRED, TRUTH, POLICY)
+    assert len(pairs) == 6
+    assert len({i for i, _ in pairs}) == len({j for _, j in pairs}) == 6
+    assert len(match_instances(PRED, TRUTH, POLICY)) == 5   # v41 历史行为保留
+
+def _oracle(ious, threshold):
+    best = (0, 0.0)
+    n_pred, n_truth = ious.shape
+    for k in range(min(n_pred, n_truth) + 1):
+        for rows in itertools.combinations(range(n_pred), k):
+            for cols in itertools.permutations(range(n_truth), k):
+                if all(ious[r, c] >= threshold for r, c in zip(rows, cols)):
+                    best = max(best, (k, sum(ious[r, c] for r, c in zip(rows, cols))))
+    return best
+
+@pytest.mark.parametrize("seed", range(40))
+def test_matches_exhaustive_oracle(seed):
+    rng = np.random.default_rng(seed)
+    n_pred, n_truth = rng.integers(1, 5, size=2)
+    pred = [{"instance_uid": f"p{i}", "class_name": "target_a", "mask": rng.random((6, 6)) < 0.4}
+            for i in range(n_pred)]
+    truth = [{"instance_uid": f"t{j}", "class_name": "target_a", "mask": rng.random((6, 6)) < 0.4}
+             for j in range(n_truth)]
+    ious = np.array([[iou(p["mask"], t["mask"]) for t in truth] for p in pred])
+    pairs = match_instances_v5(pred, truth, {"iou_match_threshold": 0.1, "class_aware": True})
+    k, total = _oracle(ious, 0.1)
+    assert len(pairs) == k
+    assert math.isclose(sum(ious[i, j] for i, j in pairs), total, abs_tol=1e-12)
+
+def test_input_order_does_not_change_id_pairs():
+    ids = {(PRED[i]["instance_uid"], TRUTH[j]["instance_uid"]) for i, j in match_instances_v5(PRED, TRUTH, POLICY)}
+    pred_r, truth_r = PRED[::-1], TRUTH[::-1]
+    ids_r = {(pred_r[i]["instance_uid"], truth_r[j]["instance_uid"])
+             for i, j in match_instances_v5(pred_r, truth_r, POLICY)}
+    assert ids == ids_r
+
+def test_class_mismatch_is_not_matched():
+    pred = [dict(PRED[0], class_name="target_b")]
+    assert match_instances_v5(pred, TRUTH[:1], POLICY) == []
+
+@pytest.mark.parametrize("threshold", [0.0, -0.1, 1.5, float("nan")])
+def test_invalid_threshold_rejected_even_when_empty(threshold):
+    with pytest.raises(V5Error) as error:
+        match_instances_v5([], [], {"iou_match_threshold": threshold, "class_aware": True})
+    assert error.value.code == "INVALID_IOU_THRESHOLD"
+
+def test_duplicate_ids_rejected():
+    with pytest.raises(V5Error) as error:
+        match_instances_v5([PRED[0], PRED[0]], TRUTH, POLICY)
+    assert error.value.code == "DUPLICATE_INSTANCE_ID"
+
+def test_shape_mismatch_rejected():
+    bad = {"instance_uid": "p9", "class_name": "target_a", "mask": np.zeros((10, 1, 1), bool)}
+    with pytest.raises(V5Error) as error:
+        match_instances_v5([bad], TRUTH, POLICY)
+    assert error.value.code == "MASK_SHAPE_MISMATCH"
+```
+
+`iou` 在测试文件内定义为交集/并集，并集为 0 时为 0.0。
+
+- [ ] **Step 2：运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_matching_cardinality.py`
+Expected: collection error（`ImportError: cannot import name 'match_instances_v5'`）
+
+- [ ] **Step 3：实现 `match_instances_v5`**
+
+- [ ] **Step 4：运行确认通过**
+
+Run: `pytest_cpu tests/v5 tests/v41`
+Expected: 全部通过，0 failed
+
+- [ ] **Step 5：提交**
+
+```bash
+git add anatobind/v41/evaluation/instances.py tests/v5/test_matching_cardinality.py reports/v5/status.md
+git diff --cached --check
+git commit -m "Add cardinality-first instance matching with stable ties"
+```
+
+### T04：冻结参照与预测结果分离的联合评价
+
+**Files:**
+- Create: `anatobind/v41/evaluation/reference.py`、`tests/v5/test_joint_reference_denominator.py`
+- Modify: `anatobind/v41/evaluation/joint.py`、`anatobind/v41/evaluation/relations.py`（均追加）、`tests/v5/factories.py`（追加 `make_reference_lesion(**overrides) -> ReferenceLesion`）
+
+**Interfaces:**
+- Consumes: T01a `canonical_sha256`、`V5Error`。
+- Produces（`reference.py`）：
+  - `@dataclass(frozen=True) class ReferenceLesion`：`patient_uid: str, instance_uid: str, a_reference_available: bool, u_reference_available: bool, r_reference_available: bool, eligible: bool, visibility_qualified: bool, exclusion_reason: str | None, truth_relation_set: tuple[str, ...]`。不得含任何预测字段。
+  - `@dataclass(frozen=True) class LesionOutcome`：`reference_instance_uid: str, detected: bool, extent_ok: bool, relation_correct: bool | None, accepted: bool, prediction_status: str`（`matched|missed|rejected|no_relation`）。
+  - `freeze_reference_set_v5(refs: list[ReferenceLesion], patient_uids: list[str], policy: dict) -> dict`：返回 `{"reference_set_hash", "policy_id", "lesions" (按 (patient_uid, instance_uid) 排序的 dict 列表), "patient_uids" (排序), "joint_eligible_uids" (G 集合 uid 列表)}`；`G` 为 `eligible and visibility_qualified and a/u/r 三项可用` 的病灶。`reference_set_hash = canonical_sha256({"policy_id", "lesions", "patient_uids"})`。病灶 `patient_uid` 不在 `patient_uids` 中抛 `UNKNOWN_PATIENT`，重复 uid 抛 `DUPLICATE_REFERENCE`。
+- Produces（`joint.py`）：`joint_score_v5(frozen: dict, outcomes: list[LesionOutcome]) -> dict`，返回 `j_numerator, j_denominator, patient_mean_j, lesion_pooled_j, per_patient {uid: {"numerator", "denominator", "j"}}, excluded_counts {原因: 数量}, n_negative_patients, reference_set_hash`。
+- Produces（`relations.py`）：`relation_scores_v5(frozen: dict, predicted_sets: dict[str, list[str] | None]) -> dict`，返回 `exact_match_rate, n_with_reference, n_empty_truth_sets, n_missing_prediction, per_tissue {tissue: {"tp","fp","fn","precision","recall","f1"}}`。
+
+**规则：** 进入前重算 hash，与 `frozen["reference_set_hash"]` 不符抛 `REFERENCE_HASH_MISMATCH`。成功 = `detected and extent_ok and relation_correct is True and accepted`。缺 outcome 的 G 病灶记为失败；未知 uid 抛 `UNKNOWN_REFERENCE_INSTANCE`，重复 outcome 抛 `DUPLICATE_OUTCOME`。不在 G 的病灶按原因计入 `excluded_counts`（`R_REFERENCE_UNAVAILABLE`、`A_REFERENCE_UNAVAILABLE`、`U_REFERENCE_UNAVAILABLE`、`NOT_ELIGIBLE`、`VISIBILITY_UNQUALIFIED`，按此优先级取第一个）。无病灶患者计入 `n_negative_patients`，不进 J。没有 `|G_i| > 0` 的患者时，`patient_mean_j` 与 `lesion_pooled_j` 为 `None`。关系：`predicted_sets[uid] is None` 表示无预测（计 `n_missing_prediction`，判为不匹配），`[]` 表示预测空组织集合；精确匹配按集合相等。
+
+- [ ] **Step 1：写失败测试 `tests/v5/test_joint_reference_denominator.py`**
+
+```python
+def _frozen(refs, patients):
+    return freeze_reference_set_v5(refs, patients, {"policy_id": "synthetic_ref_v1"})
+
+REFS = [make_reference_lesion(patient_uid="p1", instance_uid="l1"),
+        make_reference_lesion(patient_uid="p1", instance_uid="l2")]
+OK = LesionOutcome("l1", True, True, True, True, "matched")
+
+@pytest.mark.parametrize("second", [
+    [], [LesionOutcome("l2", False, False, None, False, "missed")],
+    [LesionOutcome("l2", True, True, True, False, "rejected")],
+    [LesionOutcome("l2", True, True, None, True, "no_relation")],
+])
+def test_missing_outcome_keeps_frozen_denominator(second):
+    frozen = _frozen(REFS, ["p1"])
+    result = joint_score_v5(frozen, [OK, *second])
+    assert result["j_denominator"] == 2
+    assert result["patient_mean_j"] == 0.5
+    assert result["reference_set_hash"] == frozen["reference_set_hash"]
+
+def test_empty_relation_set_differs_from_missing_reference():
+    refs = [make_reference_lesion(instance_uid="l1", truth_relation_set=()),
+            make_reference_lesion(instance_uid="l2", r_reference_available=False)]
+    result = joint_score_v5(_frozen(refs, ["p1"]), [])
+    assert result["j_denominator"] == 1
+    assert result["excluded_counts"] == {"R_REFERENCE_UNAVAILABLE": 1}
+
+def test_negative_patient_not_in_positive_j():
+    result = joint_score_v5(_frozen(REFS, ["p1", "p2"]), [OK])
+    assert result["n_negative_patients"] == 1 and set(result["per_patient"]) == {"p1"}
+
+def test_no_positive_patients_returns_none():
+    result = joint_score_v5(_frozen([], ["p1"]), [])
+    assert result["patient_mean_j"] is None and result["lesion_pooled_j"] is None
+
+@pytest.mark.parametrize("outcomes, code", [
+    ([LesionOutcome("l9", True, True, True, True, "matched")], "UNKNOWN_REFERENCE_INSTANCE"),
+    ([OK, OK], "DUPLICATE_OUTCOME"),
+])
+def test_unknown_or_duplicate_outcome_rejected(outcomes, code):
+    with pytest.raises(V5Error) as error:
+        joint_score_v5(_frozen(REFS, ["p1"]), outcomes)
+    assert error.value.code == code
+
+def test_tampered_reference_rejected():
+    frozen = _frozen(REFS, ["p1"])
+    frozen["lesions"] = frozen["lesions"][:1]
+    with pytest.raises(V5Error) as error:
+        joint_score_v5(frozen, [OK])
+    assert error.value.code == "REFERENCE_HASH_MISMATCH"
+
+def test_reference_lesion_has_no_prediction_fields():
+    names = {f.name for f in dataclasses.fields(ReferenceLesion)}
+    assert not names & {"detected", "score", "confidence", "probability", "accepted"}
+
+def test_relation_exact_match_and_missing_prediction():
+    refs = [make_reference_lesion(instance_uid="l1", truth_relation_set=("tissue_a",)),
+            make_reference_lesion(instance_uid="l2", truth_relation_set=())]
+    result = relation_scores_v5(_frozen(refs, ["p1"]), {"l1": ["tissue_a"], "l2": None})
+    assert result["exact_match_rate"] == 0.5
+    assert result["n_empty_truth_sets"] == 1 and result["n_missing_prediction"] == 1
+    assert result["per_tissue"]["tissue_a"]["recall"] == 1.0
+```
+
+`make_reference_lesion` 默认：`patient_uid "p1"`、`instance_uid "l1"`、三项可用 True、`eligible True`、`visibility_qualified True`、`exclusion_reason None`、`truth_relation_set ("tissue_a",)`。
+
+- [ ] **Step 2：运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_joint_reference_denominator.py`
+Expected: collection error（`ImportError`）
+
+- [ ] **Step 3：实现 `reference.py`、`joint_score_v5`、`relation_scores_v5`**
+
+- [ ] **Step 4：运行确认通过**
+
+Run: `pytest_cpu tests/v5 tests/v41`
+Expected: 全部通过，0 failed；`tests/v41/test_metrics.py::test_joint_score_excludes_missing_relation_reference_from_denominator` 仍通过（v41 历史行为）
+
+- [ ] **Step 5：提交**
+
+```bash
+git add anatobind/v41/evaluation/reference.py anatobind/v41/evaluation/joint.py anatobind/v41/evaluation/relations.py tests/v5/factories.py tests/v5/test_joint_reference_denominator.py reports/v5/status.md
+git diff --cached --check
+git commit -m "Separate frozen reference availability from prediction outcomes"
+```
+
+### T05：患者等权、配对差值与可配置置信区间
+
+**Files:**
+- Modify: `anatobind/v41/evaluation/statistics.py`（追加，`paired_patient_bootstrap` 保持原样）
+- Create: `tests/v5/test_patient_statistics.py`
+
+**Interfaces:**
+- Consumes: T04 `joint_score_v5` 的 `per_patient`；T01a `V5Error`。
+- Produces:
+  - `@dataclass(frozen=True) class PatientContrast`：`patient_uid: str, method_value: float, comparator_value: float, delta: float, seed_policy_id: str`。
+  - `patient_bootstrap_v5(patient_values: dict[str, float], seed: int, n_boot: int, ci_level: float) -> dict`：返回 `estimate, ci, ci_level, n_patients, n_boot, seed, statistic_version ("patient_bootstrap_v5.1")`；`estimate` 为患者值均值；`ci` 为按患者有放回重抽样后 `np.percentile(reps, [100*(1-ci_level)/2, 100*(1+ci_level)/2])` 的列表；空输入时 `estimate`、`ci` 为 `None`。
+  - `make_patient_contrasts_v5(method_rows: list[dict], comparator_rows: list[dict], policy: dict) -> list[PatientContrast]`：行键 `patient_uid, scan_uid, seed, value`；`policy = {"seeds": list[int], "seed_policy_id": str}`；先每 (患者, seed) 对扫描求均值，再对 `policy["seeds"]` 等权求均值，最后每患者一行 `delta = method - comparator`，按 `patient_uid` 排序。
+  - `paired_patient_bootstrap_v5(rows: list[PatientContrast], seed: int, n_boot: int, ci_level: float) -> dict`：对 `{r.patient_uid: r.delta}` 调用 `patient_bootstrap_v5`。
+  - `seed_variation_v5(rows: list[dict], policy: dict) -> dict`：返回 `{"per_seed": {seed: 患者等权均值}, "range": max - min}`。
+
+**错误码：** `n_boot <= 0` → `INVALID_N_BOOT`；`ci_level` 不在开区间 (0,1) → `INVALID_CI_LEVEL`；非有限值 → `NON_FINITE_VALUE`；同 (患者, 扫描, seed) 重复行 → `DUPLICATE_ROW`；患者缺 `policy["seeds"]` 中任一 seed → `MISSING_SEED`；患者只出现在一侧 → `UNPAIRED_PATIENT`。
+
+- [ ] **Step 1：写失败测试 `tests/v5/test_patient_statistics.py`**
+
+```python
+def test_unequal_lesion_counts_preserve_patient_mean():
+    refs = [make_reference_lesion(patient_uid="p1", instance_uid=f"a{i}") for i in range(100)]
+    refs.append(make_reference_lesion(patient_uid="p2", instance_uid="b0"))
+    frozen = freeze_reference_set_v5(refs, ["p1", "p2"], {"policy_id": "synthetic_ref_v1"})
+    outcomes = [LesionOutcome(f"a{i}", True, True, True, True, "matched") for i in range(100)]
+    joint = joint_score_v5(frozen, outcomes)
+    values = {uid: row["j"] for uid, row in joint["per_patient"].items()}
+    result = patient_bootstrap_v5(values, seed=7, n_boot=200, ci_level=0.9)
+    assert result["estimate"] == 0.5 and result["n_patients"] == 2
+    assert math.isclose(joint["lesion_pooled_j"], 100 / 101)
+    assert result["ci_level"] == 0.9 and "ci95" not in result
+
+def _rows(values):
+    return [{"patient_uid": p, "scan_uid": s, "seed": k, "value": v} for (p, s, k), v in values.items()]
+
+METHOD = _rows({("p1", "s1", 17): 1.0, ("p1", "s2", 17): 0.0, ("p1", "s1", 29): 1.0, ("p1", "s2", 29): 1.0,
+                ("p2", "s1", 17): 0.0, ("p2", "s1", 29): 0.0})
+COMPARATOR = _rows({("p1", "s1", 17): 0.5, ("p1", "s2", 17): 0.5, ("p1", "s1", 29): 0.5, ("p1", "s2", 29): 0.5,
+                    ("p2", "s1", 17): 0.0, ("p2", "s1", 29): 0.0})
+POLICY = {"seeds": [17, 29], "seed_policy_id": "synthetic_seeds"}
+
+def test_contrasts_average_scans_then_seeds_one_row_per_patient():
+    contrasts = make_patient_contrasts_v5(METHOD, COMPARATOR, POLICY)
+    assert [c.patient_uid for c in contrasts] == ["p1", "p2"]
+    assert math.isclose(contrasts[0].delta, 0.25) and contrasts[1].delta == 0.0
+    result = paired_patient_bootstrap_v5(contrasts, seed=3, n_boot=100, ci_level=0.95)
+    assert result["n_patients"] == 2 and math.isclose(result["estimate"], 0.125)
+    assert result == paired_patient_bootstrap_v5(contrasts, seed=3, n_boot=100, ci_level=0.95)
+
+@pytest.mark.parametrize("method, code", [
+    (METHOD + METHOD[:1], "DUPLICATE_ROW"),
+    ([r for r in METHOD if not (r["patient_uid"] == "p2" and r["seed"] == 29)], "MISSING_SEED"),
+    ([r for r in METHOD if r["patient_uid"] == "p1"] + _rows({("p3", "s1", 17): 0.0, ("p3", "s1", 29): 0.0}),
+     "UNPAIRED_PATIENT"),
+])
+def test_duplicate_row_rejected(method, code):
+    with pytest.raises(V5Error) as error:
+        make_patient_contrasts_v5(method, COMPARATOR, POLICY)
+    assert error.value.code == code
+
+@pytest.mark.parametrize("kwargs, code", [
+    ({"n_boot": 0, "ci_level": 0.95}, "INVALID_N_BOOT"),
+    ({"n_boot": 10, "ci_level": 1.0}, "INVALID_CI_LEVEL"),
+])
+def test_invalid_interval_policy_rejected(kwargs, code):
+    with pytest.raises(V5Error) as error:
+        patient_bootstrap_v5({"p1": 1.0}, seed=0, **kwargs)
+    assert error.value.code == code
+
+def test_non_finite_value_rejected():
+    with pytest.raises(V5Error) as error:
+        patient_bootstrap_v5({"p1": float("nan")}, seed=0, n_boot=10, ci_level=0.95)
+    assert error.value.code == "NON_FINITE_VALUE"
+
+def test_empty_returns_none():
+    result = patient_bootstrap_v5({}, seed=0, n_boot=10, ci_level=0.95)
+    assert result["estimate"] is None and result["ci"] is None and result["n_patients"] == 0
+
+def test_seed_variation_is_reported_separately():
+    variation = seed_variation_v5(METHOD, POLICY)
+    assert variation["per_seed"] == {17: 0.25, 29: 0.5} and variation["range"] == 0.25
+```
+
+- [ ] **Step 2：运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_patient_statistics.py`
+Expected: collection error（`ImportError`）
+
+- [ ] **Step 3：实现上述四个函数与 `PatientContrast`**
+
+`seed_variation_v5` 的每 seed 值：先对每患者该 seed 下扫描求均值，再患者等权。
+
+- [ ] **Step 4：运行确认通过**
+
+Run: `pytest_cpu tests/v5 tests/v41`
+Expected: 全部通过，0 failed
+
+- [ ] **Step 5：提交**
+
+```bash
+git add anatobind/v41/evaluation/statistics.py tests/v5/test_patient_statistics.py reports/v5/status.md
+git diff --cached --check
+git commit -m "Add patient-equal paired statistics with registered interval levels"
+```
+
+### T06a：指标政策与固定版本表面度量
+
+**Files:**
+- Create: `anatobind/v41/evaluation/policy.py`、`anatobind/v41/evaluation/surface_v5.py`、`anatobind/v41/_vendor/__init__.py`、`anatobind/v41/_vendor/surface_distance/{__init__.py,metrics.py,lookup_tables.py,LICENSE,SOURCE.json}`、`configs/v5/metrics.template.yaml`、`tests/v5/test_metric_policy.py`
+- Modify: `anatobind/v41/evaluation/segmentation.py`（追加）
+
+**Interfaces:**
+- Consumes: T01a `V5Error`。
+- Produces:
+  - `policy.py`：`METRIC_REQUIREMENTS = {"dice": (), "hd95": (), "nsd": ("surface_tolerance_mm",), "lesion_detection": ("iou_match_threshold",), "fp_constraint": ("fp_budget_per_scan",)}`；`validate_metric_policy_v5(policy: dict, stage: str) -> dict`，`stage ∈ {"development", "locked"}`，返回 `{"ok_metrics": [...], "blocked_metrics": [...]}`；只检查 `policy["metrics"]` 中列出的指标所需的键；`locked` 有 blocked 时抛 `METRIC_POLICY_NULL`；未知指标 `UNKNOWN_METRIC`；未知阶段 `UNKNOWN_STAGE`。
+  - `surface_v5.py`：`SURFACE_SOURCE_COMMIT = "1f805cea446805e559badc80dd27f34175e4173d"`；`surface_distances_v5(truth: np.ndarray, pred: np.ndarray, spacing_mm: tuple[float, ...]) -> dict`（调用内置 `compute_surface_distances(truth, pred, spacing_mm)`，在 `warnings.catch_warnings()` 中忽略 `DeprecationWarning`）；`hd95_v5(distances: dict) -> float`（`compute_robust_hausdorff(distances, 95)`）；`nsd_v5(distances: dict, tolerance_mm: float) -> float`（`compute_surface_dice_at_tolerance`）。
+  - `segmentation.py`：`segmentation_metrics_v5(pred: np.ndarray, truth: np.ndarray, eligible: np.ndarray, geometry: dict, policy: dict) -> dict`；`geometry = {"spacing_mm": list[float] | None, "physical_geometry_status": str}`；返回 `dice, hd95_mm, nsd, reasons (list[str]), surface_failure (bool), truth_empty, pred_empty, metric_version ("seg_v5.1/surface-distance@1f805ce")`。
+
+**规则：** 只接受 2D/3D 数组（否则 `UNSUPPORTED_NDIM`）。先 `pred &= eligible`、`truth &= eligible`。`eligible` 全 False → dice/表面均 `None`，原因 `NO_EVALUABLE_REGION`。两侧皆空 → `dice None`，原因 `BOTH_EMPTY`。一侧空 → 表面 `None`、原因 `ONE_SIDED_EMPTY`、`surface_failure True`（不输出 inf）。`physical_geometry_status != "verified"` 或 `spacing_mm is None` → 表面 `None`，原因 `PHYSICAL_GEOMETRY_UNKNOWN`。`eligible` 非全 True 且任一 mask 落在 `binary_dilation(~eligible, 全连通结构)` 内 → 表面 `None`，原因 `SURFACE_REFERENCE_INCOMPLETE`（Dice 照算）。`"nsd"` 在 `policy["metrics"]` 中但 `surface_tolerance_mm` 为 `None` → `nsd None`，原因 `POLICY_VALUE_UNSET`。
+
+- [ ] **Step 1：内置源码**
+
+从 `https://raw.githubusercontent.com/google-deepmind/surface-distance/1f805cea446805e559badc80dd27f34175e4173d/` 下载 `surface_distance/__init__.py`、`surface_distance/metrics.py`、`surface_distance/lookup_tables.py`、`LICENSE`（仓库根）原文，逐字节保存到上述 `_vendor` 路径，不做任何修改。`SOURCE.json`：`{"repository": "https://github.com/google-deepmind/surface-distance", "commit": "1f805cea446805e559badc80dd27f34175e4173d", "license": "Apache-2.0", "files": {"__init__.py": <sha256>, "metrics.py": <sha256>, "lookup_tables.py": <sha256>, "LICENSE": <sha256>}}`。`_vendor/__init__.py` 为空。
+
+- [ ] **Step 2：写失败测试 `tests/v5/test_metric_policy.py`**
+
+```python
+from anatobind.v41._vendor.surface_distance import metrics as sd
+
+VERIFIED = {"physical_geometry_status": "verified"}
+POLICY = {"metrics": ["dice", "hd95", "nsd"], "surface_tolerance_mm": 1.0}
+
+def _cube(shape, lo, hi):
+    mask = np.zeros(shape, bool); mask[tuple(slice(a, b) for a, b in zip(lo, hi))] = True
+    return mask
+
+def test_unknown_geometry_does_not_block_dice_or_invent_mm():
+    mask = _cube((8, 8, 8), (2, 2, 2), (6, 6, 6))
+    m = segmentation_metrics_v5(mask, mask, np.ones_like(mask), {"spacing_mm": None, "physical_geometry_status": "unknown"}, POLICY)
+    assert m["dice"] == 1.0 and m["hd95_mm"] is None and m["nsd"] is None
+    assert "PHYSICAL_GEOMETRY_UNKNOWN" in m["reasons"]
+
+@pytest.mark.parametrize("shape, lo, hi, spacing", [
+    ((12, 12, 10), (2, 2, 2), (8, 8, 6), (0.3125, 0.3125, 0.8)),
+    ((16, 16), (3, 3), (11, 9), (1.0, 0.5)),
+])
+def test_anisotropic_matches_reference(shape, lo, hi, spacing):
+    truth = _cube(shape, lo, hi)
+    pred = np.roll(truth, 1, axis=-1)
+    m = segmentation_metrics_v5(pred, truth, np.ones_like(truth), {**VERIFIED, "spacing_mm": list(spacing)}, POLICY)
+    d = sd.compute_surface_distances(truth, pred, spacing)
+    assert math.isclose(m["hd95_mm"], sd.compute_robust_hausdorff(d, 95), rel_tol=1e-10, abs_tol=1e-10)
+    assert math.isclose(m["nsd"], sd.compute_surface_dice_at_tolerance(d, 1.0), rel_tol=1e-10, abs_tol=1e-10)
+
+def test_one_sided_empty_is_failure_not_inf():
+    truth = _cube((8, 8), (2, 2), (5, 5))
+    m = segmentation_metrics_v5(np.zeros_like(truth), truth, np.ones_like(truth), {**VERIFIED, "spacing_mm": [1.0, 1.0]}, POLICY)
+    assert m["hd95_mm"] is None and m["surface_failure"] is True and "ONE_SIDED_EMPTY" in m["reasons"]
+
+def test_both_empty_dice_is_none():
+    empty = np.zeros((8, 8), bool)
+    m = segmentation_metrics_v5(empty, empty, np.ones_like(empty), {**VERIFIED, "spacing_mm": [1.0, 1.0]}, POLICY)
+    assert m["dice"] is None and "BOTH_EMPTY" in m["reasons"]
+
+def test_partial_review_touching_edge_blocks_surface_not_dice():
+    truth = _cube((8, 8), (2, 4), (6, 7))
+    eligible = np.ones_like(truth); eligible[:, 7] = False
+    m = segmentation_metrics_v5(truth, truth, eligible, {**VERIFIED, "spacing_mm": [1.0, 1.0]}, POLICY)
+    assert m["dice"] == 1.0 and m["hd95_mm"] is None and "SURFACE_REFERENCE_INCOMPLETE" in m["reasons"]
+
+def test_policy_checks_only_requested_metrics():
+    assert validate_metric_policy_v5({"metrics": ["dice"], "surface_tolerance_mm": None}, "locked")["blocked_metrics"] == []
+    assert validate_metric_policy_v5({"metrics": ["nsd"], "surface_tolerance_mm": None}, "development")["blocked_metrics"] == ["nsd"]
+    with pytest.raises(V5Error) as error:
+        validate_metric_policy_v5({"metrics": ["dice", "nsd"], "surface_tolerance_mm": None}, "locked")
+    assert error.value.code == "METRIC_POLICY_NULL"
+
+def test_vendored_sources_match_recorded_hashes():
+    root = Path("anatobind/v41/_vendor/surface_distance")
+    source = json.loads((root / "SOURCE.json").read_text())
+    assert source["commit"] == "1f805cea446805e559badc80dd27f34175e4173d"
+    for name, digest in source["files"].items():
+        assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest
+```
+
+- [ ] **Step 3：运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_metric_policy.py`
+Expected: collection error（`ImportError: cannot import name 'segmentation_metrics_v5'`）
+
+- [ ] **Step 4：实现 `policy.py`、`surface_v5.py`、`segmentation_metrics_v5` 与模板**
+
+`metrics.template.yaml`：`metrics: null`、`surface_tolerance_mm: null`、`iou_match_threshold: null`、`fp_budget_per_scan: null`。
+
+- [ ] **Step 5：运行确认通过**
+
+Run: `pytest_cpu tests/v5 tests/v41`
+Expected: 全部通过，0 failed
+
+- [ ] **Step 6：提交**
+
+```bash
+git add anatobind/v41/evaluation/policy.py anatobind/v41/evaluation/surface_v5.py anatobind/v41/evaluation/segmentation.py anatobind/v41/_vendor/__init__.py anatobind/v41/_vendor/surface_distance/__init__.py anatobind/v41/_vendor/surface_distance/metrics.py anatobind/v41/_vendor/surface_distance/lookup_tables.py anatobind/v41/_vendor/surface_distance/LICENSE anatobind/v41/_vendor/surface_distance/SOURCE.json configs/v5/metrics.template.yaml tests/v5/test_metric_policy.py reports/v5/status.md
+git diff --cached --check
+git commit -m "Add scoped metric policies and versioned surface measures"
+```
+
+### T06b：独立 StateReference 与直接组织状态评价
+
+**Files:**
+- Create: `anatobind/v41/evaluation/state.py`、`configs/v5/capability_policy.template.yaml`、`tests/v5/test_tissue_state_metrics.py`
+- Modify: `tests/v5/factories.py`（追加 `make_state_reference_inputs(scope, **overrides) -> dict`）
+
+**Interfaces:**
+- Consumes: T01a `ActiveScope`、`SampleV5`、`array_sha256`、`canonical_sha256`；T01b `PerceptionOutput`、`REASON_BITS`；T05 `patient_bootstrap_v5`。
+- Produces:
+  - `STATE_ELIGIBILITY_BITS = {"a_unqualified": 1, "u_incomplete": 2, "not_reviewed": 4, "not_visible": 8, "out_of_fov": 16, "not_state_tissue": 32, "single_slice_unreadable": 64}`。
+  - `@dataclass(frozen=True) class StateReference`：`observation_uid, mode, scope_hash, anatomy_truth (int), state_truth (uint8，0/1), state_eligible (bool), eligibility_reason (uint8), reference_set_hash, geometry`。
+  - `build_state_reference_v5(record: SampleV5, reference_arrays: dict, scope: ActiveScope, observation_uid: str) -> StateReference`；`reference_arrays` 键：`anatomy`、`abnormality`（bool `[C,*sp]`）、`valid_fov`、`single_slice_readable`（bool 或 None）、`review_regions`、`visibility_regions`（按注释中 `review_region_path`/`visibility_region_path` 取区域的字典，同 T02）。（2026-11-06 终审修订：原先由调用方传入的 `review`/`visibility` 数组可能与记录矛盾，改为由记录推导。）
+  - `tissue_state_metrics_v5(pred: PerceptionOutput, reference: StateReference, scope: ActiveScope) -> dict`，返回 `reference_count, per_tissue_state {tissue: {"target_positive": m, "target_negative": m}}`（`m` 含 `tp, fp, fn, support, dice, precision, recall`）、`u_dice_in_reference_tissue, false_normal_on_accepted, accepted_positive_fnr, normal_fp_fraction, fp_voxels, coverage, rejection_reasons {原因名: 数量}, reference_set_hash`。
+  - `summarize_state_by_patient_v5(results: list[tuple[str, dict]], metric: tuple[str, str, str], seed: int, n_boot: int, ci_level: float) -> dict`：每患者对该指标的非 `None` 值取均值后调用 `patient_bootstrap_v5`，另返回 `n_patients_without_support`。
+
+**参照规则：** 资格要求注释中有合格 A（`task "A"`、专家来源且 `reference_role == "expert_voxel"`、`quality accepted`、`target_complete`，`class_scope` 并集覆盖 `state_anatomy_classes`，否则 `a_unqualified`），以及覆盖 `scope.abnormality_classes` 全部类别的合格 U（同样要求 `expert_voxel`，`target_complete` 或 `region_complete`）；positive-only 或类别不全时全体不合格（`u_incomplete`）。复核区：`target_complete` 为全体，`region_complete` 取 `review_regions[review_region_path]`（缺失抛 `REVIEW_REGION_MISSING`）；可见性按 T02 的 `observable_target` 规则（`unknown`/`unobservable` 无资格，置 `not_visible`）。`state_eligible = 参照 A ∈ state_tissue_ids & review & visibility & valid_fov`（且通过上述注释资格）；`mode == "2d"` 时还需 `single_slice_readable is True`，否则全体不合格（`single_slice_unreadable`）。`state_truth = any_c(abnormality)`。`reference_set_hash = canonical_sha256({observation_uid, mode, scope_hash, geometry, anatomy_truth/state_truth/eligibility_reason 的 array_sha256})`；存储数组为只读副本，`tissue_state_metrics_v5` 评分前用 `verify_state_reference_v5` 重算校验（不符抛 `REFERENCE_HASH_MISMATCH`）。本模块不得被 `state_rule_v5`/推理代码导入。
+
+**指标定义（Proposal §8.5，`E = state_eligible`，`accepted_S = tissue_state_map != 2`）：** `G_kz = E & (A_ref == k) & (S_ref == z)`，`P_kz = E & (A_pred == k) & (S_pred == z) & accepted_S`；`tp = |G∩P|, fp = |P−G|, fn = |G−P|, support = |G|`；`dice = 2tp/(|G|+|P|)`、`precision = tp/|P|`、`recall = tp/|G|`，分母为 0 时 `None`。`false_normal_on_accepted = |E & S_pred==0 & S_ref==1| / |E & S_pred==0|`；`accepted_positive_fnr = |E & S_ref==1 & S_pred==0| / |E & S_ref==1 & accepted_S|`；`normal_fp_fraction = |E & S_ref==0 & S_pred==1| / |E & S_ref==0|`，`fp_voxels` 为其分子；`coverage = |E & accepted_S| / |E|`（`|E| == 0` 时 `None`）；`u_dice_in_reference_tissue` 为 `any_c(abnormality_map & acceptance.abnormality)` 与 `S_ref == 1` 在 `E` 内的 Dice；`rejection_reasons` 统计 `E & S_pred==2` 位置上 `reason["state"]` 各位。输出与参照的 `observation_uid`、`mode`、`scope_hash`、空间形状任一不符抛 `IDENTITY_MISMATCH`。
+
+- [ ] **Step 1：写失败测试 `tests/v5/test_tissue_state_metrics.py`**
+
+```python
+SCOPE = validate_scope_v5(make_scope())
+
+def _reference(**overrides):
+    inputs = make_state_reference_inputs(SCOPE, **overrides)
+    return build_state_reference_v5(inputs["record"], inputs["arrays"], SCOPE, "obs-synth-1")
+
+def test_correct_u_wrong_a_fails_joint_state():
+    reference = _reference()             # 全部体素参照为 tissue_a，(0,0,0)、(0,1,0) 为阳性
+    anatomy = np.full((1, 2, 2), 2)       # 预测全部为 tissue_b
+    out = validate_perception_output_v5(
+        make_joint_output(SCOPE, anatomy_map=anatomy, abnormality_map=reference_u()), SCOPE)
+    result = tissue_state_metrics_v5(out, reference, SCOPE)
+    assert result["u_dice_in_reference_tissue"] == 1.0
+    assert result["per_tissue_state"]["tissue_a"]["target_positive"]["recall"] == 0.0
+    assert result["reference_count"] == 4
+
+def test_rejection_keeps_state_denominator():
+    reference = _reference()
+    out = validate_perception_output_v5(make_joint_output(
+        SCOPE, anatomy_map=np.full((1, 2, 2), -1), anatomy_accepted=np.zeros((1, 2, 2), bool),
+        abnormality_map=reference_u()), SCOPE)
+    result = tissue_state_metrics_v5(out, reference, SCOPE)
+    assert result["coverage"] == 0.0 and result["false_normal_on_accepted"] is None
+    assert result["reference_count"] == 4 and result["rejection_reasons"] == {"anatomy_uncertain": 4}
+
+def test_positive_only_and_unreviewed_are_never_normal():
+    assert not _reference(u_completeness="positive_only").state_eligible.any()
+    review = np.zeros((1, 2, 2), bool); review[0, 0, 0] = True
+    assert _reference(review=review).state_eligible.sum() == 1
+
+def test_2d_reference_needs_single_slice_readability():
+    scope_2d = validate_scope_v5(make_scope(observation_mode="2d"))
+    inputs = make_state_reference_inputs(scope_2d, single_slice_readable=None)
+    reference = build_state_reference_v5(inputs["record"], inputs["arrays"], scope_2d, "obs-2d")
+    assert not reference.state_eligible.any()
+    assert reference.eligibility_reason.max() & STATE_ELIGIBILITY_BITS["single_slice_unreadable"]
+
+def test_reference_hash_is_deterministic_and_bound_to_reference_inputs():
+    assert _reference().reference_set_hash == _reference().reference_set_hash
+    review = np.ones((1, 2, 2), bool); review[0, 1, 1] = False
+    assert _reference(review=review).reference_set_hash != _reference().reference_set_hash
+
+def test_identity_mismatch_rejected():
+    reference = dataclasses.replace(_reference(), mode="2d")
+    with pytest.raises(V5Error) as error:
+        tissue_state_metrics_v5(validate_perception_output_v5(make_joint_output(SCOPE), SCOPE), reference, SCOPE)
+    assert error.value.code == "IDENTITY_MISMATCH"
+
+def test_empty_state_class_returns_none():
+    result = tissue_state_metrics_v5(validate_perception_output_v5(make_joint_output(SCOPE), SCOPE), _reference(), SCOPE)
+    assert result["per_tissue_state"]["tissue_b"]["target_positive"]["recall"] is None
+
+def test_patient_summary_is_patient_equal():
+    rows = [("p1", {"per_tissue_state": {"tissue_a": {"target_positive": {"recall": 1.0}}}}),
+            ("p1", {"per_tissue_state": {"tissue_a": {"target_positive": {"recall": 0.0}}}}),
+            ("p2", {"per_tissue_state": {"tissue_a": {"target_positive": {"recall": 1.0}}}}),
+            ("p3", {"per_tissue_state": {"tissue_a": {"target_positive": {"recall": None}}}})]
+    summary = summarize_state_by_patient_v5(rows, ("tissue_a", "target_positive", "recall"), seed=1, n_boot=50, ci_level=0.9)
+    assert summary["estimate"] == 0.75 and summary["n_patients"] == 2 and summary["n_patients_without_support"] == 1
+
+def test_capability_template_is_all_null():
+    template = yaml.safe_load(Path("configs/v5/capability_policy.template.yaml").read_text())
+    assert set(template) == {"standard_kind", "required_tissues", "required_states", "min_reference_support",
+                             "metric_bounds", "min_coverage", "uncertainty_rule", "ci_level", "n_boot", "seed"}
+    assert all(value is None for value in template.values())
+```
+
+`make_state_reference_inputs(scope, **overrides)` 默认：形状在 `scope.observation_mode == "2d"` 时为 `[2,2]`，否则 `[1,2,2]`；`record` 为含两条合格注释的 `SampleV5`（A：`task "A"`、`class_scope` 为 scope 解剖类、`target_complete`；U：`class_scope` 为 scope 异常类、`completeness` 取 `u_completeness`，默认 `target_complete`）；`arrays`：`anatomy` 全为 1（tissue_a）、`abnormality` 只有 `target_a` 在 (0,0,0)、(0,1,0) 为 True、`review`/`visibility`/`valid_fov` 全 True、`single_slice_readable True`；`review`、`single_slice_readable`、`u_completeness` 可覆盖。`reference_u()` 是测试文件内的辅助函数，返回与该参照相同的 `[2,1,2,2]` 异常数组。
+
+- [ ] **Step 2：运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_tissue_state_metrics.py`
+Expected: collection error（`ImportError`）
+
+- [ ] **Step 3：实现 `state.py` 与模板**
+
+`capability_policy.template.yaml` 的十个键全为 `null`；在键 `standard_kind` 上方注释写明允许值 `absolute | reader_tolerance | reference_comparison`（Proposal §8.5），并注明待 D1 决定。
+
+- [ ] **Step 4：运行确认通过**
+
+Run: `pytest_cpu tests/v5 tests/v41`
+Expected: 全部通过，0 failed
+
+- [ ] **Step 5：提交**
+
+```bash
+git add anatobind/v41/evaluation/state.py configs/v5/capability_policy.template.yaml tests/v5/factories.py tests/v5/test_tissue_state_metrics.py reports/v5/status.md
+git diff --cached --check
+git commit -m "Evaluate tissue identity and state against frozen references"
+```
+
+### T06c：异常 U 的病灶级指标
+
+**Files:**
+- Modify: `anatobind/v41/evaluation/instances.py`（追加）
+- Create: `tests/v5/test_lesion_metrics.py`
+
+**Interfaces:**
+- Consumes: T03 `match_instances_v5`。
+- Produces:
+  - `lesion_detection_metrics_v5(pred: list[dict], truth: list[dict], policy: dict, voxel_volume_mm3: float | None) -> dict`：`policy` 键 `iou_match_threshold`、`class_aware`、`size_strata_voxels`（升序整数边界列表）；返回 `tp, fp, fn, sensitivity (truth 为空时 None), matched_volume_error_voxels (list[int]，pred − truth), matched_volume_error_mm3 (list[float] 或 None), size_strata {"<b0": {"tp","fn"}, "b0-b1": …, ">=bn": …}`（按 truth 体素数分层）。
+  - `summarize_lesion_detection_v5(rows: list[dict]) -> dict`：每行为一个扫描的上述结果；返回 `n_scans, pooled_sensitivity (总 truth 为 0 时 None), fp_per_scan`。
+
+- [ ] **Step 1：写失败测试 `tests/v5/test_lesion_metrics.py`**
+
+```python
+POLICY = {"iou_match_threshold": 0.1, "class_aware": True, "size_strata_voxels": [50, 150]}
+
+def test_detection_counts_use_cardinality_first_matching():
+    result = lesion_detection_metrics_v5(PRED, TRUTH, POLICY, voxel_volume_mm3=None)
+    assert (result["tp"], result["fp"], result["fn"]) == (6, 0, 0)
+
+def test_no_truth_sensitivity_none_fp_counted():
+    result = lesion_detection_metrics_v5(PRED[:2], [], POLICY, voxel_volume_mm3=None)
+    assert result["sensitivity"] is None and result["fp"] == 2
+
+def test_volume_error_needs_physical_volume():
+    without = lesion_detection_metrics_v5(PRED[:1], TRUTH[:1], POLICY, voxel_volume_mm3=None)
+    assert without["matched_volume_error_mm3"] is None and without["matched_volume_error_voxels"] == [0]
+    with_mm = lesion_detection_metrics_v5(PRED[:1], TRUTH[:1], POLICY, voxel_volume_mm3=0.078125)
+    assert with_mm["matched_volume_error_mm3"] == [0.0]
+
+def test_size_strata_follow_policy_boundaries():
+    result = lesion_detection_metrics_v5([], TRUTH, POLICY, voxel_volume_mm3=None)
+    assert result["size_strata"] == {"<50": {"tp": 0, "fn": 0}, "50-150": {"tp": 0, "fn": 6},
+                                     ">=150": {"tp": 0, "fn": 0}}
+
+def test_summary_reports_fp_per_scan():
+    rows = [lesion_detection_metrics_v5(PRED[:1], TRUTH[:1], POLICY, None),
+            lesion_detection_metrics_v5(PRED[1:3], [], POLICY, None)]
+    summary = summarize_lesion_detection_v5(rows)
+    assert summary["n_scans"] == 2 and summary["fp_per_scan"] == 1.0 and summary["pooled_sensitivity"] == 1.0
+```
+
+`PRED`、`TRUTH` 从 `tests/v5/test_matching_cardinality.py` 导入（每个 truth 为 100 体素）。
+
+- [ ] **Step 2：运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_lesion_metrics.py`
+Expected: collection error（`ImportError`）
+
+- [ ] **Step 3：实现两个函数**
+
+- [ ] **Step 4：运行确认通过**
+
+Run: `pytest_cpu tests/v5 tests/v41`
+Expected: 全部通过，0 failed
+
+- [ ] **Step 5：提交**
+
+```bash
+git add anatobind/v41/evaluation/instances.py tests/v5/test_lesion_metrics.py reports/v5/status.md
+git diff --cached --check
+git commit -m "Add lesion-level detection metrics for U"
+```
+
+### 阶段 A 完成判定
+
+`pytest_cpu tests/v41 tests/v5` 全部通过（`tests/v41` 仍为 144 passed）；`reports/v5/status.md` 中 T00–T06c 为 `PASS`、其余为 `TODO`，所有 `scientific_conclusion` 仍为 `NOT_EVALUATED`；整分支独立审查后再细化阶段 B。阶段 A 只证明软件行为，不产生任何真实数据或科学结论。
+
+---
+
+## 3. Proposal 追踪（V5-01–V5-18）
+
+| ID | 必须关闭的问题 | 任务 |
+| --- | --- | --- |
+| V5-01 | 规格优先级、历史状态与实际实现一致 | T00、T01a |
+| V5-02 | 可见性/FOV/positive-only/pseudo 资格正确 | T02 |
+| V5-03 | 实例最大配对数优先 | T03 |
+| V5-04 | 参照固定分母、缺参照 NA、拒判不删病灶 | T04 |
+| V5-05 | 患者等权配对统计与种子处理 | T05 |
+| V5-06 | 表面/空值/部分复核边界、任务级指标政策 | T06a、T06c |
+| V5-07 | 专家来源与输入可见性分开、空间链完整 | T01a（字段）、T07 |
+| V5-08 | 曝光核验、官方划分/分层、独立测试 | T08 |
+| V5-09 | 实际读者、可靠同例 U/R、正确仲裁字段 | T01a（字段）、T11、T12 |
+| V5-10 | 训练控制与基线实测 | T09a–c、T10 |
+| V5-11 | H1 公平比较、关系语义、开发选阈值 | T13、T14 |
+| V5-12 | H2 现实信息、阴性支持、角色隔离 | T15 |
+| V5-13 | H3 信息边界、同权重与八项评价 | T16、T17 |
+| V5-14 | 任务级 gate、分期解封、证据发布与隐私 | T01c、T09a、T18a–c |
+| V5-15 | PerceptionOutput 与组织状态组合、保存、原网格一致性 | T01b、T09c、T13、T16 |
+| V5-16 | StateReference、直接组织状态指标与八格硬验收 | T06b、T11、T12、T14、T17 |
+| V5-17 | 核心组织归属语义，不以 near 等辅助关系替代 | T01a、T01b、T01c、T12、T13、T17 |
+| V5-18 | 能力/假设/研究包三类完成状态 | T00、T14、T17、T18c |
+
+## 4. 执行交接
+
+执行方式沿用研究者已选的 subagent-driven-development。阶段 A 共 11 个任务，按 §1.1 顺序串行；每个任务结束后做任务审查，阶段 A 结束后做一次整分支审查。阶段 B 的细化在阶段 A 整分支审查之后进行，并先处理 D4。

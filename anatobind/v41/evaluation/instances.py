@@ -29,3 +29,122 @@ def match_instances(pred: list[dict], truth: list[dict], policy: dict) -> list[t
 
 def detection_counts(pred: list[dict], truth: list[dict], matches: list[tuple[int, int]]) -> dict:
     return {"tp": len(matches), "fp": len(pred) - len(matches), "fn": len(truth) - len(matches)}
+
+
+# ---------------------------------------------------------------------------
+# v5.1 cardinality-first matching (Proposal_v5 §8.1). v41 match_instances above is unchanged.
+
+import math  # noqa: E402
+
+from ..contracts_v5 import V5Error  # noqa: E402
+
+
+def _check_threshold_v5(policy: dict) -> float:
+    threshold = policy.get("iou_match_threshold")
+    if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or not math.isfinite(threshold) \
+            or not 0 < threshold <= 1:
+        raise V5Error("INVALID_IOU_THRESHOLD", "$.policy.iou_match_threshold")
+    return float(threshold)
+
+
+def match_instances_v5(pred: list[dict], truth: list[dict], policy: dict) -> list[tuple[int, int]]:
+    """Max eligible one-to-one pairs first, then max total IoU; ties resolved by sorted instance_uid.
+
+    Eligible edges weigh M + IoU with M = min(n_pred, n_truth) + 1: M exceeds any IoU-sum difference,
+    so adding one eligible pair always outweighs any IoU gain among fewer pairs.
+    """
+    threshold = _check_threshold_v5(policy)
+    class_aware = policy.get("class_aware")
+    if not isinstance(class_aware, bool):
+        raise V5Error("INVALID_POLICY", "$.policy.class_aware")
+    for side, items in (("pred", pred), ("truth", truth)):
+        for i, item in enumerate(items):
+            if not isinstance(item["mask"], np.ndarray) or item["mask"].dtype != np.bool_:
+                raise V5Error("DTYPE_MISMATCH", f"$.{side}[{i}].mask")
+    shapes = {np.shape(item["mask"]) for item in pred + truth}
+    if len(shapes) > 1:
+        raise V5Error("MASK_SHAPE_MISMATCH", "$.mask")
+    for side, items in (("pred", pred), ("truth", truth)):
+        uids = [item["instance_uid"] for item in items]
+        if len(set(uids)) != len(uids):
+            raise V5Error("DUPLICATE_INSTANCE_ID", f"$.{side}.instance_uid")
+    if not pred or not truth:
+        return []
+    pred_order = sorted(range(len(pred)), key=lambda i: pred[i]["instance_uid"])
+    truth_order = sorted(range(len(truth)), key=lambda j: truth[j]["instance_uid"])
+    big_m = min(len(pred), len(truth)) + 1
+    weights = np.zeros((len(pred), len(truth)))
+    eligible = np.zeros((len(pred), len(truth)), dtype=bool)
+    for r, i in enumerate(pred_order):
+        p_mask = pred[i]["mask"]
+        for c, j in enumerate(truth_order):
+            if class_aware and pred[i]["class_name"] != truth[j]["class_name"]:
+                continue
+            overlap = _iou(p_mask, truth[j]["mask"])
+            if overlap >= threshold:
+                eligible[r, c] = True
+                weights[r, c] = big_m + overlap
+    rows, cols = linear_sum_assignment(weights, maximize=True)
+    pairs = [(pred_order[r], truth_order[c]) for r, c in zip(rows, cols) if eligible[r, c]]
+    return sorted(pairs)
+
+
+# ---------------------------------------------------------------------------
+# v5.1 lesion-level U metrics (Proposal_v5 §8.3): sensitivity, FP/scan, volume error, size strata.
+
+
+def _size_strata_keys_v5(bounds: list[int]) -> list[str]:
+    keys = [f"<{bounds[0]}"]
+    keys += [f"{lo}-{hi}" for lo, hi in zip(bounds[:-1], bounds[1:])]
+    keys.append(f">={bounds[-1]}")
+    return keys
+
+
+def _stratum_v5(size: int, bounds: list[int], keys: list[str]) -> str:
+    for i, bound in enumerate(bounds):
+        if size < bound:
+            return keys[i]
+    return keys[-1]
+
+
+def lesion_detection_metrics_v5(pred: list[dict], truth: list[dict], policy: dict,
+                                voxel_volume_mm3: float | None) -> dict:
+    """One scan. Volume error in mm^3 only when a physical voxel volume is known; never assumes 1 mm."""
+    bounds = policy.get("size_strata_voxels")
+    if not isinstance(bounds, list) or not bounds or not all(isinstance(b, int) and not isinstance(b, bool)
+                                                              for b in bounds) \
+            or any(lo >= hi for lo, hi in zip(bounds[:-1], bounds[1:])):
+        raise V5Error("INVALID_SIZE_STRATA", "$.policy.size_strata_voxels")
+    if voxel_volume_mm3 is not None and (isinstance(voxel_volume_mm3, bool)
+                                         or not isinstance(voxel_volume_mm3, (int, float))
+                                         or not math.isfinite(voxel_volume_mm3) or voxel_volume_mm3 <= 0):
+        raise V5Error("INVALID_VOXEL_VOLUME", "$.voxel_volume_mm3")
+    pairs = match_instances_v5(pred, truth, policy)
+    matched_truth = {j for _, j in pairs}
+    errors = [int(np.count_nonzero(pred[i]["mask"])) - int(np.count_nonzero(truth[j]["mask"])) for i, j in pairs]
+    keys = _size_strata_keys_v5(bounds)
+    strata = {key: {"tp": 0, "fn": 0} for key in keys}
+    for j, item in enumerate(truth):
+        key = _stratum_v5(int(np.count_nonzero(item["mask"])), bounds, keys)
+        strata[key]["tp" if j in matched_truth else "fn"] += 1
+    tp = len(pairs)
+    return {
+        "tp": tp,
+        "fp": len(pred) - tp,
+        "fn": len(truth) - tp,
+        "sensitivity": tp / len(truth) if truth else None,
+        "matched_volume_error_voxels": errors,
+        "matched_volume_error_mm3": None if voxel_volume_mm3 is None else [e * float(voxel_volume_mm3) for e in errors],
+        "size_strata": strata,
+    }
+
+
+def summarize_lesion_detection_v5(rows: list[dict]) -> dict:
+    """Pooled over scans: sensitivity = sum tp / sum truth lesions; FP per scan = sum fp / scans."""
+    tp = sum(row["tp"] for row in rows)
+    n_truth = sum(row["tp"] + row["fn"] for row in rows)
+    return {
+        "n_scans": len(rows),
+        "pooled_sensitivity": tp / n_truth if n_truth else None,
+        "fp_per_scan": sum(row["fp"] for row in rows) / len(rows) if rows else None,
+    }

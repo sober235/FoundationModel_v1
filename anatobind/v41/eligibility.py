@@ -113,3 +113,101 @@ def supervision_counts(record: dict, task_tensors: dict[str, tuple[np.ndarray, n
             "eligible_voxels": int(eligible.sum()),
         })
     return rows
+
+
+# ---------------------------------------------------------------------------
+# v5.1 signed eligibility (Proposal_v5 §2.3, §4.2). v41 functions above are unchanged.
+
+from .contracts_v5 import V5Error  # noqa: E402  (v5.1 section is appended; v41 code above untouched)
+
+TRACKS_V5 = ("observable_target", "released_reference")
+CHANNELS_V5 = ("expert", "pseudo")
+
+
+def annotation_channel_v5(annotation, task: str) -> str | None:
+    """'expert', 'pseudo' or None (never supervises this task)."""
+    if annotation.task != task or annotation.quality_status != "accepted":
+        return None
+    if annotation.provenance_type in NEVER_SUPERVISE or annotation.representation in LOCALIZATION_ONLY:
+        return None
+    if annotation.intended_role == "excluded":
+        return None
+    if annotation.provenance_type not in QUALIFIED_PROVENANCE + PSEUDO_PROVENANCE:
+        return None
+    if (annotation.provenance_type in QUALIFIED_PROVENANCE and annotation.reference_role != "unverified"
+            and annotation.intended_role != "pseudo_only"):
+        return "expert"
+    return "pseudo"
+
+
+def region_mask_v5(regions: dict, key, shape: tuple, code: str, path: str) -> np.ndarray:
+    if key is None or key not in regions:
+        raise V5Error(code, path)
+    region = np.asarray(regions[key], dtype=bool)
+    if region.shape != shape:
+        raise V5Error("GRID_MISMATCH", path)
+    return region
+
+
+def visibility_support_v5(annotation, record, visibility_regions: dict, shape: tuple, policy: dict,
+                   path: str) -> np.ndarray:
+    visibility = annotation.input_visibility
+    if policy["track"] == "observable_target":
+        if visibility == "visible":
+            return np.ones(shape, dtype=bool)
+        if visibility == "limited":
+            return region_mask_v5(visibility_regions, annotation.visibility_region_path, shape,
+                           "VISIBILITY_REGION_MISSING", f"{path}.visibility_region_path")
+        return np.zeros(shape, dtype=bool)
+    if visibility in ("visible", "limited"):
+        return np.ones(shape, dtype=bool)
+    if visibility == "unknown" and policy.get("allow_unknown_visibility") is True \
+            and policy.get("reference_policy_id") == record.reference_policy_id:
+        return np.ones(shape, dtype=bool)
+    return np.zeros(shape, dtype=bool)
+
+
+def build_eligibility_v5(record, task: str, classes: list[str], targets: dict, review_regions: dict,
+                         visibility_regions: dict, valid_fov: np.ndarray, policy: dict,
+                         channel: str) -> tuple[np.ndarray, np.ndarray]:
+    if policy.get("track") not in TRACKS_V5:
+        raise V5Error("UNKNOWN_TRACK", "$.policy.track")
+    if policy["track"] == "observable_target" and policy.get("allow_unknown_visibility"):
+        raise V5Error("UNKNOWN_VISIBILITY_NOT_ALLOWED", "$.policy.allow_unknown_visibility")
+    if channel not in CHANNELS_V5:
+        raise V5Error("UNKNOWN_CHANNEL", "$.channel")
+    fov = np.asarray(valid_fov, dtype=bool)
+    shape = fov.shape
+    e_pos = np.zeros((len(classes), *shape), dtype=bool)
+    e_neg = np.zeros((len(classes), *shape), dtype=bool)
+    for i, annotation in enumerate(record.annotation_records):
+        path = f"$.annotation_records[{i}]"
+        if annotation_channel_v5(annotation, task) != channel:
+            continue
+        indices = [k for k, name in enumerate(classes) if name in annotation.class_scope]
+        if not indices:
+            continue
+        support = visibility_support_v5(annotation, record, visibility_regions, shape, policy, path) & fov
+        completeness = annotation.completeness
+        if completeness == "target_complete":
+            for k in indices:
+                e_pos[k] |= support
+                e_neg[k] |= support
+        elif completeness == "region_complete":
+            reviewed = support & region_mask_v5(review_regions, annotation.review_region_path, shape,
+                                         "REVIEW_REGION_MISSING", f"{path}.review_region_path")
+            for k in indices:
+                e_pos[k] |= reviewed
+                e_neg[k] |= reviewed
+        elif completeness == "positive_only":
+            class_values = policy.get("class_values")
+            if not isinstance(class_values, dict) or any(classes[k] not in class_values for k in indices):
+                raise V5Error("POSITIVE_ONLY_CLASS_MAP_REQUIRED", "$.policy.class_values")
+            if annotation.annotation_uid not in targets:
+                raise V5Error("TARGET_MISSING", f"{path}.annotation_uid")
+            target = np.asarray(targets[annotation.annotation_uid])
+            if target.shape != shape:
+                raise V5Error("GRID_MISMATCH", f"{path}.annotation_uid")
+            for k in indices:
+                e_pos[k] |= support & (target == class_values[classes[k]])
+    return e_pos, e_neg
