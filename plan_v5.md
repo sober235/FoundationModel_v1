@@ -1584,6 +1584,125 @@ git commit -m "Record D1-D4 decisions and sync status documents"
 
 ---
 
+## 2B. 阶段 B1：来源、几何、曝光与划分（T07a–T08b）
+
+**Goal:** 把 v41 记录迁移到 v5.1 契约，登记来源政策并固化几何软件检查，建立符合 Proposal §3.3 的曝光账本和划分；全部用合成数据在 CPU 上验证，真实数据步骤单列且等待批准。
+
+**范围划分（执行者裁定，2026-11-06）：** 阶段 B 拆为 B1（T07–T08，数据层，CPU 可测）与 B2（T09a–c、T10，训练/推理与基线，需 GPU、G-BASE 批准和 148 环境核验）。B2 在 B1 完成并经审查后再细化。
+
+**依据：** Proposal §3.1–3.3、§4.1；`reports/v5/host_precheck_148.md`（ISLES 250 例 DWI/ADC/mask；SKM 155 个 H5，含 `echo1`、`echo2`、`seg`，标注 v1.0.0）。
+
+**约束：** Global Constraints 与 §2.0 适用。真实数据只在获得对应来源的 G-DATA 数据使用批准、且研究者同意写服务器后运行；仓库只接纳脱敏汇总。串行顺序：T07a → T07b → T07c → T08a → T08b。
+
+**Review Focus（B1）：**
+1. 几何状态只能保持或降级，不能因迁移升级为 `verified` —— T07a `test_geometry_status_never_upgraded`。
+2. v41 的 `limited` 可见性没有区域，不能被静默改成 visible/unknown —— T07a `test_limited_visibility_without_region_is_not_silently_migrated`。
+3. 降采样后消失的小阳性必须被报告并排除出阴性资格 —— T07b `test_downsample_reports_vanished_small_lesion`。
+4. 换随机种子不能让有曝光的组进入 locked_test —— T08b `test_exposure_survives_reseeding`。
+5. 官方分组缺失的组不能被猜测分配 —— T08b `test_missing_official_group_stays_unassigned`。
+
+### T07a：来源政策与 v41 记录迁移
+
+**Files:**
+- Create: `anatobind/v41/source_policy_v5.py`、`anatobind/v41/migrate_v5.py`
+- Create: `configs/v5/sources_v5.template.yaml`
+- Test: `tests/v5/test_source_policy.py`、`tests/v5/test_migrate_v41.py`
+- Modify: `tests/v5/factories.py`（新增 `make_source_policy(**overrides) -> SourcePolicy`）
+
+**Interfaces:**
+- Produces: `SourcePolicy`（frozen dataclass）：`source_id: str, source_version: str, source_dataset: str, scope_id: str, reference_policy_id: str, model_modalities: tuple[str, ...], annotation_modalities: dict[str, tuple[str, ...] | None], index_evidence: str | None, physical_units_policy: str | None`（`"trust_header"` 或 `None`）。
+- `load_source_policies_v5(path: Path) -> dict[str, SourcePolicy]`（键为 `source_id`）；`source_binding_v5(policy) -> dict`（`{"source_id", "source_version"}`，供 FX1 的 `evaluate_gate_v5(..., source=...)`）。
+- `migrate_v41_record_v5(record: SampleRecord, policy: SourcePolicy, scope: ActiveScope) -> SampleV5`；`migrate_v41_records_v5(records, policy, scope) -> tuple[list[SampleV5], list[dict]]`，失败行只含 `{"index", "code", "path"}`，不含 sample_uid 或病例标识。
+
+**模板值：** `isles_2022`：`source_dataset: ISLES_ltr`、`source_version: isles2022_bids1.6.0`、`scope_id: isles_u`、`reference_policy_id: isles_released_reference_v1`、`model_modalities: [dwi, adc]`；`skm_tea`：`source_dataset: SKM-TEA_ltr`、`source_version: skm_tea_annotations_v1.0.0`、`scope_id: skm_a`、`reference_policy_id: skm_a6_released_reference_v1`、`model_modalities: [qdess_e1, qdess_e2]`。两者的 `annotation_modalities`、`index_evidence`、`physical_units_policy` 为 `null`，由 T07c 的真实核验依据填写（填写前迁移对真实记录失败关闭）。
+
+**迁移规则：**
+- `record.source_dataset != policy.source_dataset` → `V5Error("SOURCE_MISMATCH", "$.source_dataset")`；`policy.scope_id != scope.scope_id` 或 `policy.reference_policy_id != scope.reference_policy_id` → `SCOPE_MISMATCH`。
+- 新增字段：`schema_version: "v5.1"`、`active_scope_id`、`reference_policy_id`、`model_modalities`；其余 v41 字段原样保留；输入记录不被修改；输出经 `validate_sample_v5`。
+- `index_alignment_status`：`geometry_status == "fail"` → `failed`；`"pass"` 且 `index_evidence` 非空 → `verified`；其余 → `unknown`。
+- `physical_geometry_status`：`"fail"` → `failed`；`"pass"` 且 `physical_units_policy == "trust_header"` 且 `image_geometry["units"] == "mm"` → `verified`；其余 → `unknown`。不改 header 或单位。
+- 标注：`annotation_modalities = policy.annotation_modalities[task]`（缺失或 `None` → `ANNOTATION_MODALITY_UNKNOWN`）；`visibility_region_path = None`；`input_visibility` 原样保留，v41 的 `limited` → `MIGRATION_NEEDS_VISIBILITY_REGION`。
+- `exposure_history` 在 T07a 原样保留（T08a 改为 v5 角色）。
+
+- [ ] **Step 1: 写失败测试**：`test_policies_load_and_bind_sources`（模板两条来源可加载，`source_binding_v5` 返回两键）、`test_policy_rejects_unknown_or_missing_fields`（`INVALID_SOURCE_POLICY`）、`test_migrated_record_validates_and_keeps_v41_fields`（基于 `tests.v41.conftest._sample()`，输出为 `SampleV5`，`patient_uid`、`split` 不变）、`test_geometry_status_never_upgraded`（参数化上述两条状态规则的全部分支）、`test_limited_visibility_without_region_is_not_silently_migrated`、`test_source_or_scope_mismatch_rejected`、`test_v41_record_not_mutated`、`test_batch_failures_report_index_not_ids`、`test_template_unknowns_fail_closed`（模板政策迁移真实形态记录报 `ANNOTATION_MODALITY_UNKNOWN`）。
+- [ ] **Step 2: 运行确认失败** —— `pytest_cpu tests/v5/test_source_policy.py tests/v5/test_migrate_v41.py`，Expected: `ImportError`。
+- [ ] **Step 3: 实现上述接口与规则。**
+- [ ] **Step 4: 运行确认通过** —— 同上命令全部通过；`pytest_cpu tests/v41 tests/v5` 全绿。
+- [ ] **Step 5: 提交** `Add v5 source policies and v41 record migration`。
+
+### T07b：几何软件检查与降采样信息损失
+
+**Files:**
+- Create: `anatobind/v41/geometry_v5.py`
+- Test: `tests/v5/test_geometry_v5.py`
+
+**Interfaces:**
+- `affine_roundtrip_error_v5(points_vox: np.ndarray, affine: np.ndarray) -> float`：`inverse(transform(points))` 的最大绝对体素误差（复用 v41 `geometry.transform_points`/`inverse_transform_points`）。
+- `resample_labels_v5(labels: np.ndarray, src_affine, dst_affine, dst_shape) -> np.ndarray`：最近邻；非整数 dtype → `DTYPE_MISMATCH`；输出取值 ⊆ 输入取值。
+- `pad_or_crop_v5(array, target_shape, fill) -> tuple[np.ndarray, np.ndarray]`（数组与 `valid_mask`）；`restore_grid_v5(array, valid_mask, original_shape) -> np.ndarray`（精确逆操作）。
+- `downsample_loss_report_v5(mask: np.ndarray, factor: tuple[int, ...], class_names: list[str]) -> dict`：`mask` 为 bool `[C, *spatial]`；降采样为步长取样；逐类给 `voxels_before`、`voxels_after`、`components_before`、`components_vanished`（降采样后在其覆盖块内无阳性的连通域，26 邻接）；另给 bool `lost_positive_mask`（降采样网格上，消失连通域所在块为 True），调用方必须把它从阴性资格中去掉。
+
+- [ ] **Step 1: 写失败测试**：`test_affine_roundtrip_within_1e-4_voxel`（各向异性加旋转仿射，1000 个随机点，误差 `< 1e-4`）、`test_label_resampling_is_discrete`（float 输入报错；恒等仿射输出相等；取值子集）、`test_original_grid_write_back_is_exact`（pad 再还原逐元素相等，padding 处 `valid_mask` 为 False）、`test_downsample_reports_vanished_small_lesion`（单体素病灶在 factor 2 下 `components_vanished == 1` 且 `lost_positive_mask` 在其块为 True；8×8×8 病灶保留）、`test_downsample_rejects_non_bool_or_bad_factor`。
+- [ ] **Step 2: 运行确认失败** —— `pytest_cpu tests/v5/test_geometry_v5.py`，Expected: `ImportError`。
+- [ ] **Step 3: 实现。**
+- [ ] **Step 4: 运行确认通过** —— 本文件与全套测试全绿。
+- [ ] **Step 5: 提交** `Add v5 geometry checks and downsampling loss report`。
+
+### T07c：来源只读核验入口（代码合成验证；真实运行待批准）
+
+**Files:**
+- Create: `anatobind/v41/source_check_v5.py`
+- Test: `tests/v5/test_source_check.py`
+
+**Interfaces:**
+- `summarize_source_check_v5(geometry_rows: list[dict], pairing_rows: list[dict], channel_reports: list[dict], loss_reports: list[dict], policy: SourcePolicy) -> dict`：只输出计数与比例——配对状态计数、几何 pass/fail/unknown 计数、SKM 通道变换一致的病例数、逐类降采样消失连通域总数与受影响扫描数；不含病例 ID、路径、文件名。复用 v41 `geometry_qc.run_geometry_qc` 产生的行。
+- `render_source_check_md_v5(summary: dict) -> str`：生成 `reports/v5/source_check_<source_id>.md` 的正文。
+
+- [ ] **Step 1: 写失败测试**：`test_summary_has_counts_only`（合成行含 `case_id`/路径，汇总与 markdown 中均不出现）、`test_summary_counts_match_rows`、`test_missing_pairs_are_counted_not_dropped`。
+- [ ] **Step 2–4:** 同上 RED → 实现 → GREEN。
+- [ ] **Step 5: 提交** `Add redacted source-check summaries`。
+- **真实运行（不在本任务完成条件内）：** 在 148 上对 ISLES、SKM 各跑一次 `run_geometry_qc` 与 `downsample_loss_report_v5`，原始行写 `$PRIVATE_ROOT`，脱敏 markdown 入库，并据此填写来源政策的 `null` 项。前提：对应来源的 G-DATA 数据使用批准、研究者同意写服务器。
+
+### T08a：v5 曝光账本
+
+**Files:**
+- Modify: `schemas/v5/sample.schema.json`（`exposure_history` 条目）
+- Create: `anatobind/v41/exposure_v5.py`
+- Modify: `anatobind/v41/migrate_v5.py`（角色映射）
+- Test: `tests/v5/test_exposure_v5.py`；按需更新 `tests/v5/factories.py`
+
+**Interfaces:**
+- `EXPOSURE_ROLES_V5 = ("training", "unlabeled_pretraining", "model_selection", "test_results_seen", "administrative_qc", "unknown")`。
+- 条目：`{"experiment_id": str, "role": <上面之一>, "recorded_at": str, "lineage_id": str | null, "evidence": str | null}`，`additionalProperties: false`。
+- `V41_ROLE_MAP = {"train": "training", "val": "model_selection", "test": "test_results_seen", "ssl": "unlabeled_pretraining", "pseudo_label": "training", "unknown": "unknown"}`；迁移时 `lineage_id = None`、`evidence = "migrated_from_v41"`。
+- `locked_test_blockers_v5(exposure_history: list[dict], lineage_id: str) -> list[str]`：返回阻止该谱系 locked_test 的条目角色（排序去重）。规则：`administrative_qc` 不阻止；`test_results_seen` 与 `unknown` 对所有谱系都阻止（研究选择层面的曝光）；`training`、`unlabeled_pretraining`、`model_selection` 仅当 `lineage_id` 相同或条目 `lineage_id` 为 null 时阻止。
+
+- [ ] **Step 1: 写失败测试**：`test_v5_roles_validate_and_v41_roles_rejected`、`test_v41_roles_are_mapped_on_migration`、`test_administrative_qc_never_blocks`、`test_unknown_and_seen_results_block_every_lineage`、`test_training_blocks_only_its_lineage_or_null`。
+- [ ] **Step 2–4:** RED → 实现 → GREEN（全套测试含 T07a 迁移测试）。
+- [ ] **Step 5: 提交** `Add v5 exposure roles and locked-test blockers`。
+
+### T08b：v5 划分（官方分组优先、组内分层）
+
+**Files:**
+- Create: `anatobind/v41/splits_v5.py`
+- Test: `tests/v5/test_splits_v5.py`
+
+**Interfaces:**
+- `freeze_splits_v5(records: list[SampleV5], groups: dict[str, str], policy: dict, lineage_id: str) -> dict`：纯函数，不写文件；返回 `{"assignment": {sample_uid: split}, "counts": {split: n_groups}, "exposed_groups": int, "unassigned_groups": int, "split_sha256": str}`。按组分配，同组记录同 split。
+- `policy["kind"] == "official"`：`policy["official_split"]: {group: "train" | "val" | "test"}`，映射为 `train` / `development_val` / `locked_test`；不在映射中的组 → `unassigned`。
+- `policy["kind"] == "stratified"`：必需 `seed: int`、`fractions`（三个 split，和为 1）、`strata: {group: str}`、`min_stratum_groups: int`、`small_stratum_rule: "merge"`（小于阈值的层并入 `"__merged__"`）；组内按 `sha256(f"{seed}:{stratum}:{group}")` 排序后按比例切分。缺键 → `V5Error("INVALID_SPLIT_POLICY", "$.policy.<key>")`，不设默认值（GC11）。
+- 两种 kind 都必需 `exposed_groups: "train" | "excluded"`：组内任一记录的 `locked_test_blockers_v5(..., lineage_id)` 非空且被分到 `locked_test` 时，改为该值。
+
+- [ ] **Step 1: 写失败测试**：`test_official_split_is_mapped`、`test_missing_official_group_stays_unassigned`、`test_stratified_split_is_deterministic_and_group_consistent`、`test_small_strata_are_merged_by_rule`、`test_exposure_survives_reseeding`（参数化 3 个种子，曝光组从不进 `locked_test`）、`test_policy_without_seed_or_rule_raises`。
+- [ ] **Step 2–4:** RED → 实现 → GREEN。
+- [ ] **Step 5: 提交** `Add v5 official and stratified splits with exposure exclusion`。
+
+### B1 完成判定
+
+`pytest_cpu tests/v41 tests/v5` 全部通过；`reports/v5/status.md` 的 T07、T08 行 `code_status: PASS`、`data_run_status: TODO`（真实运行待批准）；整段 B1 做一次独立审查。B1 不产生真实数据结论；划分的种子、比例、分层与小层规则由研究者在真实运行前批准登记。
+
+---
+
 ## 3. Proposal 追踪（V5-01–V5-18）
 
 | ID | 必须关闭的问题 | 任务 |
