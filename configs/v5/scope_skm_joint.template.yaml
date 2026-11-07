@@ -1,0 +1,16 @@
+# ActiveScope v5.1 TEMPLATE: SKM joint pilot (Proposal_v5 §2.2). Not a valid scope until the researcher
+# fills the expert-confirmed target classes, state tissues and the single core relation semantics.
+# Do not fill these from test results.
+schema_version: "v5.1"
+scope_id: skm_joint_pilot
+scope_kind: joint
+anatomy_classes: [patellar_cartilage, femoral_cartilage, tibial_cartilage_medial, tibial_cartilage_lateral, meniscus_medial, meniscus_lateral]
+state_anatomy_classes: null
+abnormality_classes: null
+relation_type: null
+relation_predicate: null
+relation_contract: null
+input_modalities: [qdess_e1, qdess_e2]
+observation_mode: "3d"
+normal_claim_scope: reviewed_enabled_cartilage_abnormality_only
+reference_policy_id: null
