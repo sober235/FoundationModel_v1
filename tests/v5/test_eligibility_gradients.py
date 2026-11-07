@@ -118,3 +118,13 @@ def test_softmax_requires_complete_class_support():
     base = masked_objective_v5(torch.zeros(1, 3, 2), target, e_pos, e_neg, spec)
     moved = torch.zeros(1, 3, 2); moved[0, :, 1] = torch.tensor([9.0, -9.0, 3.0])
     assert torch.isclose(masked_objective_v5(moved, target, e_pos, e_neg, spec), base)
+
+
+def test_bce_is_normalized_per_class():
+    logits = torch.zeros(1, 2, 4)
+    logits[0, 0] = 2.0
+    target = torch.tensor([[[0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]]])
+    e_pos = torch.tensor([[[False] * 4, [True, False, False, False]]])
+    e_neg = torch.tensor([[[True] * 4, [False] * 4]])
+    expected = (math.log1p(math.exp(2.0)) + math.log(2.0)) / 2
+    assert torch.isclose(masked_objective_v5(logits, target, e_pos, e_neg, SIG), torch.tensor(expected))

@@ -79,7 +79,7 @@ def patient_bootstrap_v5(patient_values: dict, seed: int, n_boot: int, ci_level:
 
 
 def _seed_means_v5(rows: list[dict], policy: dict, side: str) -> dict:
-    """{patient: {seed: mean over that patient's scans}} after duplicate/seed checks."""
+    """{patient: {seed: mean over that patient's scans}}; every seed must cover the same scans."""
     seeds = policy.get("seeds")
     if not isinstance(seeds, list) or not seeds or not all(_is_int(s) for s in seeds) or len(set(seeds)) != len(seeds):
         raise V5Error("INVALID_SEED_POLICY", "$.policy.seeds")
@@ -94,11 +94,20 @@ def _seed_means_v5(rows: list[dict], policy: dict, side: str) -> dict:
             raise V5Error("UNREGISTERED_SEED", f"$.{side}[{i}].seed")
         if not _finite(row["value"]):
             raise V5Error("NON_FINITE_VALUE", f"$.{side}[{i}].value")
-        scans.setdefault(row["patient_uid"], {}).setdefault(row["seed"], []).append(float(row["value"]))
+        scans.setdefault(row["patient_uid"], {}).setdefault(row["seed"], {})[row["scan_uid"]] = float(row["value"])
     for patient, by_seed in scans.items():
         if set(by_seed) != set(seeds):
             raise V5Error("MISSING_SEED", f"$.{side}")
-    return {patient: {s: sum(v) / len(v) for s, v in by_seed.items()} for patient, by_seed in scans.items()}
+        if len({frozenset(scan_set) for scan_set in by_seed.values()}) != 1:
+            raise V5Error("MISSING_SCAN", f"$.{side}")
+    return {patient: {s: sum(v.values()) / len(v) for s, v in by_seed.items()} for patient, by_seed in scans.items()}
+
+
+def _scan_sets_v5(rows: list[dict]) -> dict:
+    sets: dict = {}
+    for row in rows:
+        sets.setdefault(row["patient_uid"], set()).add(row["scan_uid"])
+    return sets
 
 
 def make_patient_contrasts_v5(method_rows: list[dict], comparator_rows: list[dict], policy: dict) -> list:
@@ -107,6 +116,8 @@ def make_patient_contrasts_v5(method_rows: list[dict], comparator_rows: list[dic
     comparator = _seed_means_v5(comparator_rows, policy, "comparator_rows")
     if set(method) != set(comparator):
         raise V5Error("UNPAIRED_PATIENT", "$.patient_uid")
+    if _scan_sets_v5(method_rows) != _scan_sets_v5(comparator_rows):
+        raise V5Error("UNPAIRED_SCAN", "$.scan_uid")
     seeds = policy["seeds"]
     contrasts = []
     for patient in sorted(method):

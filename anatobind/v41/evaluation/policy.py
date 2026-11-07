@@ -5,6 +5,8 @@ that needs it, never unrelated metrics. A locked evaluation refuses any block.
 """
 from __future__ import annotations
 
+import math
+
 from ..contracts_v5 import V5Error
 
 METRIC_REQUIREMENTS = {
@@ -15,6 +17,18 @@ METRIC_REQUIREMENTS = {
     "fp_constraint": ("fp_budget_per_scan",),
 }
 STAGES = ("development", "locked")
+# Range of each policy value once it is set (non-null); NaN/inf are never valid.
+_VALUE_RULES = {
+    "surface_tolerance_mm": lambda v: v > 0,
+    "iou_match_threshold": lambda v: 0 < v <= 1,
+    "fp_budget_per_scan": lambda v: v >= 0,
+}
+
+
+def _check_value(key: str, value: object) -> None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) \
+            or not _VALUE_RULES[key](value):
+        raise V5Error("INVALID_POLICY_VALUE", f"$.{key}")
 
 
 def validate_metric_policy_v5(policy: dict, stage: str) -> dict:
@@ -31,6 +45,9 @@ def validate_metric_policy_v5(policy: dict, stage: str) -> dict:
     for name in metrics:
         if name not in METRIC_REQUIREMENTS:
             raise V5Error("UNKNOWN_METRIC", "$.metrics")
+        for key in METRIC_REQUIREMENTS[name]:
+            if policy.get(key) is not None:
+                _check_value(key, policy[key])
         if any(policy.get(key) is None for key in METRIC_REQUIREMENTS[name]):
             blocked.append(name)
         else:

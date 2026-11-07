@@ -101,3 +101,40 @@ def test_capability_template_is_all_null():
     assert set(template) == {"standard_kind", "required_tissues", "required_states", "min_reference_support",
                              "metric_bounds", "min_coverage", "uncertainty_rule", "ci_level", "n_boot", "seed"}
     assert all(value is None for value in template.values())
+
+
+# Final review fixes (I4, I5, I6).
+
+@pytest.mark.parametrize("visibility", ["unknown", "unobservable"])
+def test_unknown_or_unobservable_visibility_is_never_normal(visibility):
+    reference = _reference(u_visibility=visibility)
+    assert not reference.state_eligible.any()
+    assert (reference.eligibility_reason & STATE_ELIGIBILITY_BITS["not_visible"]).all()
+
+
+def test_region_complete_without_review_region_rejected():
+    inputs = make_state_reference_inputs(SCOPE, review=np.ones((1, 2, 2), bool))
+    inputs["arrays"]["review_regions"] = {}
+    with pytest.raises(V5Error) as error:
+        build_state_reference_v5(inputs["record"], inputs["arrays"], SCOPE, "obs-synth-1")
+    assert error.value.code == "REVIEW_REGION_MISSING"
+
+
+@pytest.mark.parametrize("override", [{"u_reference_role": "pseudo_only"}, {"u_reference_role": "weak_localization"},
+                                      {"a_reference_role": "pseudo_only"}, {"a_class_scope": ["tissue_a"]}])
+def test_reference_needs_expert_voxel_a_and_u_covering_scope(override):
+    assert not _reference(**override).state_eligible.any()
+
+
+def test_reference_arrays_are_copied_and_read_only():
+    inputs = make_state_reference_inputs(SCOPE)
+    reference = build_state_reference_v5(inputs["record"], inputs["arrays"], SCOPE, "obs-synth-1")
+    inputs["arrays"]["anatomy"][:] = 2
+    assert (reference.anatomy_truth == 1).all() and not reference.anatomy_truth.flags.writeable
+
+
+def test_tampered_state_reference_rejected():
+    reference = dataclasses.replace(_reference(), state_truth=np.zeros((1, 2, 2), np.uint8))
+    with pytest.raises(V5Error) as error:
+        tissue_state_metrics_v5(validate_perception_output_v5(make_joint_output(SCOPE), SCOPE), reference, SCOPE)
+    assert error.value.code == "REFERENCE_HASH_MISMATCH"

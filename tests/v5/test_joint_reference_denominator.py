@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 
+import numpy as np
 import pytest
 
 from anatobind.v41.contracts_v5 import V5Error
@@ -83,3 +84,48 @@ def test_relation_exact_match_and_missing_prediction():
     assert result["exact_match_rate"] == 0.5
     assert result["n_empty_truth_sets"] == 1 and result["n_missing_prediction"] == 1
     assert result["per_tissue"]["tissue_a"]["recall"] == 1.0
+
+
+# Final review fixes (I1, M5, I2, M6).
+
+def test_numpy_bool_outcome_counts_as_success():
+    frozen = _frozen(REFS[:1], ["p1"])
+    outcome = LesionOutcome("l1", np.bool_(True), np.bool_(True), np.bool_(True), np.bool_(True), "matched")
+    assert joint_score_v5(frozen, [outcome])["patient_mean_j"] == 1.0
+
+
+@pytest.mark.parametrize("args", [
+    ("l1", True, True, 1, True, "matched"),
+    ("l1", True, True, True, True, "missed"),
+    ("l1", True, True, True, False, "matched"),
+    ("l1", True, True, None, True, "matched"),
+])
+def test_outcome_flags_must_be_bool_and_match_status(args):
+    with pytest.raises(V5Error) as error:
+        LesionOutcome(*args)
+    assert error.value.code == "INVALID_OUTCOME"
+
+
+def test_reference_flags_must_be_bool():
+    with pytest.raises(V5Error) as error:
+        make_reference_lesion(eligible="False")
+    assert error.value.code == "INVALID_REFERENCE"
+
+
+def test_exclusion_reason_on_joint_lesion_rejected():
+    with pytest.raises(V5Error) as error:
+        _frozen([make_reference_lesion(exclusion_reason="QUALITY_FAIL")], ["p1"])
+    assert error.value.code == "EXCLUSION_REASON_CONFLICT"
+
+
+def test_never_predicted_tissue_has_zero_f1():
+    refs = [make_reference_lesion(instance_uid="l1", truth_relation_set=("tissue_a",)),
+            make_reference_lesion(instance_uid="l2", truth_relation_set=("tissue_b",))]
+    tissue_b = relation_scores_v5(_frozen(refs, ["p1"]), {"l1": ["tissue_a"], "l2": []})["per_tissue"]["tissue_b"]
+    assert tissue_b["f1"] == 0.0 and tissue_b["precision"] is None and tissue_b["recall"] == 0.0
+
+
+def test_string_predicted_set_rejected():
+    with pytest.raises(V5Error) as error:
+        relation_scores_v5(_frozen(REFS, ["p1"]), {"l1": "tissue_a"})
+    assert error.value.code == "INVALID_PREDICTED_SET"

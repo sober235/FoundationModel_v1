@@ -102,15 +102,17 @@ def masked_objective_v5(logits: torch.Tensor, target: torch.Tensor, e_pos: torch
         selected = logits[mask]
         if not bool(torch.isfinite(selected).all()):
             raise V5Error("NON_FINITE_LOGITS", "$.logits")
-        labels = target[mask].to(logits.dtype)
-        ce = F.binary_cross_entropy_with_logits(selected, labels)
-        per_class = []
+        # Proposal §4.3: normalize per class over its own support, then average classes with support.
+        per_class_ce, per_class_dice = [], []
         for c in range(logits.shape[1]):
             class_mask = mask[:, c]
             if bool(class_mask.any()):
-                probs = torch.sigmoid(logits[:, c][class_mask]).unsqueeze(1)
-                per_class.append(_soft_dice_v5(probs, target[:, c][class_mask].to(logits.dtype).unsqueeze(1)))
-        dice = torch.stack(per_class).mean()
+                class_logits = logits[:, c][class_mask]
+                class_labels = target[:, c][class_mask].to(logits.dtype)
+                per_class_ce.append(F.binary_cross_entropy_with_logits(class_logits, class_labels))
+                per_class_dice.append(_soft_dice_v5(torch.sigmoid(class_logits).unsqueeze(1), class_labels.unsqueeze(1)))
+        ce = torch.stack(per_class_ce).mean()
+        dice = torch.stack(per_class_dice).mean()
     else:
         selected = logits.movedim(1, -1)[mask]
         if not bool(torch.isfinite(selected).all()):

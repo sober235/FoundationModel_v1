@@ -81,3 +81,19 @@ def test_vendored_sources_match_recorded_hashes():
     assert source["commit"] == "1f805cea446805e559badc80dd27f34175e4173d"
     for name, digest in source["files"].items():
         assert hashlib.sha256((root / name).read_bytes()).hexdigest() == digest
+
+
+# Final review fixes (M1, M15).
+
+@pytest.mark.parametrize("tolerance", [float("nan"), float("inf"), -1.0, 0.0])
+def test_surface_tolerance_must_be_finite_positive(tolerance):
+    with pytest.raises(V5Error) as error:
+        validate_metric_policy_v5({"metrics": ["nsd"], "surface_tolerance_mm": tolerance}, "development")
+    assert error.value.code == "INVALID_POLICY_VALUE"
+
+
+def test_probability_maps_rejected():
+    truth = _cube((8, 8), (2, 2), (5, 5))
+    with pytest.raises(V5Error) as error:
+        segmentation_metrics_v5(truth * 0.2, truth, np.ones_like(truth), {**VERIFIED, "spacing_mm": [1.0, 1.0]}, POLICY)
+    assert error.value.code == "DTYPE_MISMATCH"

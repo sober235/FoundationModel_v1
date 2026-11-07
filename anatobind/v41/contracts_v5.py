@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .schema import AnnotationRecord, SampleRecord, SchemaError, load_schema, validate_against
+from .schema import AnnotationRecord, SampleRecord, SchemaError, _resolve_ref, load_schema, validate_against
 
 SCHEMA_VERSION_V5 = "v5.1"
 SCHEMA_DIR_V5 = Path(__file__).resolve().parents[2] / "schemas" / "v5"
@@ -38,10 +38,33 @@ def array_sha256(array: np.ndarray) -> str:
     return hashlib.sha256(header + np.ascontiguousarray(array).tobytes()).hexdigest()
 
 
+UNKNOWN_KEY = "<unknown>"
+
+
+def _raise_redacted_unknown(instance: object, schema: dict, root: dict, path: str) -> None:
+    """Re-walk the schema to report an unknown key at its parent path without the key text (it may be a case ID)."""
+    if "$ref" in schema:
+        schema = {**_resolve_ref(schema["$ref"], root), **{k: v for k, v in schema.items() if k != "$ref"}}
+    if isinstance(instance, dict):
+        properties = schema.get("properties", {})
+        if schema.get("additionalProperties", True) is False and any(key not in properties for key in instance):
+            raise V5Error("UNKNOWN_FIELD", f"{path}.{UNKNOWN_KEY}")
+        for name, sub in properties.items():
+            if name in instance:
+                _raise_redacted_unknown(instance[name], sub, root, f"{path}.{name}")
+    elif isinstance(instance, list) and isinstance(schema.get("items"), dict):
+        for i, item in enumerate(instance):
+            _raise_redacted_unknown(item, schema["items"], root, f"{path}[{i}]")
+
+
 def _check_schema(record: object, name: str, path: str = "$") -> None:
     try:
-        validate_against(record, load_schema(name, SCHEMA_DIR_V5), path=path)
+        schema = load_schema(name, SCHEMA_DIR_V5)
+        validate_against(record, schema, path=path)
     except SchemaError as error:
+        if error.code == "UNKNOWN_FIELD":
+            _raise_redacted_unknown(record, schema, schema, path)
+            raise V5Error("UNKNOWN_FIELD", path) from None
         raise V5Error(error.code, error.path) from None
 
 
@@ -218,9 +241,8 @@ def _check_keys(record: object, expected, path: str) -> None:
     missing = [key for key in expected if key not in record]
     if missing:
         raise V5Error("MISSING_FIELD", f"{path}.{missing[0]}")
-    unknown = sorted(str(key) for key in record if key not in expected)
-    if unknown:
-        raise V5Error("UNKNOWN_FIELD", f"{path}.{unknown[0]}")
+    if any(key not in expected for key in record):
+        raise V5Error("UNKNOWN_FIELD", f"{path}.{UNKNOWN_KEY}")
 
 
 def _check_hash(value: object, path: str) -> None:

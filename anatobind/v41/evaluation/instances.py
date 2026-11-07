@@ -57,6 +57,10 @@ def match_instances_v5(pred: list[dict], truth: list[dict], policy: dict) -> lis
     class_aware = policy.get("class_aware")
     if not isinstance(class_aware, bool):
         raise V5Error("INVALID_POLICY", "$.policy.class_aware")
+    for side, items in (("pred", pred), ("truth", truth)):
+        for i, item in enumerate(items):
+            if not isinstance(item["mask"], np.ndarray) or item["mask"].dtype != np.bool_:
+                raise V5Error("DTYPE_MISMATCH", f"$.{side}[{i}].mask")
     shapes = {np.shape(item["mask"]) for item in pred + truth}
     if len(shapes) > 1:
         raise V5Error("MASK_SHAPE_MISMATCH", "$.mask")
@@ -72,11 +76,11 @@ def match_instances_v5(pred: list[dict], truth: list[dict], policy: dict) -> lis
     weights = np.zeros((len(pred), len(truth)))
     eligible = np.zeros((len(pred), len(truth)), dtype=bool)
     for r, i in enumerate(pred_order):
-        p_mask = np.asarray(pred[i]["mask"], dtype=bool)
+        p_mask = pred[i]["mask"]
         for c, j in enumerate(truth_order):
             if class_aware and pred[i]["class_name"] != truth[j]["class_name"]:
                 continue
-            overlap = _iou(p_mask, np.asarray(truth[j]["mask"], dtype=bool))
+            overlap = _iou(p_mask, truth[j]["mask"])
             if overlap >= threshold:
                 eligible[r, c] = True
                 weights[r, c] = big_m + overlap

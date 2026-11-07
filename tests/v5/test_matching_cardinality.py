@@ -92,3 +92,10 @@ def test_shape_mismatch_rejected():
     with pytest.raises(V5Error) as error:
         match_instances_v5([bad], TRUTH, POLICY)
     assert error.value.code == "MASK_SHAPE_MISMATCH"
+
+
+def test_non_bool_masks_rejected():
+    soft = dict(PRED[0], mask=PRED[0]["mask"] * 0.5)
+    with pytest.raises(V5Error) as error:
+        match_instances_v5([soft], TRUTH, POLICY)
+    assert error.value.code == "DTYPE_MISMATCH"

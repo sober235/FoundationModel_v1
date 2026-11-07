@@ -49,9 +49,12 @@ def relation_scores_v5(frozen: dict, predicted_sets: dict) -> dict:
     [] is a predicted empty tissue set and matches an empty truth set.
     """
     lesions = verify_reference_set_v5(frozen)
-    for uid in predicted_sets:
+    for uid, predicted in predicted_sets.items():
         if uid not in lesions:
             raise V5Error("UNKNOWN_REFERENCE_INSTANCE", "$.predicted_sets")
+        if predicted is not None and (not isinstance(predicted, (list, tuple))
+                                      or not all(isinstance(t, str) for t in predicted)):
+            raise V5Error("INVALID_PREDICTED_SET", "$.predicted_sets")
     evaluable = [lesion for lesion in frozen["lesions"]
                  if lesion["r_reference_available"] and lesion["eligible"] and lesion["visibility_qualified"]]
     matches = n_empty = n_missing = 0
@@ -73,10 +76,8 @@ def relation_scores_v5(frozen: dict, predicted_sets: dict) -> dict:
     for tissue in sorted(counts):
         tp, fp, fn = counts[tissue]["tp"], counts[tissue]["fp"], counts[tissue]["fn"]
         precision, recall = _ratio_v5(tp, tp + fp), _ratio_v5(tp, tp + fn)
-        if precision is None or recall is None:
-            f1 = None
-        else:
-            f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        # A listed tissue always has tp + fp + fn > 0; a never-predicted tissue is F1 0, not NA.
+        f1 = _ratio_v5(2 * tp, 2 * tp + fp + fn)
         per_tissue[tissue] = {"tp": tp, "fp": fp, "fn": fn, "precision": precision, "recall": recall, "f1": f1}
     return {
         "exact_match_rate": _ratio_v5(matches, len(evaluable)),

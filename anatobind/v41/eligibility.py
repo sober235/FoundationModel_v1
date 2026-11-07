@@ -140,7 +140,7 @@ def annotation_channel_v5(annotation, task: str) -> str | None:
     return "pseudo"
 
 
-def _region(regions: dict, key, shape: tuple, code: str, path: str) -> np.ndarray:
+def region_mask_v5(regions: dict, key, shape: tuple, code: str, path: str) -> np.ndarray:
     if key is None or key not in regions:
         raise V5Error(code, path)
     region = np.asarray(regions[key], dtype=bool)
@@ -149,14 +149,14 @@ def _region(regions: dict, key, shape: tuple, code: str, path: str) -> np.ndarra
     return region
 
 
-def _visibility_v5(annotation, record, visibility_regions: dict, shape: tuple, policy: dict,
+def visibility_support_v5(annotation, record, visibility_regions: dict, shape: tuple, policy: dict,
                    path: str) -> np.ndarray:
     visibility = annotation.input_visibility
     if policy["track"] == "observable_target":
         if visibility == "visible":
             return np.ones(shape, dtype=bool)
         if visibility == "limited":
-            return _region(visibility_regions, annotation.visibility_region_path, shape,
+            return region_mask_v5(visibility_regions, annotation.visibility_region_path, shape,
                            "VISIBILITY_REGION_MISSING", f"{path}.visibility_region_path")
         return np.zeros(shape, dtype=bool)
     if visibility in ("visible", "limited"):
@@ -187,14 +187,14 @@ def build_eligibility_v5(record, task: str, classes: list[str], targets: dict, r
         indices = [k for k, name in enumerate(classes) if name in annotation.class_scope]
         if not indices:
             continue
-        support = _visibility_v5(annotation, record, visibility_regions, shape, policy, path) & fov
+        support = visibility_support_v5(annotation, record, visibility_regions, shape, policy, path) & fov
         completeness = annotation.completeness
         if completeness == "target_complete":
             for k in indices:
                 e_pos[k] |= support
                 e_neg[k] |= support
         elif completeness == "region_complete":
-            reviewed = support & _region(review_regions, annotation.review_region_path, shape,
+            reviewed = support & region_mask_v5(review_regions, annotation.review_region_path, shape,
                                          "REVIEW_REGION_MISSING", f"{path}.review_region_path")
             for k in indices:
                 e_pos[k] |= reviewed

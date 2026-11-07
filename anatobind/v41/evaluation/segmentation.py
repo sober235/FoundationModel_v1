@@ -127,7 +127,10 @@ def _touches_unreviewed_v5(pred: np.ndarray, truth: np.ndarray, eligible: np.nda
 
 def segmentation_metrics_v5(pred: np.ndarray, truth: np.ndarray, eligible: np.ndarray, geometry: dict,
                             policy: dict) -> dict:
-    pred, truth, eligible = (np.asarray(a, dtype=bool) for a in (pred, truth, eligible))
+    for name, array in (("pred", pred), ("truth", truth), ("eligible", eligible)):
+        if not isinstance(array, np.ndarray) or array.dtype != np.bool_:
+            # Probability or label maps are never thresholded here (Proposal §3.2).
+            raise V5Error("DTYPE_MISMATCH", f"$.{name}")
     if pred.ndim not in (2, 3):
         raise V5Error("UNSUPPORTED_NDIM", "$.pred")
     if not (pred.shape == truth.shape == eligible.shape):

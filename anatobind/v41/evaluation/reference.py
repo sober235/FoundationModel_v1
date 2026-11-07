@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+import numpy as np
+
 from ..contracts_v5 import V5Error, canonical_sha256
 
 PREDICTION_STATUSES = ("matched", "missed", "rejected", "no_relation")
@@ -19,6 +21,19 @@ EXCLUSION_ORDER = (
     ("eligible", "NOT_ELIGIBLE"),
     ("visibility_qualified", "VISIBILITY_UNQUALIFIED"),
 )
+
+
+def _as_bool(value: object, code: str, path: str, allow_none: bool = False) -> bool | None:
+    """Python or numpy bool -> bool; anything else (1, "False", ...) is rejected, never coerced by truthiness."""
+    if value is None and allow_none:
+        return None
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    raise V5Error(code, path)
+
+
+_REFERENCE_FLAGS = ("a_reference_available", "u_reference_available", "r_reference_available", "eligible",
+                    "visibility_qualified")
 
 
 @dataclass(frozen=True)
@@ -33,6 +48,19 @@ class ReferenceLesion:
     exclusion_reason: str | None
     truth_relation_set: tuple[str, ...]
 
+    def __post_init__(self):
+        for name in ("patient_uid", "instance_uid"):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name):
+                raise V5Error("INVALID_REFERENCE", f"$.{name}")
+        for name in _REFERENCE_FLAGS:
+            object.__setattr__(self, name, _as_bool(getattr(self, name), "INVALID_REFERENCE", f"$.{name}"))
+        if self.exclusion_reason is not None and not isinstance(self.exclusion_reason, str):
+            raise V5Error("INVALID_REFERENCE", "$.exclusion_reason")
+        tissues = self.truth_relation_set
+        if not isinstance(tissues, (tuple, list)) or not all(isinstance(t, str) for t in tissues):
+            raise V5Error("INVALID_REFERENCE", "$.truth_relation_set")
+        object.__setattr__(self, "truth_relation_set", tuple(tissues))
+
 
 @dataclass(frozen=True)
 class LesionOutcome:
@@ -46,6 +74,20 @@ class LesionOutcome:
     def __post_init__(self):
         if self.prediction_status not in PREDICTION_STATUSES:
             raise V5Error("INVALID_PREDICTION_STATUS", "$.prediction_status")
+        for name in ("detected", "extent_ok", "accepted"):
+            object.__setattr__(self, name, _as_bool(getattr(self, name), "INVALID_OUTCOME", f"$.{name}"))
+        object.__setattr__(self, "relation_correct",
+                           _as_bool(self.relation_correct, "INVALID_OUTCOME", "$.relation_correct", allow_none=True))
+        # The status must agree with the flags, so a row cannot be both "missed" and a success.
+        status = self.prediction_status
+        consistent = {
+            "matched": self.detected and self.accepted and self.relation_correct is not None,
+            "missed": not self.detected,
+            "rejected": self.detected and not self.accepted,
+            "no_relation": self.detected and self.relation_correct is None,
+        }[status]
+        if not consistent:
+            raise V5Error("INVALID_OUTCOME", "$.prediction_status")
 
 
 def exclusion_reason_v5(lesion: dict) -> str | None:
@@ -76,6 +118,8 @@ def freeze_reference_set_v5(refs: list[ReferenceLesion], patient_uids: list[str]
             raise V5Error("DUPLICATE_REFERENCE", f"$.refs[{i}].instance_uid")
         seen.add(ref.instance_uid)
         lesion = asdict(ref)
+        if ref.exclusion_reason is not None and exclusion_reason_v5(lesion) is None:
+            raise V5Error("EXCLUSION_REASON_CONFLICT", f"$.refs[{i}].exclusion_reason")
         lesion["truth_relation_set"] = sorted(ref.truth_relation_set)
         lesions.append(lesion)
     lesions.sort(key=lambda lesion: (lesion["patient_uid"], lesion["instance_uid"]))

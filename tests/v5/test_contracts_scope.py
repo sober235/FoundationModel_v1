@@ -78,3 +78,12 @@ def test_joint_template_is_not_a_valid_scope_until_filled():
         validate_scope_v5(template)
     for name in ("scope_isles_u", "scope_skm_a"):
         validate_scope_v5(yaml.safe_load(Path(f"configs/v5/{name}.yaml").read_text()))
+
+
+def test_unknown_key_names_are_not_echoed(secret_values):
+    with pytest.raises(V5Error) as error:
+        validate_scope_v5(make_scope(**{secret_values[0]: 1}))
+    assert error.value.code == "UNKNOWN_FIELD" and secret_values[0] not in str(error.value)
+    with pytest.raises(V5Error) as error:
+        validate_sample_v5(make_sample_v5(annotation={secret_values[0]: 1}))
+    assert error.value.code == "UNKNOWN_FIELD" and secret_values[0] not in str(error.value)

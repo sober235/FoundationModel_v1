@@ -220,13 +220,29 @@ def make_reference_lesion(**overrides) -> ReferenceLesion:
 
 
 def make_state_reference_inputs(scope, **overrides) -> dict:
-    """Default: every voxel reference tissue_a, target_a positive at (0,0,0) and (0,1,0), all reviewed/visible/in FOV."""
+    """Default: every voxel reference tissue_a, target_a positive at (0,0,0) and (0,1,0), all reviewed/visible/in FOV.
+
+    Overrides: review (array; makes the U annotation region_complete on path "review/r1"), u_completeness,
+    u_visibility, u_reference_role, a_reference_role, a_class_scope, single_slice_readable.
+    """
     shape = (2, 2) if scope.observation_mode == "2d" else (1, 2, 2)
-    sample = make_sample_v5(annotation={"class_scope": list(scope.abnormality_classes),
-                                        "completeness": overrides.get("u_completeness", "target_complete")})
-    anatomy_annotation = copy.deepcopy(sample["annotation_records"][0])
-    anatomy_annotation.update(annotation_uid="ann-v5-a", task="A", class_scope=list(scope.anatomy_classes),
-                              completeness="target_complete")
+    review = overrides.get("review")
+    visibility = overrides.get("u_visibility", "visible")
+    u_annotation = {
+        "class_scope": list(scope.abnormality_classes),
+        "completeness": "region_complete" if review is not None else overrides.get("u_completeness", "target_complete"),
+        "review_region_path": "review/r1" if review is not None else None,
+        "input_visibility": visibility,
+        "visibility_evidence": None if visibility == "unknown" else "synthetic",
+        "reference_role": overrides.get("u_reference_role", "expert_voxel"),
+    }
+    sample = make_sample_v5(annotation=u_annotation)
+    anatomy_annotation = copy.deepcopy(_sample()["annotation_records"][0])
+    anatomy_annotation.update(annotation_uid="ann-v5-a", task="A",
+                              class_scope=list(overrides.get("a_class_scope", scope.anatomy_classes)),
+                              completeness="target_complete", annotation_modalities=["qdess_e1"],
+                              visibility_region_path=None,
+                              reference_role=overrides.get("a_reference_role", "expert_voxel"))
     sample["annotation_records"].insert(0, anatomy_annotation)
     abnormality = np.zeros((len(scope.abnormality_classes), *shape), dtype=bool)
     positive = abnormality[0].reshape(-1, 2, 2)
@@ -234,9 +250,9 @@ def make_state_reference_inputs(scope, **overrides) -> dict:
     arrays = {
         "anatomy": np.ones(shape, dtype=np.int64),
         "abnormality": abnormality,
-        "review": overrides.get("review", np.ones(shape, dtype=bool)),
-        "visibility": np.ones(shape, dtype=bool),
         "valid_fov": np.ones(shape, dtype=bool),
         "single_slice_readable": overrides.get("single_slice_readable", True),
+        "review_regions": {"review/r1": review} if review is not None else {},
+        "visibility_regions": {},
     }
     return {"record": validate_sample_v5(sample), "arrays": arrays}

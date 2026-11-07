@@ -86,3 +86,12 @@ def test_module_output_cannot_carry_state():
 def test_state_rule_signature_has_no_reference_inputs():
     params = set(inspect.signature(derive_state_map_v5).parameters)
     assert not params & {"truth", "reference", "review", "visibility", "eligible", "gt"}
+
+
+def test_unknown_output_key_is_not_echoed():
+    secret = "/private/zz_patient_root/case_000777"
+    out = make_joint_output(SCOPE)
+    out[secret] = 1
+    with pytest.raises(V5Error) as error:
+        validate_perception_output_v5(out, SCOPE)
+    assert error.value.code == "UNKNOWN_FIELD" and secret not in str(error.value)

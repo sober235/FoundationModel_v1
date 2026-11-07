@@ -87,3 +87,19 @@ def test_empty_returns_none():
 def test_seed_variation_is_reported_separately():
     variation = seed_variation_v5(METHOD, POLICY)
     assert variation["per_seed"] == {17: 0.25, 29: 0.5} and variation["range"] == 0.25
+
+
+# Final review fix (I3): scans are paired, not only patients.
+
+def test_scan_missing_on_one_side_rejected():
+    comparator = [r for r in COMPARATOR if not (r["patient_uid"] == "p1" and r["scan_uid"] == "s2")]
+    with pytest.raises(V5Error) as error:
+        make_patient_contrasts_v5(METHOD, comparator, POLICY)
+    assert error.value.code == "UNPAIRED_SCAN"
+
+
+def test_scan_missing_for_one_seed_rejected():
+    method = [r for r in METHOD if not (r["patient_uid"] == "p1" and r["scan_uid"] == "s2" and r["seed"] == 29)]
+    with pytest.raises(V5Error) as error:
+        make_patient_contrasts_v5(method, COMPARATOR, POLICY)
+    assert error.value.code == "MISSING_SCAN"

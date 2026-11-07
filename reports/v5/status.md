@@ -20,13 +20,13 @@ tasks:
     scientific_conclusion: NOT_EVALUATED
   T01a:
     code_status: PASS
-    test_evidence: "tests/v5/test_contracts_scope.py: 16 passed"
+    test_evidence: "tests/v5/test_contracts_scope.py: 17 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
   T01b:
     code_status: PASS
-    test_evidence: "tests/v5/test_contracts_outputs.py: 13 passed"
+    test_evidence: "tests/v5/test_contracts_outputs.py: 14 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
@@ -38,37 +38,37 @@ tasks:
     scientific_conclusion: NOT_EVALUATED
   T02:
     code_status: PASS
-    test_evidence: "tests/v5/test_eligibility_gradients.py: 14 passed"
+    test_evidence: "tests/v5/test_eligibility_gradients.py: 15 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
   T03:
     code_status: PASS
-    test_evidence: "tests/v5/test_matching_cardinality.py: 49 passed"
+    test_evidence: "tests/v5/test_matching_cardinality.py: 50 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
   T04:
     code_status: PASS
-    test_evidence: "tests/v5/test_joint_reference_denominator.py: 12 passed"
+    test_evidence: "tests/v5/test_joint_reference_denominator.py: 21 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
   T05:
     code_status: PASS
-    test_evidence: "tests/v5/test_patient_statistics.py: 10 passed"
+    test_evidence: "tests/v5/test_patient_statistics.py: 12 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
   T06a:
     code_status: PASS
-    test_evidence: "tests/v5/test_metric_policy.py: 8 passed"
+    test_evidence: "tests/v5/test_metric_policy.py: 13 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
   T06b:
     code_status: PASS
-    test_evidence: "tests/v5/test_tissue_state_metrics.py: 9 passed"
+    test_evidence: "tests/v5/test_tissue_state_metrics.py: 18 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
