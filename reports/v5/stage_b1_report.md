@@ -5,7 +5,7 @@
   - 计划细化 `dfa0234`
   - 任务提交 `0255e86`…`b959ed8`
   - 终审修复 `39b35ae`…`c69e351`，修复记录 `9db2cb3`
-- 本分支同时包含此前未推送的阶段 A 补修 FX1–FX4（`f0e826a..9fb5752`）和 148 只读预检（`0bfdc8b`）。
+- 本分支同时包含此前未推送的阶段 A 补修 FX1–FX4（`f0e826a..9fb5752`）和 amax 只读预检（`0bfdc8b`）。
 - 数据运行状态：NOT_STARTED。B1 只在合成数据上验证，未接触真实数据。真实 T07 运行要等 G-DATA 批准和服务器写入同意。
 - 科学结论：NOT_EVALUATED
 - 逐任务状态见 `reports/v5/status.md`
@@ -111,10 +111,10 @@
 ## 待研究者决定
 
 - 4 份仍被 Git 跟踪的 v4.1 文档含私有路径（blocker `PRIVATE_PATHS_TRACKED:v41_docs`），是否脱敏。
-- 是否同意在 148 上建独立工作目录，用服务器解释器跑 `tests/v41 tests/v5`（见 `reports/v5/host_precheck_148.md`）。
+- 是否同意在 amax 上建独立工作目录，用服务器解释器跑 `tests/v41 tests/v5`（见 `reports/v5/host_precheck_amax.md`）。
 - ISLES-2022 和 SKM-TEA 按来源与版本的 G-DATA 数据使用批准。
 - D2 的 Git 历史审查。
 
 ## 下一步
 
-B1 经研究者审阅后，把阶段 B2（T09a–c、T10：训练、推理、基线）细化到 B1 的粒度，再执行。B2 需要 GPU、G-BASE 批准和已登记的 148 执行环境（D4）。
+B1 经研究者审阅后，把阶段 B2（T09a–c、T10：训练、推理、基线）细化到 B1 的粒度，再执行。B2 需要 GPU、G-BASE 批准和已登记的 amax 执行环境（D4）。

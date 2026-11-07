@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python ≥3.9（本机 `.venv` 为 3.9.6；数据服务器为 3.11），NumPy、SciPy、PyTorch、PyYAML、pytest（均已安装）；Google DeepMind surface-distance 源码按固定提交内置（仅 T06a）。不新增运行时依赖。
 
-**Spec:** [Proposal_v5.md](Proposal_v5.md)，v5.1（2026-11-07 修订），SHA256 `5937627173942f3bc015cb2b5513fd6af3614fe973e1ba153f4dde0e5e1da972`。其 §1–12 是本计划的约束依据；本计划与之冲突时以 Proposal 为准。
+**Spec:** [Proposal_v5.md](Proposal_v5.md)，v5.1（2026-11-07 修订），SHA256 `007850125c31cbebaf04e1cac673e25c7772554e5e93cad46dbb5b3176959992`。其 §1–12 是本计划的约束依据；本计划与之冲突时以 Proposal 为准。
 
 **本次修订（相对提交 `8dc38be` 的上一版）：**
 - 执行基线改为 GitHub `sober235/FoundationModel_v1` 当前内容（本地 `restart-dev`，代码与 `main`/`d7cbd5b` 相同）。上一版依赖的 `02a2447`、`9c972f9` 不在仓库内，相关“复用/适配”假设全部取消，缺失模块改为新建。远端 `docs/skm-a-200step-summary-20261106` 报告的服务器实现与试训结果不作为本计划任何任务的完成证据。
@@ -132,7 +132,7 @@ flowchart TD
   - T11 / X0。
 - 真实训练和 X0 试点抽样，都要先完成真实 T07/T08 运行。真实运行需要：
   - 对应来源的 G-DATA 批准；
-  - 研究者同意写 148 服务器。
+  - 研究者同意写 amax 服务器。
 - B2 的模块结果只按模块报告。ISLES 的 U 与 SKM 的 A 各自成功，不能相加为同例联合成功（Proposal §1.3）。
 
 ### 1.2 各阶段范围
@@ -160,7 +160,7 @@ flowchart TD
 | D1 | 能力标准：上一版要求每格同时满足“批准的绝对下限”和“相对专用模型非劣”；Proposal §8.5 允许绝对要求、读者容差、批准的参照比较三选一 | T17；T06b 模板字段 `standard_kind` 保持 `null` | `reference_comparison`，保留 H3 对同场景专用二维／三维系统的预注册非劣；容差与约束在独立测试前依据专家／开发证据冻结；政策实例待联合 scope 冻结后建立 |
 | D2 | `memory.md` 含服务器私有路径且被 Git 跟踪（文件头声明不得提交）。选项：仅移出索引并加入 `.gitignore`；另行重写历史；保留 | T00 只登记 blocker，不改文件 | 移出索引并忽略（FX3 已实施）；历史不改写，另行审查 |
 | D3 | 专家资源与替代场景（X0） | 阶段 C 的真实部分与核心目标验证 | 保留 SKM 联合场景，先准备 20–30 次非锁定开发扫描试点；人员未落实前保持 `BLOCKED_EXPERT_REVIEW` |
-| D4 | 真实数据执行主机（数据服务器）与该主机上的解释器 | 阶段 B 起的真实数据步骤 | 选定 148 数据服务器；只读预检通过前不登记为就绪 |
+| D4 | 真实数据执行主机（数据服务器）与该主机上的解释器 | 阶段 B 起的真实数据步骤 | 选定 amax 数据服务器；只读预检通过前不登记为就绪 |
 | D5 | 长期目标定位：v5.1 是否作为“可迁移 MRI 基础模型”长期目标中的一个能力验证阶段；若是，是否在 v5.1 之后另立复用/迁移/泛化里程碑（§1.5） | 不改变 v5.1 的任务与完成判定；影响 v5.1 之后的路线和对外表述 | 待研究者决定（2026-11-07 提出） |
 
 ### 1.4 X0：专家资源线（非代码，现在即可并行）
@@ -1406,7 +1406,7 @@ git commit -m "Add lesion-level detection metrics for U"
 
 **Goal:** 关闭外部审查在 `6231fbb` 上复现的两处缺口，落实研究者对 D1–D4 的决定，并同步状态文档；不新增科学结论。
 
-**依据：** 研究者 2026-11-06 采纳外部审查建议——D1 选 `reference_comparison` 并保留 H3 对同场景专用二维/三维系统的预注册非劣；D2 停止跟踪 `memory.md` 并忽略，历史另审；D3 保留 SKM 联合场景，先准备 20–30 次非锁定开发扫描试点，人员未落实前保持 `BLOCKED_EXPERT_REVIEW`；D4 优先 148 数据服务器，“已选定”与“已核验就绪”分开登记。
+**依据：** 研究者 2026-11-06 采纳外部审查建议——D1 选 `reference_comparison` 并保留 H3 对同场景专用二维/三维系统的预注册非劣；D2 停止跟踪 `memory.md` 并忽略，历史另审；D3 保留 SKM 联合场景，先准备 20–30 次非锁定开发扫描试点，人员未落实前保持 `BLOCKED_EXPERT_REVIEW`；D4 优先 amax 数据服务器，“已选定”与“已核验就绪”分开登记。
 
 **约束：** Global Constraints 全部适用；§2.0 共用约定适用。四个任务串行：FX1 → FX2 → FX3 → FX4。
 
@@ -1633,7 +1633,7 @@ git commit -m "Stop tracking memory.md and add a redacted example"
 | D1 | `reference_comparison_with_h3_noninferiority` | `TODO`（容差与约束在独立测试前冻结；政策实例待联合 scope 冻结后建立） | `NOT_RUN` | `NOT_EVALUATED` |
 | D2 | `untrack_and_ignore_history_review_pending` | `PASS`（FX3） | `NOT_APPLICABLE` | `NOT_APPLICABLE` |
 | D3 | `skm_joint_pilot_20_30_dev_scans` | `TODO`（人员、预算未落实） | `NOT_RUN` | `NOT_EVALUATED` |
-| D4 | `server_148` | `TODO`（只读预检未做） | `NOT_RUN` | `NOT_EVALUATED` |
+| D4 | `server_amax` | `TODO`（只读预检未做） | `NOT_RUN` | `NOT_EVALUATED` |
 
 `decided_at` 取执行当天日期。`blockers` 改为 `["PRIVATE_PATHS_IN_HISTORY:memory.md", "BLOCKED_EXPERT_REVIEW", "EXECUTION_HOST_UNVERIFIED"]`。正文“待研究者决定事项”改为“研究者决定（2026-11-06）”，逐条写选择、未完成部分，并新增“阶段 A 补修”表（FX1–FX4，各附提交号与测试）。
 
@@ -1659,7 +1659,7 @@ def test_decisions_recorded_with_separate_statuses():
 Run: `pytest_cpu tests/v5/test_status_docs.py`
 Expected: FAIL（`KeyError: 'decisions'`）
 
-- [ ] **Step 3: 按上文改 status.md；plan §1.3 表格加“决定（2026-11-06）”列；§4 写明补修后下一步为阶段 B 细化与 148 只读预检；README “当前边界”首段写明执行基线与当前实现提交、科学结论仍为 `NOT_EVALUATED`；traceability 状态列按 status.md 实际填写（V5-02–V5-06、V5-14–V5-16 写“阶段 A 软件已交付，真实数据未运行”，其余照实）**
+- [ ] **Step 3: 按上文改 status.md；plan §1.3 表格加“决定（2026-11-06）”列；§4 写明补修后下一步为阶段 B 细化与 amax 只读预检；README “当前边界”首段写明执行基线与当前实现提交、科学结论仍为 `NOT_EVALUATED`；traceability 状态列按 status.md 实际填写（V5-02–V5-06、V5-14–V5-16 写“阶段 A 软件已交付，真实数据未运行”，其余照实）**
 
 - [ ] **Step 4: 运行确认通过**
 
@@ -1687,9 +1687,9 @@ git commit -m "Record D1-D4 decisions and sync status documents"
 
 **Goal:** 把 v41 记录迁移到 v5.1 契约，登记来源政策并固化几何软件检查，建立符合 Proposal §3.3 的曝光账本和划分；全部用合成数据在 CPU 上验证，真实数据步骤单列且等待批准。
 
-**范围划分（执行者裁定，2026-11-06）：** 阶段 B 拆为 B1（T07–T08，数据层，CPU 可测）与 B2（T09a–c、T10，训练/推理与基线，需 GPU、G-BASE 批准和 148 环境核验）。B2 在 B1 完成并经审查后再细化。
+**范围划分（执行者裁定，2026-11-06）：** 阶段 B 拆为 B1（T07–T08，数据层，CPU 可测）与 B2（T09a–c、T10，训练/推理与基线，需 GPU、G-BASE 批准和 amax 环境核验）。B2 在 B1 完成并经审查后再细化。
 
-**依据：** Proposal §3.1–3.3、§4.1；`reports/v5/host_precheck_148.md`（ISLES 250 例 DWI/ADC/mask；SKM 155 个 H5，含 `echo1`、`echo2`、`seg`，标注 v1.0.0）。
+**依据：** Proposal §3.1–3.3、§4.1；`reports/v5/host_precheck_amax.md`（ISLES 250 例 DWI/ADC/mask；SKM 155 个 H5，含 `echo1`、`echo2`、`seg`，标注 v1.0.0）。
 
 **约束：** Global Constraints 与 §2.0 适用。真实数据只在获得对应来源的 G-DATA 数据使用批准、且研究者同意写服务器后运行；仓库只接纳脱敏汇总。串行顺序：T07a → T07b → T07c → T08a → T08b。
 
@@ -1760,7 +1760,7 @@ git commit -m "Record D1-D4 decisions and sync status documents"
 - [ ] **Step 1: 写失败测试**：`test_summary_has_counts_only`（合成行含 `case_id`/路径，汇总与 markdown 中均不出现）、`test_summary_counts_match_rows`、`test_missing_pairs_are_counted_not_dropped`。
 - [ ] **Step 2–4:** 同上 RED → 实现 → GREEN。
 - [ ] **Step 5: 提交** `Add redacted source-check summaries`。
-- **真实运行（不在本任务完成条件内）：** 在 148 上对 ISLES、SKM 各跑一次 `run_geometry_qc` 与 `downsample_loss_report_v5`，原始行写 `$PRIVATE_ROOT`，脱敏 markdown 入库，并据此填写来源政策的 `null` 项。前提：对应来源的 G-DATA 数据使用批准、研究者同意写服务器。
+- **真实运行（不在本任务完成条件内）：** 在 amax 上对 ISLES、SKM 各跑一次 `run_geometry_qc` 与 `downsample_loss_report_v5`，原始行写 `$PRIVATE_ROOT`，脱敏 markdown 入库，并据此填写来源政策的 `null` 项。前提：对应来源的 G-DATA 数据使用批准、研究者同意写服务器。
 
 ### T08a：v5 曝光账本
 
@@ -1840,13 +1840,13 @@ git commit -m "Record D1-D4 decisions and sync status documents"
 
 执行方式沿用研究者已选的 subagent-driven-development。阶段 A 共 11 个任务，按 §1.1 顺序串行；每个任务结束后做任务审查，阶段 A 结束后做一次整分支审查。阶段 B 的细化在阶段 A 整分支审查之后进行，并先处理 D4。
 
-阶段 A 实际由 executing-plans 内联执行并经整分支独立审查；§2A 补修（FX1–FX4）同样内联执行。补修完成后的下一步：把阶段 B（T07–T10）细化到阶段 A 的粒度；148 服务器只读预检与 X0 专家试点准备可并行。真实 G-DATA 放行与真实 StateReference 发布分别以 FX1、FX2 为前提。
+阶段 A 实际由 executing-plans 内联执行并经整分支独立审查；§2A 补修（FX1–FX4）同样内联执行。补修完成后的下一步：把阶段 B（T07–T10）细化到阶段 A 的粒度；amax 服务器只读预检与 X0 专家试点准备可并行。真实 G-DATA 放行与真实 StateReference 发布分别以 FX1、FX2 为前提。
 
 B1（§2B）已内联执行，经独立终审并完成修复。2026-11-07 核心目标对齐修订后，下一步如下：
 
 1. 把 B2（T09a–c、T10）细化到 B1 的粒度，纳入 §1.6 的 L2、L4–L6 与 §1.7 的接口。
 2. 与 B2 同级并行推进 X0 和 T11（§1.4）。
-3. 真实 T07/T08 运行要等两件事：G-DATA(ISLES、SKM) 批准，研究者同意写 148 服务器。运行前关闭 L1–L3、L8。
+3. 真实 T07/T08 运行要等两件事：G-DATA(ISLES、SKM) 批准，研究者同意写 amax 服务器。运行前关闭 L1–L3、L8。
 
 下一轮的检验标准，是开始产生真实数据与模型产物，而不是更多合成测试：
 - 真实 batch、小样本过拟合、恢复训练、原网格预测；

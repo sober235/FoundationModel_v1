@@ -92,7 +92,7 @@ def test_stage_a_report_points_to_current_status():
 
 
 def test_host_precheck_report_is_redacted_and_not_overclaimed():
-    report = Path("reports/v5/host_precheck_148.md").read_text(encoding="utf-8")
+    report = Path("reports/v5/host_precheck_amax.md").read_text(encoding="utf-8")
     assert not re.search(PRIVATE_PATH_PATTERN, report) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", report)
     d4 = _front_matter()["decisions"]["D4"]
     assert d4["implementation_status"] == "PARTIAL" and d4["run_status"] == "NOT_RUN"

@@ -1,7 +1,7 @@
 ---
 plan_revision: "2026-11-07"
 execution_base: "GitHub sober235/FoundationModel_v1 current content (branch restart-dev); code identical to d7cbd5b"
-spec_sha256: "5937627173942f3bc015cb2b5513fd6af3614fe973e1ba153f4dde0e5e1da972"
+spec_sha256: "007850125c31cbebaf04e1cac673e25c7772554e5e93cad46dbb5b3176959992"
 scientific_conclusion: NOT_EVALUATED
 core_target_validated: null
 study_package_complete: false
@@ -30,9 +30,9 @@ decisions:
     run_status: NOT_RUN
     scientific_conclusion: NOT_EVALUATED
   D4:
-    choice: server_148
+    choice: server_amax
     decided_at: "2026-11-06"
-    implementation_status: PARTIAL   # read-only precheck done (reports/v5/host_precheck_148.md); v5 tests not yet run on the host
+    implementation_status: PARTIAL   # read-only precheck done (reports/v5/host_precheck_amax.md); v5 tests not yet run on the host
     run_status: NOT_RUN
     scientific_conclusion: NOT_EVALUATED
 blockers: ["PRIVATE_PATHS_IN_HISTORY:memory.md", "PRIVATE_PATHS_TRACKED:v41_docs", "BLOCKED_EXPERT_REVIEW",
@@ -227,7 +227,7 @@ tasks:
   - D1 不阻塞阶段 B 工程；它阻塞最终能力判定与 G-H3-SCI。
 - **D2 `memory.md`：** 已停止 Git 跟踪并加入 `.gitignore`（FX3），公开仓库保留脱敏的 `memory.example.md`。**当前跟踪树并不干净**：以下 4 个仍被跟踪的 v4.1 文档含与旧 `memory.md` 相同的私有原始数据根与私有产物根（blocker `PRIVATE_PATHS_TRACKED:v41_docs`）：`AnatoBind_MRI_v4.1_Feasibility_Proposal.md`、`AnatoBind_MRI_v4.1_Supervision_Data_Contract.md`、`docs/archive/v4.1/plan.md`、`reports/v41/reuse_decisions.md`。是否脱敏这些归档文档由研究者决定；未处理前 D2 实现状态为 `PARTIAL`。Git 历史未改写：历史中有私有路径；按 token 格式扫描未发现凭证字符串，但这不是完整的敏感性审查。是否清理历史由研究者另行决定（blocker `PRIVATE_PATHS_IN_HISTORY:memory.md`）。其他机器上的旧克隆 `git pull` 前须先备份本机 `memory.md`。
 - **D3 专家资源：** 保留 SKM 联合场景；先准备 20–30 次非锁定开发扫描试点，明确主读、独立复读、仲裁责任，以及异常边界、不确定带与单层可判读规则。人员与预算未落实前 X0 不标完成，相关科学验证保持 `BLOCKED_EXPERT_REVIEW`。框、分级或伪标签不能替代原定联合验证；试点不能形成稳定体素参照时，再按实际资源提出替代场景。
-- **D4 执行主机：** 选定 148 数据服务器。2026-11-06 已完成只读预检（`reports/v5/host_precheck_148.md`）：硬件与 ISLES/SKM 数据就位；服务器检出仍是旧 `main`，v5 测试尚未在其 Python 3.11 / NumPy 2.4 / SciPy 1.17 上运行，故仍未登记为正式执行环境（blocker `EXECUTION_HOST_UNVERIFIED`）。在服务器解释器上跑通 v5 测试后才登记为正式执行环境；解释器路径以实测为准，真实路径只进本地配置。
+- **D4 执行主机：** 选定 amax 数据服务器。2026-11-06 已完成只读预检（`reports/v5/host_precheck_amax.md`）：硬件与 ISLES/SKM 数据就位；服务器检出仍是旧 `main`，v5 测试尚未在其 Python 3.11 / NumPy 2.4 / SciPy 1.17 上运行，故仍未登记为正式执行环境（blocker `EXECUTION_HOST_UNVERIFIED`）。在服务器解释器上跑通 v5 测试后才登记为正式执行环境；解释器路径以实测为准，真实路径只进本地配置。
 - **D5 长期目标定位（2026-11-07 提出，待决定）：** v5.1 是否作为“可迁移 MRI 基础模型”长期目标中的一个能力验证阶段；若是，是否在 v5.1 之后另立复用/迁移/泛化里程碑（Proposal §1.4，plan §1.5）。不改变 v5.1 的任务与完成判定。
 
 ## 阶段 A 补修（plan_v5.md §2A，外部审查后）
