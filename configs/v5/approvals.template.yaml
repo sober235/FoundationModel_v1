@@ -1,0 +1,22 @@
+# v5.1 gate approvals TEMPLATE (Proposal_v5 §9). Every value stays null until the responsible person
+# fills {approved_by, approved_at, scope_hash}. An approval is valid only for the scope_hash it names.
+# The agent never fills these. G-H3-ENG has no approval keys and is not listed.
+G-DATA:
+  data_use: null
+G-BASE-A:
+  resources: null
+G-BASE-U:
+  resources: null
+G-ANNOTATION:
+  clinical_definition: null
+  reader_policy: null
+G-JOINT:
+  resources: null
+G-H2:
+  resources: null
+G-H3-SCI:
+  capability_standards: null
+  noninferiority_margins: null
+G-LOCKED:
+  independence: null
+  unseal: null

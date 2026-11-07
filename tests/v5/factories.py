@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 
 import numpy as np
 
@@ -197,3 +198,12 @@ def make_module_output(scope, task: str, **fields) -> dict:
         output["reason"]["abnormality"] = _reasons(accepted, "abnormality_uncertain")
     output.update(fields)
     return output
+
+
+def make_evidence(keys) -> dict:
+    return {key: {"status": "PASS", "sha256": hashlib.sha256(key.encode()).hexdigest()} for key in keys}
+
+
+def make_approvals(scope, keys) -> dict:
+    return {key: {"approved_by": FIXTURE_APPROVER, "approved_at": "2026-11-06T00:00:00Z",
+                  "scope_hash": scope.scope_hash} for key in keys}

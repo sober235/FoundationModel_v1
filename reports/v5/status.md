@@ -31,8 +31,8 @@ tasks:
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
   T01c:
-    code_status: TODO
-    test_evidence: null
+    code_status: PASS
+    test_evidence: "tests/v5/test_gates_v5.py: 7 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED
