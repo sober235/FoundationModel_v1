@@ -82,3 +82,11 @@ def test_fix_pack_rows_cite_existing_commits():
 def test_stage_a_report_points_to_current_status():
     head = Path("reports/v5/stage_a_report.md").read_text(encoding="utf-8").split("\n## ")[0]
     assert "reports/v5/status.md" in head and "已被" in head
+
+
+def test_host_precheck_report_is_redacted_and_not_overclaimed():
+    report = Path("reports/v5/host_precheck_148.md").read_text(encoding="utf-8")
+    assert not re.search(PRIVATE_PATH_PATTERN, report) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", report)
+    d4 = _front_matter()["decisions"]["D4"]
+    assert d4["implementation_status"] == "PARTIAL" and d4["run_status"] == "NOT_RUN"
+    assert "EXECUTION_HOST_UNVERIFIED" in _front_matter()["blockers"]
