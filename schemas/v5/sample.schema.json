@@ -156,7 +156,9 @@
         "required": [
           "experiment_id",
           "role",
-          "recorded_at"
+          "recorded_at",
+          "lineage_id",
+          "evidence"
         ],
         "properties": {
           "experiment_id": {
@@ -165,16 +167,28 @@
           "role": {
             "type": "string",
             "enum": [
-              "train",
-              "val",
-              "test",
-              "ssl",
-              "pseudo_label",
+              "training",
+              "unlabeled_pretraining",
+              "model_selection",
+              "test_results_seen",
+              "administrative_qc",
               "unknown"
             ]
           },
           "recorded_at": {
             "type": "string"
+          },
+          "lineage_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       }

@@ -3,13 +3,15 @@
 Migration adds the v5.1 fields, never upgrades evidence: geometry status can
 only stay unknown or fail unless the source policy registers the evidence,
 headers and units are not edited, and v41 "limited" visibility (which has no
-region) is refused rather than rewritten. The input record is not modified.
+region) is refused rather than rewritten. v41 exposure roles are mapped to the
+v5 roles with no lineage. The input record is not modified.
 """
 from __future__ import annotations
 
 import dataclasses
 
 from .contracts_v5 import SCHEMA_VERSION_V5, ActiveScope, SampleV5, V5Error, validate_sample_v5
+from .exposure_v5 import migrate_exposure_v41
 from .schema import SampleRecord
 from .source_policy_v5 import SourcePolicy
 
@@ -48,6 +50,8 @@ def migrate_v41_record_v5(record: SampleRecord, policy: SourcePolicy, scope: Act
         raise V5Error("SCOPE_MISMATCH", "$.active_scope_id")
     body["annotation_records"] = [_annotation(a, policy, f"$.annotation_records[{i}]")
                                   for i, a in enumerate(body["annotation_records"])]
+    body["exposure_history"] = [migrate_exposure_v41(e, f"$.exposure_history[{i}]")
+                                for i, e in enumerate(body["exposure_history"])]
     body.update(schema_version=SCHEMA_VERSION_V5, active_scope_id=scope.scope_id,
                 reference_policy_id=policy.reference_policy_id, model_modalities=list(policy.model_modalities),
                 index_alignment_status=_index_status(body, policy),
