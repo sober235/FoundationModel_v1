@@ -4,7 +4,7 @@ Roles say how a sample has been seen. A lineage is the line of models one
 locked test is meant to judge. Seeing test results (or an unknown exposure)
 is a research-selection exposure and blocks every lineage; training-type
 exposure blocks only its own lineage, or every lineage when the entry does
-not name one; administrative QC never blocks.
+not name one (a blank lineage counts as not named); administrative QC never blocks.
 """
 from __future__ import annotations
 
@@ -40,8 +40,12 @@ def locked_test_blockers_v5(exposure_history: list[dict], lineage_id: str) -> li
         role = entry.get("role")
         if role not in EXPOSURE_ROLES_V5:
             raise V5Error("INVALID_EXPOSURE_ROLE", f"{path}.role")
+        entry_lineage = entry.get("lineage_id")
+        if entry_lineage is not None and not isinstance(entry_lineage, str):
+            raise V5Error("INVALID_LINEAGE", f"{path}.lineage_id")
         if role in GLOBAL_BLOCKING_ROLES:
             blockers.add(role)
-        elif role in LINEAGE_BLOCKING_ROLES and entry.get("lineage_id") in (None, lineage_id):
+        elif role in LINEAGE_BLOCKING_ROLES and (not entry_lineage or not entry_lineage.strip()
+                                                 or entry_lineage.strip() == lineage_id.strip()):
             blockers.add(role)
     return sorted(blockers)

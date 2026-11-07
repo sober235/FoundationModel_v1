@@ -70,3 +70,12 @@ def test_blockers_reject_bad_inputs():
         with pytest.raises(V5Error) as err:
             locked_test_blockers_v5([], lineage)
         assert (err.value.code, err.value.path) == ("INVALID_LINEAGE", "$.lineage_id")
+
+
+def test_blank_lineage_entry_blocks_like_null():
+    for blank in ("", "   "):
+        assert locked_test_blockers_v5([_entry("training", blank)], "lin-a") == ["training"]
+    assert locked_test_blockers_v5([_entry("training", " lin-a ")], "lin-a") == ["training"]
+    with pytest.raises(V5Error) as err:
+        locked_test_blockers_v5([_entry("training", 3)], "lin-a")
+    assert (err.value.code, err.value.path) == ("INVALID_LINEAGE", "$.exposure_history[0].lineage_id")
