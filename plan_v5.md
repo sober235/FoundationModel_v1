@@ -1303,6 +1303,283 @@ git commit -m "Add lesion-level detection metrics for U"
 
 ---
 
+## 2A. 阶段 A 补修（2026-11-07，外部审查后）
+
+**Goal:** 关闭外部审查在 `6231fbb` 上复现的两处缺口，落实研究者对 D1–D4 的决定，并同步状态文档；不新增科学结论。
+
+**依据：** 研究者 2026-11-07 采纳外部审查建议——D1 选 `reference_comparison` 并保留 H3 对同场景专用二维/三维系统的预注册非劣；D2 停止跟踪 `memory.md` 并忽略，历史另审；D3 保留 SKM 联合场景，先准备 20–30 次非锁定开发扫描试点，人员未落实前保持 `BLOCKED_EXPERT_REVIEW`；D4 优先 148 数据服务器，“已选定”与“已核验就绪”分开登记。
+
+**约束：** Global Constraints 全部适用；§2.0 共用约定适用。四个任务串行：FX1 → FX2 → FX3 → FX4。
+
+**Review Focus（补修）：**
+1. 证据缺少绑定字段（旧格式 `{status, sha256}`）必须被挡住，不能因字段缺失而默认匹配 —— FX1 `test_evidence_without_binding_is_rejected`。
+2. 同一 scope 不同数据版本的证据不能互用 —— FX1 `test_evidence_from_other_source_or_version_is_rejected`。
+3. A 为 `limited` 时只在 A 可见区域内可评，区域外不得变成目标阴性 —— FX2 `test_limited_a_visibility_restricts_eligibility`。
+4. A 可见性只作用于参照状态组织体素；非状态组织仍只带 `not_state_tissue` —— FX2 `test_a_visibility_bit_only_on_state_tissue`。
+5. 移出跟踪后的 `memory.md` 不能再被 `git add` 误加 —— FX3 `test_memory_md_untracked_and_ignored`。
+
+### FX1：准入证据绑定 scope／来源／任务
+
+**Files:**
+- Modify: `anatobind/v41/gates_v5.py`
+- Modify: `tests/v5/factories.py`（`make_evidence` 加绑定字段；新增 `SYNTH_SOURCE`）
+- Test: `tests/v5/test_gates_v5.py`
+- Modify: `reports/v5/status.md`（T01c `test_evidence`）
+
+**Interfaces:**
+- Produces: `evaluate_gate_v5(gate_id: str, scope: ActiveScope, evidence: dict, approvals: dict, source: dict, fixture_mode: bool = False) -> dict`；`gate_task_v5(scope: ActiveScope) -> str`（joint scope → `"joint"`；module scope 只有 A → `"A"`，只有 U → `"U"`，两者都有 → `"A+U"`）；`FIXTURE_APPROVERS = ("synthetic-fixture",)`。
+- 证据条目契约：`{"status": "PASS", "sha256": <64 位小写 hex>, "scope_hash": scope.scope_hash, "source_id": source["source_id"], "source_version": source["source_version"], "task": gate_task_v5(scope)}`。
+- 返回值在原有键之外增加 `source_id`、`source_version`、`task`。
+- 工厂：`SYNTH_SOURCE = {"source_id": "synthetic_source", "source_version": "v0"}`；`make_evidence(keys, scope, source=SYNTH_SOURCE) -> dict`。
+
+**规则：**
+- `source` 不是含非空字符串 `source_id`、`source_version` 的 dict → `V5Error("INVALID_SOURCE", "$.source")`；`fixture_mode` 非 bool → `V5Error("INVALID_TYPE", "$.fixture_mode")`。
+- 证据：非 PASS 或 sha256 非法 → `EVIDENCE_MISSING:<key>`（不变）；PASS 且 sha256 合法、但四个绑定字段任一缺失或不等 → `EVIDENCE_BINDING_MISMATCH:<key>`。
+- 批准：缺失 → `APPROVAL_MISSING:<key>`；`approved_by` 属于 `FIXTURE_APPROVERS` 且 `fixture_mode` 不为 True → `APPROVAL_FIXTURE_NOT_ALLOWED:<key>`；否则 scope_hash 不等 → `APPROVAL_SCOPE_MISMATCH:<key>`。每个批准键至多一个 blocker。
+
+- [ ] **Step 1: 改写现有 gate 测试并新增失败测试**
+
+现有 7 个测试改为传 `SYNTH_SOURCE` 与 `fixture_mode=True`，`make_evidence` 传当前 scope。新增：
+
+```python
+U_SCOPE = validate_scope_v5(make_module_scope("U"))
+
+@pytest.mark.parametrize("gate_id", ["G-DATA", "G-BASE-U"])
+def test_evidence_from_other_scope_is_rejected(gate_id):
+    keys = list(GATE_REQUIREMENTS[gate_id]["evidence"])
+    a_evidence = make_evidence(keys, A_SCOPE)
+    decision = evaluate_gate_v5(gate_id, U_SCOPE, a_evidence,
+                                make_approvals(U_SCOPE, GATE_REQUIREMENTS[gate_id]["approvals"]),
+                                SYNTH_SOURCE, fixture_mode=True)
+    assert decision["engineering_status"] == "BLOCKED"
+    assert {f"EVIDENCE_BINDING_MISMATCH:{k}" for k in keys} <= set(decision["blockers"])
+
+@pytest.mark.parametrize("field", ["source_id", "source_version"])
+def test_evidence_from_other_source_or_version_is_rejected(field):
+    other = {**SYNTH_SOURCE, field: "other"}
+    decision = evaluate_gate_v5("G-BASE-A", A_SCOPE, make_evidence(BASE_KEYS, A_SCOPE, other),
+                                make_approvals(A_SCOPE, ["resources"]), SYNTH_SOURCE, fixture_mode=True)
+    assert decision["blockers"] == sorted(f"EVIDENCE_BINDING_MISMATCH:{k}" for k in BASE_KEYS)
+
+def test_evidence_without_binding_is_rejected():
+    legacy = {k: {"status": "PASS", "sha256": hashlib.sha256(k.encode()).hexdigest()} for k in BASE_KEYS}
+    decision = evaluate_gate_v5("G-BASE-A", A_SCOPE, legacy, make_approvals(A_SCOPE, ["resources"]),
+                                SYNTH_SOURCE, fixture_mode=True)
+    assert decision["blockers"] == sorted(f"EVIDENCE_BINDING_MISMATCH:{k}" for k in BASE_KEYS)
+
+def test_fixture_approver_rejected_outside_fixture_mode():
+    args = ("G-BASE-A", A_SCOPE, make_evidence(BASE_KEYS, A_SCOPE), make_approvals(A_SCOPE, ["resources"]), SYNTH_SOURCE)
+    assert evaluate_gate_v5(*args)["blockers"] == ["APPROVAL_FIXTURE_NOT_ALLOWED:resources"]
+    assert evaluate_gate_v5(*args, fixture_mode=True)["engineering_status"] == "PASS"
+
+def test_decision_records_source_and_task():
+    decision = evaluate_gate_v5("G-BASE-A", A_SCOPE, make_evidence(BASE_KEYS, A_SCOPE),
+                                make_approvals(A_SCOPE, ["resources"]), SYNTH_SOURCE, fixture_mode=True)
+    assert (decision["source_id"], decision["source_version"], decision["task"]) == ("synthetic_source", "v0", "A")
+    assert gate_task_v5(U_SCOPE) == "U" and gate_task_v5(validate_scope_v5(make_scope())) == "joint"
+
+@pytest.mark.parametrize("source", [None, {}, {"source_id": "", "source_version": "v0"}, {"source_id": "s"}])
+def test_invalid_source_raises(source):
+    with pytest.raises(V5Error) as error:
+        evaluate_gate_v5("G-DATA", A_SCOPE, {}, {}, source)
+    assert error.value.code == "INVALID_SOURCE"
+```
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_gates_v5.py`
+Expected: FAIL（`ImportError: gate_task_v5` / `SYNTH_SOURCE`）
+
+- [ ] **Step 3: 在 `gates_v5.py` 实现上述签名与规则；更新模块 docstring 写明证据与批准都绑定 scope_hash，证据另绑定来源与任务**
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `pytest_cpu tests/v5/test_gates_v5.py && pytest_cpu tests/v41 tests/v5`
+Expected: 本文件全部通过；`tests/v41` 144 passed
+
+- [ ] **Step 5: 更新 status.md T01c 的 `test_evidence` 计数并提交**
+
+```bash
+git add anatobind/v41/gates_v5.py tests/v5/factories.py tests/v5/test_gates_v5.py reports/v5/status.md
+git commit -m "Bind gate evidence to scope, source and task; reject fixture approvers outside tests"
+```
+
+### FX2：StateReference 应用 A 的输入可见性
+
+**Files:**
+- Modify: `anatobind/v41/evaluation/state.py`
+- Modify: `tests/v5/factories.py`（`make_state_reference_inputs` 新增覆盖项 `a_visibility`、`a_visibility_region`）
+- Test: `tests/v5/test_tissue_state_metrics.py`
+- Modify: `reports/v5/status.md`（T06b `test_evidence`）
+
+**Interfaces:**
+- Consumes: `visibility_support_v5(annotation, record, visibility_regions, shape, {"track": "observable_target"}, path)`（T02）。
+- Produces: `STATE_ELIGIBILITY_BITS["a_not_visible"] = 128`；`build_state_reference_v5` 签名不变。
+- 工厂：`a_visibility`（默认 `"visible"`；`"unknown"` 时 `visibility_evidence=None`，其余为 `"synthetic"`）；`a_visibility_region`（bool 数组，登记在 `visibility_regions["visibility/a1"]`，`limited` 时 A 标注的 `visibility_region_path="visibility/a1"`）。
+
+**规则：** 对每个 `scope.state_anatomy_classes` 中的组织 `k`，A 支持 `a_support_k` = 所有合格 A 参照标注（`expert_voxel`、`target_complete`、`k ∈ class_scope`）的 `visibility_support_v5` 并集；体素 `v` 若 `anatomy[v] == tissue_id(k)` 且 `a_support_k[v]` 为假，置 `a_not_visible`。参照组织不在 `state_tissue_ids` 的体素不置此位（已有 `not_state_tissue`）。U 的 `not_visible` 规则不变。哈希随 `eligibility_reason` 自然变化，无需改哈希字段。
+
+- [ ] **Step 1: 写失败测试**
+
+```python
+@pytest.mark.parametrize("visibility", ["unknown", "unobservable", "limited_empty"])
+def test_a_not_visible_is_never_normal(visibility):
+    overrides = ({"a_visibility": "limited", "a_visibility_region": np.zeros((1, 2, 2), bool)}
+                 if visibility == "limited_empty" else {"a_visibility": visibility})
+    reference = _reference(**overrides)
+    assert not reference.state_eligible.any()
+    assert (reference.eligibility_reason & STATE_ELIGIBILITY_BITS["a_not_visible"]).all()
+
+def test_visible_a_keeps_eligibility():
+    reference = _reference(a_visibility="visible")
+    assert reference.state_eligible.all()
+    assert int((reference.state_truth[reference.state_eligible] == 0).sum()) == 2
+
+def test_limited_a_visibility_restricts_eligibility():
+    region = np.zeros((1, 2, 2), bool)
+    region[0, 0, :] = True
+    reference = _reference(a_visibility="limited", a_visibility_region=region)
+    assert np.array_equal(reference.state_eligible, region)
+
+def test_a_visibility_bit_only_on_state_tissue():
+    inputs = make_state_reference_inputs(SCOPE, a_visibility="unobservable")
+    inputs["arrays"]["anatomy"][0, 0, 0] = 0
+    reference = build_state_reference_v5(inputs["record"], inputs["arrays"], SCOPE, "obs-synth-1")
+    assert reference.eligibility_reason[0, 0, 0] & STATE_ELIGIBILITY_BITS["a_not_visible"] == 0
+    assert reference.eligibility_reason[0, 0, 0] & STATE_ELIGIBILITY_BITS["not_state_tissue"]
+```
+
+（`_reference` 是该测试文件已有的辅助函数，按覆盖项调用 `make_state_reference_inputs` 再 `build_state_reference_v5`；若其签名不同，按其现有写法传覆盖项。）
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_tissue_state_metrics.py`
+Expected: FAIL（`KeyError: 'a_not_visible'` 或断言失败）
+
+- [ ] **Step 3: 在 `state.py` 按规则实现；在 docstring 写明 A 可见性按参照组织身份应用**
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `pytest_cpu tests/v5/test_tissue_state_metrics.py && pytest_cpu tests/v41 tests/v5`
+Expected: 全部通过；`tests/v41` 144 passed
+
+- [ ] **Step 5: 更新 status.md T06b 计数并提交**
+
+```bash
+git add anatobind/v41/evaluation/state.py tests/v5/factories.py tests/v5/test_tissue_state_metrics.py reports/v5/status.md
+git commit -m "Apply anatomy input visibility per reference tissue in StateReference"
+```
+
+### FX3：D2 —— 停止跟踪 memory.md
+
+**Files:**
+- Untrack: `memory.md`（`git rm --cached`，本地文件保留）
+- Modify: `.gitignore`（新增一节 `# private project memory (contains server paths)` 与一行 `memory.md`）
+- Create: `memory.example.md`
+- Test: `tests/v5/test_status_docs.py`
+
+**`memory.example.md` 内容：** 首段写明“本文件是 `memory.md` 的脱敏示例；真实 `memory.md` 只在本地、已被 `.gitignore` 忽略。其他机器上的旧克隆在 `git pull` 前先备份本机 `memory.md`，否则拉取会把它从工作区删除。”；保留 `## 关键路径`、`## GitHub 推送方式` 两节，所有路径与命令参数替换为 `<PRIVATE_ROOT>`、`<ASKPASS_SCRIPT>` 等占位符；`## 用户偏好/规则` 一节逐字照抄。不含“已完成 / spec.md / 待用户操作”等历史流水。
+
+- [ ] **Step 1: 写失败测试**
+
+```python
+def test_memory_md_untracked_and_ignored():
+    tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "memory.md"], capture_output=True)
+    ignored = subprocess.run(["git", "check-ignore", "-q", "memory.md"])
+    assert tracked.returncode != 0 and ignored.returncode == 0
+    example = Path("memory.example.md").read_text(encoding="utf-8")
+    assert "## 用户偏好/规则" in example
+    assert not re.search(r"/(Users|home|data|mnt|private|srv|opt)/", example)
+```
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_status_docs.py`
+Expected: FAIL（`memory.md` 仍被跟踪）
+
+- [ ] **Step 3: 执行**
+
+```bash
+git rm --cached memory.md
+```
+
+写 `.gitignore` 与 `memory.example.md`。若删除钩子拦截 `git rm --cached`，请研究者在会话中运行 `! git rm --cached memory.md`。Git 历史不改写。
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `pytest_cpu tests/v5/test_status_docs.py && test -f memory.md`
+Expected: PASS，且本地 `memory.md` 仍在
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add .gitignore memory.example.md tests/v5/test_status_docs.py
+git commit -m "Stop tracking memory.md and add a redacted example"
+```
+
+（`git rm --cached` 已暂存删除；提交前 `git diff --cached --stat` 只应列出这四个路径。）
+
+### FX4：D1–D4 决定登记与文档同步
+
+**Files:**
+- Modify: `reports/v5/status.md`、`tests/v5/test_status_docs.py`
+- Modify: `plan_v5.md` §1.3、§4
+- Modify: `README.md`（“当前边界”首段）
+- Modify: `reports/v5/traceability.md`（状态列）
+
+**status.md 头部：** `open_decisions: []`；新增 `decisions`，D1–D4 各含 `choice`、`decided_at`、`implementation_status`、`run_status`、`scientific_conclusion` 五项：
+
+| ID | choice | implementation_status | run_status | scientific_conclusion |
+| --- | --- | --- | --- | --- |
+| D1 | `reference_comparison_with_h3_noninferiority` | `TODO`（容差与约束在独立测试前冻结；政策实例待联合 scope 冻结后建立） | `NOT_RUN` | `NOT_EVALUATED` |
+| D2 | `untrack_and_ignore_history_review_pending` | `PASS`（FX3） | `NOT_APPLICABLE` | `NOT_APPLICABLE` |
+| D3 | `skm_joint_pilot_20_30_dev_scans` | `TODO`（人员、预算未落实） | `NOT_RUN` | `NOT_EVALUATED` |
+| D4 | `server_148` | `TODO`（只读预检未做） | `NOT_RUN` | `NOT_EVALUATED` |
+
+`decided_at` 取执行当天日期。`blockers` 改为 `["PRIVATE_PATHS_IN_HISTORY:memory.md", "BLOCKED_EXPERT_REVIEW", "EXECUTION_HOST_UNVERIFIED"]`。正文“待研究者决定事项”改为“研究者决定（2026-11-07）”，逐条写选择、未完成部分，并新增“阶段 A 补修”表（FX1–FX4，各附提交号与测试）。
+
+**D1 正文须写明：** 患者间等权；J 为患者内冻结病灶集合的成功数/支持数；A/U/S 观测级指标先观测、再患者内汇总、再患者等权；逐指标登记支持集合、患者内权重与空值原因；预测为空或全部弃权造成的 `None` 不得记作“参照无支持”（当前 `summarize_state_by_patient_v5` 的 `n_patients_without_support` 混记 precision 的这两种情形，修订放入阶段 C 汇总任务）；不得按测试结果选择聚合方式。
+
+- [ ] **Step 1: 改写 `test_known_blockers_are_recorded` 为失败测试**
+
+```python
+def test_decisions_recorded_with_separate_statuses():
+    meta = _front_matter()
+    assert meta["open_decisions"] == []
+    assert list(meta["decisions"]) == ["D1", "D2", "D3", "D4"]
+    for row in meta["decisions"].values():
+        assert set(row) == {"choice", "decided_at", "implementation_status", "run_status", "scientific_conclusion"}
+    assert meta["decisions"]["D1"]["choice"] == "reference_comparison_with_h3_noninferiority"
+    assert meta["decisions"]["D4"]["run_status"] == "NOT_RUN"
+    assert {"PRIVATE_PATHS_IN_HISTORY:memory.md", "BLOCKED_EXPERT_REVIEW",
+            "EXECUTION_HOST_UNVERIFIED"} == set(meta["blockers"])
+```
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_status_docs.py`
+Expected: FAIL（`KeyError: 'decisions'`）
+
+- [ ] **Step 3: 按上文改 status.md；plan §1.3 表格加“决定（2026-11-07）”列；§4 写明补修后下一步为阶段 B 细化与 148 只读预检；README “当前边界”首段写明执行基线与当前实现提交、科学结论仍为 `NOT_EVALUATED`；traceability 状态列按 status.md 实际填写（V5-02–V5-06、V5-14–V5-16 写“阶段 A 软件已交付，真实数据未运行”，其余照实）**
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `pytest_cpu tests/v41 tests/v5`
+Expected: 全部通过；`tests/v41` 144 passed
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add reports/v5/status.md tests/v5/test_status_docs.py plan_v5.md README.md reports/v5/traceability.md
+git commit -m "Record D1-D4 decisions and sync status documents"
+```
+
+### 补修完成判定
+
+`pytest_cpu tests/v41 tests/v5` 全部通过；FX1–FX4 提交齐全；整段补修做一次独立审查；推送前征得研究者同意。补修只改软件行为与登记，不产生真实数据或科学结论。
+
+---
+
 ## 3. Proposal 追踪（V5-01–V5-18）
 
 | ID | 必须关闭的问题 | 任务 |
