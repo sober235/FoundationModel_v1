@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -37,3 +39,12 @@ def test_known_blockers_are_recorded():
     assert {"D1", "D2", "D3", "D4"} <= set(meta["open_decisions"])
     assert "PRIVATE_PATHS_TRACKED:memory.md" in meta["blockers"]
     assert "BLOCKED_EXPERT_REVIEW" in meta["blockers"]
+
+
+def test_memory_md_untracked_and_ignored():
+    tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "memory.md"], capture_output=True)
+    ignored = subprocess.run(["git", "check-ignore", "-q", "memory.md"])
+    assert tracked.returncode != 0 and ignored.returncode == 0
+    example = Path("memory.example.md").read_text(encoding="utf-8")
+    assert "## 用户偏好/规则" in example
+    assert not re.search(r"/(Users|home|data|mnt|private|srv|opt)/", example)
