@@ -12,6 +12,10 @@ from anatobind.v41.geometry_v5 import (
     restore_grid_v5,
 )
 
+# NumPy 2.0 with macOS Accelerate emits spurious divide-by-zero/overflow/invalid RuntimeWarnings from matmul for some shapes;
+# the values are finite and match einsum. A real overflow still fails these tests' value assertions.
+pytestmark = pytest.mark.filterwarnings("ignore:(divide by zero|overflow|invalid value) encountered in matmul:RuntimeWarning")
+
 
 def _anisotropic_rotated_affine() -> np.ndarray:
     theta = 0.3
@@ -22,9 +26,6 @@ def _anisotropic_rotated_affine() -> np.ndarray:
     return affine
 
 
-# NumPy 2.0 with macOS Accelerate emits a spurious "divide by zero" RuntimeWarning from matmul for some shapes;
-# the values are finite and match einsum. A real overflow would still fail the < 1e-4 assertion (NaN compares False).
-@pytest.mark.filterwarnings("ignore:divide by zero encountered in matmul:RuntimeWarning")
 def test_affine_roundtrip_within_1e_4_voxel():
     points = np.random.default_rng(0).uniform(0, 512, size=(1000, 3))
     assert affine_roundtrip_error_v5(points, _anisotropic_rotated_affine()) < 1e-4
