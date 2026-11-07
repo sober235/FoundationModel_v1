@@ -71,3 +71,23 @@ def test_unknown_pairing_status_raises():
         summarize_source_check_v5(geometry, pairing, channel, loss, make_source_policy())
     assert (err.value.code, err.value.path) == ("INVALID_PAIRING_STATUS", "$.pairing_rows[4].status")
     assert SECRET_CASE not in str(err.value)
+
+
+@pytest.mark.parametrize("part,value,path", [
+    ("geometry", '["AFFINE_MISMATCH"]', "$.geometry_rows[0].reasons"),
+    ("channel", [{"tracks": {"t": {"best": "x"}}}], "$.channel_reports[0].tracks"),
+    ("loss", [{"factor": 2, "classes": {}}], "$.loss_reports[0].factor"),
+    ("loss", [{"factor": [2, 2, 2], "classes": []}], "$.loss_reports[0].classes"),
+    ("loss", [{"factor": [2, 2, 2], "classes": {"a": {"components_vanished": "1"}}}], "$.loss_reports[0].classes"),
+])
+def test_malformed_rows_raise_v5_errors(part, value, path):
+    geometry, pairing, channel, loss = _rows()
+    if part == "geometry":
+        geometry[0]["reasons"] = value
+    elif part == "channel":
+        channel = value
+    else:
+        loss = value
+    with pytest.raises(V5Error) as err:
+        summarize_source_check_v5(geometry, pairing, channel, loss, make_source_policy())
+    assert (err.value.code, err.value.path) == ("INVALID_TYPE", path)

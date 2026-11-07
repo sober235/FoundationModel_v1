@@ -7,6 +7,8 @@ unrecognised reason strings are counted as ``OTHER`` rather than echoed.
 """
 from __future__ import annotations
 
+import numpy as np
+
 from .contracts_v5 import V5Error
 from .source_policy_v5 import SourcePolicy, source_binding_v5
 
@@ -21,6 +23,10 @@ def _field(row: object, key: str, path: str):
     if key not in row:
         raise V5Error("MISSING_FIELD", f"{path}.{key}")
     return row[key]
+
+
+def _is_count(value: object) -> bool:
+    return isinstance(value, (int, np.integer)) and not isinstance(value, bool) and value >= 0
 
 
 def _own_rows(rows: list, name: str, source_dataset: str) -> list[tuple[str, dict]]:
@@ -50,7 +56,10 @@ def _geometry(rows: list[tuple[str, dict]]) -> tuple[dict, dict]:
     for path, row in rows:
         status = _field(row, "status", path)
         counts[status if status in ("pass", "fail") else "unknown"] += 1
-        for reason in _field(row, "reasons", path) or []:
+        reasons_list = _field(row, "reasons", path)
+        if not isinstance(reasons_list, list):
+            raise V5Error("INVALID_TYPE", f"{path}.reasons")
+        for reason in reasons_list:
             key = reason if reason in GEOMETRY_REASONS else "OTHER"
             reasons[key] = reasons.get(key, 0) + 1
     return dict(sorted(counts.items())), dict(sorted(reasons.items()))
@@ -64,8 +73,11 @@ def _channel(reports: list) -> dict:
         tracks = _field(report, "tracks", f"$.channel_reports[{index}]")
         if not isinstance(tracks, dict):
             raise V5Error("INVALID_TYPE", f"$.channel_reports[{index}].tracks")
-        flags = [info["best"].get("consistent") is True
-                 for info in tracks.values() if isinstance(info, dict) and info.get("best")]
+        if any((info is not None and not isinstance(info, dict))
+               or (isinstance(info, dict) and info.get("best") is not None and not isinstance(info["best"], dict))
+               for info in tracks.values()):
+            raise V5Error("INVALID_TYPE", f"$.channel_reports[{index}].tracks")
+        flags = [info["best"].get("consistent") is True for info in tracks.values() if info and info.get("best")]
         if not flags:
             unevaluated += 1
         elif all(flags):
@@ -80,9 +92,17 @@ def _downsampling(reports: list) -> dict:
     classes: dict[str, dict[str, int]] = {}
     for index, report in enumerate(reports):
         path = f"$.loss_reports[{index}]"
-        factors.add(tuple(int(f) for f in _field(report, "factor", path)))
-        for name, info in sorted(_field(report, "classes", path).items()):
-            vanished = int(_field(info, "components_vanished", f"{path}.classes"))
+        factor = _field(report, "factor", path)
+        if not isinstance(factor, (list, tuple)) or not all(_is_count(f) for f in factor):
+            raise V5Error("INVALID_TYPE", f"{path}.factor")
+        factors.add(tuple(int(f) for f in factor))
+        report_classes = _field(report, "classes", path)
+        if not isinstance(report_classes, dict):
+            raise V5Error("INVALID_TYPE", f"{path}.classes")
+        for name, info in sorted(report_classes.items()):
+            vanished = _field(info, "components_vanished", f"{path}.classes")
+            if not _is_count(vanished):
+                raise V5Error("INVALID_TYPE", f"{path}.classes")
             entry = classes.setdefault(name, {"components_vanished": 0, "scans_affected": 0})
             entry["components_vanished"] += vanished
             entry["scans_affected"] += int(vanished > 0)
