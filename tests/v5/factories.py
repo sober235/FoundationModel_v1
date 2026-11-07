@@ -6,6 +6,7 @@ import hashlib
 
 import numpy as np
 
+from anatobind.v41.evaluation.reference import ReferenceLesion
 from anatobind.v41.state_rule_v5 import REASON_BITS, derive_state_map_v5
 from tests.v41.conftest import _sample
 
@@ -207,3 +208,11 @@ def make_evidence(keys) -> dict:
 def make_approvals(scope, keys) -> dict:
     return {key: {"approved_by": FIXTURE_APPROVER, "approved_at": "2026-11-06T00:00:00Z",
                   "scope_hash": scope.scope_hash} for key in keys}
+
+
+def make_reference_lesion(**overrides) -> ReferenceLesion:
+    fields = {"patient_uid": "p1", "instance_uid": "l1", "a_reference_available": True,
+              "u_reference_available": True, "r_reference_available": True, "eligible": True,
+              "visibility_qualified": True, "exclusion_reason": None, "truth_relation_set": ("tissue_a",)}
+    fields.update(overrides)
+    return ReferenceLesion(**fields)
