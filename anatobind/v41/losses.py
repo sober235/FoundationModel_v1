@@ -49,3 +49,75 @@ def aggregate_task_losses(losses: dict[str, torch.Tensor], supports: dict[str, i
             return torch.zeros(())
         return any_loss.sum() * 0.0
     return sum(terms) / total_weight
+
+
+# ---------------------------------------------------------------------------
+# v5.1 signed masked objective (Proposal_v5 §4.3). v41 functions above are unchanged.
+
+import math  # noqa: E402
+
+from .contracts_v5 import V5Error  # noqa: E402
+
+LOSS_KINDS_V5 = ("sigmoid", "softmax")
+
+
+def _check_weights_v5(task_spec: dict) -> tuple[float, float]:
+    weights = (task_spec.get("ce_weight"), task_spec.get("dice_weight"))
+    valid = all(isinstance(w, (int, float)) and not isinstance(w, bool) and math.isfinite(w) and w >= 0
+                for w in weights)
+    if not valid or sum(weights) <= 0:
+        raise V5Error("INVALID_LOSS_WEIGHTS", "$.task_spec")
+    return float(weights[0]), float(weights[1])
+
+
+def _soft_dice_v5(probs: torch.Tensor, onehot: torch.Tensor) -> torch.Tensor:
+    """Mean over channels of 1 - Dice; probs/onehot are [N, channels] over supervised positions only."""
+    intersection = (probs * onehot).sum(dim=0)
+    denominator = probs.sum(dim=0) + onehot.sum(dim=0)
+    return (1.0 - (2.0 * intersection + EPS) / (denominator + EPS)).mean()
+
+
+def masked_objective_v5(logits: torch.Tensor, target: torch.Tensor, e_pos: torch.Tensor, e_neg: torch.Tensor,
+                        task_spec: dict) -> torch.Tensor:
+    kind = task_spec.get("kind")
+    if kind not in LOSS_KINDS_V5:
+        raise V5Error("UNKNOWN_LOSS_KIND", "$.task_spec.kind")
+    ce_weight, dice_weight = _check_weights_v5(task_spec)
+    e_pos, e_neg = e_pos.to(torch.bool), e_neg.to(torch.bool)
+    if kind == "sigmoid":
+        if not (target.shape == logits.shape == e_pos.shape == e_neg.shape):
+            raise V5Error("GRID_MISMATCH", "$.logits")
+        mask = ((target == 1) & e_pos) | ((target == 0) & e_neg)
+        full_mask = mask
+    else:
+        batch, spatial, n_classes = logits.shape[0], tuple(logits.shape[2:]), logits.shape[1] - 1
+        if tuple(target.shape) != (batch, *spatial) or e_pos.shape != e_neg.shape \
+                or tuple(e_pos.shape) != (batch, n_classes, *spatial):
+            raise V5Error("GRID_MISMATCH", "$.logits")
+        mask = e_pos.all(dim=1) & e_neg.all(dim=1)
+        full_mask = mask.unsqueeze(1).expand_as(logits)
+    if not bool(mask.any()):
+        return logits.masked_fill(~full_mask, 0).sum() * 0.0
+    if kind == "sigmoid":
+        selected = logits[mask]
+        if not bool(torch.isfinite(selected).all()):
+            raise V5Error("NON_FINITE_LOGITS", "$.logits")
+        labels = target[mask].to(logits.dtype)
+        ce = F.binary_cross_entropy_with_logits(selected, labels)
+        per_class = []
+        for c in range(logits.shape[1]):
+            class_mask = mask[:, c]
+            if bool(class_mask.any()):
+                probs = torch.sigmoid(logits[:, c][class_mask]).unsqueeze(1)
+                per_class.append(_soft_dice_v5(probs, target[:, c][class_mask].to(logits.dtype).unsqueeze(1)))
+        dice = torch.stack(per_class).mean()
+    else:
+        selected = logits.movedim(1, -1)[mask]
+        if not bool(torch.isfinite(selected).all()):
+            raise V5Error("NON_FINITE_LOGITS", "$.logits")
+        labels = target[mask].long()
+        ce = F.cross_entropy(selected, labels)
+        probs = torch.softmax(selected, dim=1)
+        onehot = F.one_hot(labels, num_classes=logits.shape[1]).to(logits.dtype)
+        dice = _soft_dice_v5(probs[:, 1:], onehot[:, 1:])
+    return ce_weight * ce + dice_weight * dice
