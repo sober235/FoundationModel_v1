@@ -68,7 +68,7 @@ tasks:
     scientific_conclusion: NOT_EVALUATED
   T06b:
     code_status: PASS
-    test_evidence: "tests/v5/test_tissue_state_metrics.py: 18 passed"
+    test_evidence: "tests/v5/test_tissue_state_metrics.py: 24 passed"
     data_run_status: NOT_APPLICABLE
     approval_status: NOT_REQUIRED
     scientific_conclusion: NOT_EVALUATED

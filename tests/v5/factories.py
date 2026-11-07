@@ -230,7 +230,8 @@ def make_state_reference_inputs(scope, **overrides) -> dict:
     """Default: every voxel reference tissue_a, target_a positive at (0,0,0) and (0,1,0), all reviewed/visible/in FOV.
 
     Overrides: review (array; makes the U annotation region_complete on path "review/r1"), u_completeness,
-    u_visibility, u_reference_role, a_reference_role, a_class_scope, single_slice_readable.
+    u_visibility, u_reference_role, a_reference_role, a_class_scope, single_slice_readable, a_visibility,
+    a_visibility_region (array; registered as "visibility/a1" and used when a_visibility is "limited").
     """
     shape = (2, 2) if scope.observation_mode == "2d" else (1, 2, 2)
     review = overrides.get("review")
@@ -244,11 +245,14 @@ def make_state_reference_inputs(scope, **overrides) -> dict:
         "reference_role": overrides.get("u_reference_role", "expert_voxel"),
     }
     sample = make_sample_v5(annotation=u_annotation)
+    a_visibility = overrides.get("a_visibility", "visible")
     anatomy_annotation = copy.deepcopy(_sample()["annotation_records"][0])
     anatomy_annotation.update(annotation_uid="ann-v5-a", task="A",
                               class_scope=list(overrides.get("a_class_scope", scope.anatomy_classes)),
                               completeness="target_complete", annotation_modalities=["qdess_e1"],
-                              visibility_region_path=None,
+                              input_visibility=a_visibility,
+                              visibility_evidence=None if a_visibility == "unknown" else "synthetic",
+                              visibility_region_path="visibility/a1" if a_visibility == "limited" else None,
                               reference_role=overrides.get("a_reference_role", "expert_voxel"))
     sample["annotation_records"].insert(0, anatomy_annotation)
     abnormality = np.zeros((len(scope.abnormality_classes), *shape), dtype=bool)
@@ -260,6 +264,7 @@ def make_state_reference_inputs(scope, **overrides) -> dict:
         "valid_fov": np.ones(shape, dtype=bool),
         "single_slice_readable": overrides.get("single_slice_readable", True),
         "review_regions": {"review/r1": review} if review is not None else {},
-        "visibility_regions": {},
+        "visibility_regions": ({"visibility/a1": overrides["a_visibility_region"]}
+                               if "a_visibility_region" in overrides else {}),
     }
     return {"record": validate_sample_v5(sample), "arrays": arrays}
