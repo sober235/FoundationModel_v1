@@ -25,7 +25,7 @@ import torch
 from ..contracts_v5 import V5Error, canonical_sha256
 from ..losses import masked_objective_v5
 from ..models.interface_v5 import ModelOutputV5, PerceptionModelV5
-from ..paths import PrivatePathError, _make_private_dirs, resolve_private_output, write_private_json
+from ..paths import PrivatePathError, _make_private_dirs, resolve_private_output, write_private_bytes, write_private_json
 from .data_v5 import PatchSamplerV5, TrainingSampleV5, make_batch_v5, positive_centers_v5
 from .registration_v5 import run_sha256_v5, validate_recipe_v5, validate_supervision_v5
 
@@ -93,10 +93,16 @@ def build_scaler_v5(recipe: dict, device_type: str) -> torch.amp.GradScaler:
     return torch.amp.GradScaler(device_type, enabled=recipe["precision"] == "amp_fp16")
 
 
-def _autocast(recipe: dict, device_type: str):
-    if recipe["precision"] == "fp32":
+PRECISIONS = ("fp32", "amp_bf16", "amp_fp16")
+
+
+def autocast_v5(precision: str, device_type: str):
+    """No autocast for fp32; bf16 or fp16 autocast for the amp precisions (training and inference alike)."""
+    if precision not in PRECISIONS:
+        raise V5Error("INVALID_PRECISION", "$.precision")
+    if precision == "fp32":
         return contextlib.nullcontext()
-    dtype = torch.bfloat16 if recipe["precision"] == "amp_bf16" else torch.float16
+    dtype = torch.bfloat16 if precision == "amp_bf16" else torch.float16
     return torch.autocast(device_type=device_type, dtype=dtype)
 
 
@@ -132,20 +138,7 @@ def save_checkpoint_v5(path: Path, state: dict, run: dict, private_root: Path, r
     torch.save(payload, buffer)
     data = buffer.getvalue()
     digest = hashlib.sha256(data).hexdigest()
-    _make_private_dirs(path.parent)
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
-    try:
-        with os.fdopen(os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "wb") as handle:
-            handle.write(data)
-            handle.flush()
-            os.fsync(handle.fileno())
-        try:
-            os.link(tmp, path)
-        except FileExistsError:
-            raise PrivatePathError("PRIVATE_FILE_EXISTS") from None
-    finally:
-        if tmp.exists():
-            tmp.unlink()
+    write_private_bytes(path, data)
     write_private_json(sidecar, {"sha256": digest, "step": step, "run_sha256": payload["run_sha256"]})
     return digest
 
@@ -289,7 +282,7 @@ def train_v5(run: dict, model: PerceptionModelV5, samples: dict, recipe: dict, s
         batch, targets, eligibility = _to_device(*make_batch_v5(samples, sampler, recipe, model.scope), device)
         lr = optimizer.param_groups[0]["lr"]
         try:
-            with _autocast(recipe, device.type):
+            with autocast_v5(recipe["precision"], device.type):
                 output = model(batch)
             for logits in (output.anatomy_logits, output.abnormality_logits):
                 if logits is not None and not bool(torch.isfinite(logits).all()):

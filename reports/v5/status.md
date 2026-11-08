@@ -129,8 +129,8 @@ tasks:
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T09c:
-    code_status: TODO
-    test_evidence: null
+    code_status: PASS
+    test_evidence: "tests/v5/test_inference_v5.py: 6 passed; test_perception_chain.py: 10 passed; test_perception_io.py: 4 passed; test_training_data.py: 13 passed (chain order)"
     data_run_status: NOT_STARTED
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED

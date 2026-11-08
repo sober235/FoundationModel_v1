@@ -5,6 +5,7 @@ review or visibility files (GC8). Channels are taken by modality name in the sco
 model modalities must equal the scope's inputs (L2). Downsampling is strided sampling anchored at the origin, the
 same for image, labels and regions; a block whose positive vanished on the lattice gets no negative eligibility
 (L5). Training samples come only from the frozen split's train assignment (L4). Arrays are (x, y, z).
+Transform chains list operations in the order they were applied to the original grid; restoring walks them backwards.
 """
 from __future__ import annotations
 
@@ -138,6 +139,15 @@ def _model_grid(header: dict | None, record: SampleV5, shape: tuple, factor: tup
             "affine": None if affine is None else (np.asarray(affine, dtype=float) @ np.diag([*factor, 1])).tolist(),
             "units_reliable": record.physical_geometry_status == "verified",
             "transform_chain": copy.deepcopy(to_original)}
+
+
+def original_geometry_v5(observation: ObservationV5, record: SampleV5) -> dict:
+    """GEOMETRY_KEYS of the observation's original grid: restored outputs are written on it (T09c)."""
+    if not isinstance(observation, ObservationV5) or not isinstance(record, SampleV5) \
+            or observation.sample_uid != record.sample_uid:
+        raise V5Error("INVALID_TYPE", "$.observation")
+    ones = (1,) * len(observation.original_shape)
+    return _model_grid(observation.original_header, record, observation.original_shape, ones, [])
 
 
 def load_observation_v5(root: Path, record: SampleV5, scope: ActiveScope, recipe: dict) -> ObservationV5:
@@ -360,7 +370,7 @@ def extract_patch_v5(sample: TrainingSampleV5, center: tuple, patch_size: tuple)
         affine[:3, 3] += affine[:3, :3] @ np.asarray(start, dtype=float)
         grid["affine"] = affine.tolist()
     crop = {"op": "crop", "start": list(start), "input_shape": list(shape)}
-    grid["transform_chain"] = [crop, *copy.deepcopy(observation.to_original)]
+    grid["transform_chain"] = [*copy.deepcopy(observation.to_original), crop]   # application order
     return {
         "channels": {name: _crop(array, start, size) for name, array in observation.channels.items()},
         "valid_fov": _crop(observation.valid_fov, start, size),

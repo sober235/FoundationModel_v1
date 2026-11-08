@@ -15,7 +15,7 @@ import yaml
 from anatobind.v41.contracts_v5 import validate_sample_v5, validate_scope_v5
 from anatobind.v41.evaluation.reference import ReferenceLesion
 from anatobind.v41.gates_v5 import GATE_REQUIREMENTS, evaluate_gate_v5, gate_task_v5
-from anatobind.v41.models.interface_v5 import ModelOutputV5, PerceptionModelV5
+from anatobind.v41.models.interface_v5 import ModelOutputV5, PerceptionModelV5, build_model_input_v5
 from anatobind.v41.splits_v5 import freeze_splits_v5
 from anatobind.v41.source_policy_v5 import validate_source_policy_v5
 from anatobind.v41.state_rule_v5 import REASON_BITS, derive_state_map_v5
@@ -587,3 +587,49 @@ class TinyPerceptionModel(PerceptionModelV5):
         self.calls += 1
         return ModelOutputV5(anatomy_logits=self.heads["A"](batch.image) if "A" in self.heads else None,
                              abnormality_logits=self.heads["U"](batch.image) if "U" in self.heads else None)
+
+
+# ---------------------------------------------------------------------------
+# Inference and output fixtures (plan_v5 T09c)
+
+
+def make_acceptance_policy(scope, **overrides) -> dict:
+    """A synthetic engineering acceptance policy for `scope`; tasks the scope lacks keep null values."""
+    has_a, has_u = bool(scope.anatomy_classes), bool(scope.abnormality_classes)
+    policy = {"policy_id": "synthetic_acceptance_v1", "policy_role": "engineering",
+              "anatomy": {"min_confidence": 0.5 if has_a else None},
+              "abnormality": {"thresholds": {c: 0.5 for c in scope.abnormality_classes} if has_u else None,
+                              "reject_band": {c: "none" for c in scope.abnormality_classes} if has_u else None},
+              "instances": {"connectivity": 26 if has_u else None, "min_voxels": 1 if has_u else None}}
+    return _merge(policy, overrides)
+
+
+def make_model_input_v5(scope, shape, channels=None, to_original=()):
+    """A B=1 ModelInputV5 on an identity (x, y, z) grid; channels default to zeros in scope order."""
+    shape = tuple(shape)
+    channels = channels or {name: np.zeros(shape, dtype=np.float32) for name in scope.input_modalities}
+    grid = make_original_geometry(shape)
+    grid["transform_chain"] = list(to_original)
+    return build_model_input_v5(channels, scope, np.ones(shape, dtype=bool), grid, list(to_original))
+
+
+def make_original_geometry(shape) -> dict:
+    ndim = len(shape)
+    return {"shape": list(shape), "axis_order": "xyz"[:ndim], "spacing_mm": [1.0] * ndim,
+            "affine": np.eye(4).tolist() if ndim == 3 else None, "units_reliable": True, "transform_chain": []}
+
+
+class StubPerceptionModel(PerceptionModelV5):
+    """Logits are fixed functions of each window batch; records every window's transform chain."""
+
+    def __init__(self, scope, tasks, anatomy_fn=None, abnormality_fn=None):
+        super().__init__(scope, tasks)
+        self.anatomy_fn, self.abnormality_fn = anatomy_fn, abnormality_fn
+        self.chains = []
+        self.calls = 0
+
+    def _forward_v5(self, batch):
+        self.calls += 1
+        self.chains.append(batch.to_original[0])
+        return ModelOutputV5(anatomy_logits=None if self.anatomy_fn is None else self.anatomy_fn(batch),
+                             abnormality_logits=None if self.abnormality_fn is None else self.abnormality_fn(batch))

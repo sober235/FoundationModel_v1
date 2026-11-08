@@ -1,0 +1,14 @@
+# v5.1 acceptance policy template (plan_v5 T09c; Proposal_v5 §2.1, §9). Every value is null on purpose:
+# a real policy is a registered file. B2 registers engineering values only (policy_role: engineering);
+# engineering values never become formal thresholds by themselves - calibrated ones are chosen by T14 on the
+# development split. validate_acceptance_policy_v5 rejects null values and keys for tasks the scope lacks.
+policy_id: null
+policy_role: null            # engineering | calibrated
+anatomy:
+  min_confidence: null       # A: a voxel whose largest softmax probability is below this is anatomy_uncertain
+abnormality:
+  thresholds: null           # U: {class: p}; probability >= p is positive (thresholds apply after restore)
+  reject_band: null          # U: {class: [lo, hi] | none}; lo <= probability <= hi is abnormality_uncertain
+instances:
+  connectivity: null         # 6 | 26
+  min_voxels: null           # smaller components stay in the voxel map but form no instance

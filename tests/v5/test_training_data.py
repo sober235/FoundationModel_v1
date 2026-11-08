@@ -307,3 +307,15 @@ def test_grids_are_audited_with_the_registered_tolerance(tmp_path):
             _recipe(scope, grid_tolerance={"atol_affine": None}))
     _raises("INVALID_RECIPE_VALUE", "$.grid_tolerance.atol_spacing", load_observation_v5, tmp_path, record, scope,
             _recipe(scope, grid_tolerance={"atol_spacing": -1.0}))
+
+
+def test_patch_chain_lists_ops_in_application_order():
+    # Chains list operations in the order they were applied to the original grid; restoring walks them backwards.
+    scope = _scope("A")
+    sample = make_training_sample_v5(scope, "s-0", shape=(6, 6, 6))
+    down = {"op": "downsample", "factor": [2, 2, 2], "input_shape": [12, 12, 12]}
+    observation = dataclasses.replace(sample.observation, to_original=[down],
+                                      grid=dict(sample.observation.grid, transform_chain=[down]))
+    patch = extract_patch_v5(dataclasses.replace(sample, observation=observation), (3, 3, 3), (4, 4, 4))
+    crop = {"op": "crop", "start": [1, 1, 1], "input_shape": [6, 6, 6]}
+    assert patch["to_original"] == [down, crop] and patch["grid"]["transform_chain"] == [down, crop]
