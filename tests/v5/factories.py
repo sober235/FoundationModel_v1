@@ -12,7 +12,7 @@ import numpy as np
 import torch
 import yaml
 
-from anatobind.v41.contracts_v5 import validate_sample_v5, validate_scope_v5
+from anatobind.v41.contracts_v5 import validate_module_output_v5, validate_sample_v5, validate_scope_v5
 from anatobind.v41.evaluation.reference import ReferenceLesion
 from anatobind.v41.gates_v5 import GATE_REQUIREMENTS, evaluate_gate_v5, gate_task_v5
 from anatobind.v41.models.interface_v5 import ModelOutputV5, PerceptionModelV5, build_model_input_v5
@@ -633,3 +633,61 @@ class StubPerceptionModel(PerceptionModelV5):
         self.chains.append(batch.to_original[0])
         return ModelOutputV5(anatomy_logits=None if self.anatomy_fn is None else self.anatomy_fn(batch),
                              abnormality_logits=None if self.abnormality_fn is None else self.abnormality_fn(batch))
+
+
+# ---------------------------------------------------------------------------
+# Module evaluation fixtures (plan_v5 T10)
+
+_METRIC_VALUES = {"metrics": ["dice", "hd95", "nsd", "lesion_detection"], "surface_tolerance_mm": 1.0,
+                  "iou_match_threshold": 0.3, "fp_budget_per_scan": None, "class_aware": True,
+                  "size_strata_voxels": [10]}
+
+
+def make_metric_policy(**overrides) -> dict:
+    """The null metric template filled with synthetic development values; dict overrides merge."""
+    return _merge(_fill(load_template_v5("metrics.template.yaml"), _METRIC_VALUES), overrides)
+
+
+def make_module_reference(scope, patient_uid: str, shape, anatomy_truth=None, abnormality_truth=None,
+                          units_reliable: bool = True, **overrides) -> dict:
+    """A development_val reference on the identity grid of make_original_geometry, evaluable everywhere."""
+    shape = tuple(shape)
+    geometry = make_original_geometry(shape)
+    geometry["units_reliable"] = units_reliable
+    tasks = {}
+    if anatomy_truth is not None:
+        tasks["A"] = {"truth": np.array(anatomy_truth, dtype=np.int16),
+                      "eligible": np.ones((len(scope.anatomy_classes), *shape), dtype=bool)}
+    if abnormality_truth is not None:
+        tasks["U"] = {"truth": np.array(abnormality_truth, dtype=bool),
+                      "eligible": np.ones((len(scope.abnormality_classes), *shape), dtype=bool)}
+    reference = {"patient_uid": patient_uid, "split": "development_val", "geometry": geometry, "tasks": tasks}
+    reference.update(overrides)
+    return reference
+
+
+def make_scored_output(scope, uid: str, shape, anatomy_map=None, abnormality_map=None, abnormality_accepted=None,
+                       policy_id: str = "synthetic_acceptance_v1", units_reliable: bool = True):
+    """A validated ModuleOutput on that grid; anatomy -1 marks rejected voxels, U is accepted unless given."""
+    geometry = make_original_geometry(tuple(shape))
+    geometry["units_reliable"] = units_reliable
+    enabled = [task for task, value in (("A", anatomy_map), ("U", abnormality_map)) if value is not None]
+    acceptance, reason = {}, {}
+    if anatomy_map is not None:
+        anatomy_map = np.array(anatomy_map, dtype=np.int16)
+        acceptance["anatomy"] = anatomy_map != -1
+        reason["anatomy"] = _reasons(acceptance["anatomy"], "anatomy_uncertain")
+    if abnormality_map is not None:
+        abnormality_map = np.array(abnormality_map, dtype=bool)
+        accepted = np.ones(abnormality_map.shape, dtype=bool) if abnormality_accepted is None \
+            else np.array(abnormality_accepted, dtype=bool)
+        acceptance["abnormality"] = accepted
+        reason["abnormality"] = _reasons(accepted, "abnormality_uncertain")
+    output = {"output_kind": "module", "output_version": "v5.1", "observation_uid": uid,
+              "mode": scope.observation_mode, "scope_id": scope.scope_id, "scope_hash": scope.scope_hash,
+              "checkpoint_sha256": "b" * 64, "enabled_tasks": enabled,
+              "disabled_tasks": [task for task in ("A", "U", "S", "R") if task not in enabled],
+              "anatomy_map": anatomy_map, "abnormality_map": abnormality_map, "acceptance": acceptance,
+              "reason": reason, "geometry": geometry,
+              "provenance": {"input_sha256": "a" * 64, "model_sha256": "b" * 64, "output_policy_version": policy_id}}
+    return validate_module_output_v5(output, scope)

@@ -135,8 +135,8 @@ tasks:
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T10:
-    code_status: TODO
-    test_evidence: null
+    code_status: PASS
+    test_evidence: "tests/v5/test_resunet_v5.py: 7 passed; test_module_baseline.py: 11 passed; test_training_core.py: 12 passed (shared training step)"
     data_run_status: NOT_STARTED
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED

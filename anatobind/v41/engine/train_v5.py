@@ -106,6 +106,24 @@ def autocast_v5(precision: str, device_type: str):
     return torch.autocast(device_type=device_type, dtype=dtype)
 
 
+def training_step_v5(model: PerceptionModelV5, batch, targets: dict, eligibility: dict, supervision: dict,
+                     optimizer, scheduler, scaler, precision: str) -> tuple[torch.Tensor, dict]:
+    """One step as train_v5 runs it: forward under autocast, every logit finite, loss, scaled backward, then the
+    optimizer, scaler and scheduler steps. Raises V5Error NON_FINITE_LOGITS / NON_FINITE_LOSS (STOP_CODES)."""
+    with autocast_v5(precision, batch.image.device.type):
+        output = model(batch)
+    for logits in (output.anatomy_logits, output.abnormality_logits):
+        if logits is not None and not bool(torch.isfinite(logits).all()):
+            raise V5Error("NON_FINITE_LOGITS", "$.output")
+    loss, parts = training_loss_v5(output, targets, eligibility, supervision)
+    optimizer.zero_grad(set_to_none=True)
+    scaler.scale(loss).backward()
+    scaler.step(optimizer)
+    scaler.update()
+    scheduler.step()
+    return loss, parts
+
+
 # ---------------------------------------------------------------------------
 # Checkpoints
 
@@ -282,17 +300,8 @@ def train_v5(run: dict, model: PerceptionModelV5, samples: dict, recipe: dict, s
         batch, targets, eligibility = _to_device(*make_batch_v5(samples, sampler, recipe, model.scope), device)
         lr = optimizer.param_groups[0]["lr"]
         try:
-            with autocast_v5(recipe["precision"], device.type):
-                output = model(batch)
-            for logits in (output.anatomy_logits, output.abnormality_logits):
-                if logits is not None and not bool(torch.isfinite(logits).all()):
-                    raise V5Error("NON_FINITE_LOGITS", "$.output")
-            loss, parts = training_loss_v5(output, targets, eligibility, supervision)
-            optimizer.zero_grad(set_to_none=True)
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-            scheduler.step()
+            loss, parts = training_step_v5(model, batch, targets, eligibility, supervision, optimizer, scheduler,
+                                           scaler, recipe["precision"])
         except torch.cuda.OutOfMemoryError:
             return stop("OUT_OF_MEMORY")
         except V5Error as err:
