@@ -118,25 +118,25 @@ tasks:
     scientific_conclusion: NOT_EVALUATED
   T09a:
     code_status: PASS
-    test_evidence: "tests/v5/test_run_registration.py: 66 passed; test_model_interface.py: 9 passed; test_exposure_v5.py: 8 passed; test_splits_v5.py: 12 passed"
+    test_evidence: "tests/v5/test_run_registration.py: 67 passed; test_model_interface.py: 9 passed; test_exposure_v5.py: 8 passed; test_splits_v5.py: 12 passed (after the B2 final-review fixes)"
     data_run_status: NOT_STARTED
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T09b:
     code_status: PASS
-    test_evidence: "tests/v5/test_volume_io.py: 12 passed, 1 skipped (SimpleITK comparison runs on amax); test_training_data.py: 12 passed; test_training_core.py: 12 passed"
+    test_evidence: "tests/v5/test_volume_io.py: 14 passed, 1 skipped (SimpleITK comparison runs on amax); test_training_data.py: 14 passed; test_training_core.py: 14 passed (after the B2 final-review fixes)"
     data_run_status: NOT_STARTED
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T09c:
     code_status: PASS
-    test_evidence: "tests/v5/test_inference_v5.py: 6 passed; test_perception_chain.py: 10 passed; test_perception_io.py: 4 passed; test_training_data.py: 13 passed (chain order)"
+    test_evidence: "tests/v5/test_inference_v5.py: 6 passed; test_perception_chain.py: 11 passed; test_perception_io.py: 4 passed; test_training_data.py: 14 passed (chain order; after the B2 final-review fixes)"
     data_run_status: NOT_STARTED
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T10:
     code_status: PASS
-    test_evidence: "tests/v5/test_resunet_v5.py: 7 passed; test_module_baseline.py: 11 passed; test_training_core.py: 12 passed (shared training step)"
+    test_evidence: "tests/v5/test_resunet_v5.py: 7 passed; test_module_baseline.py: 13 passed; test_training_core.py: 14 passed (shared training step; after the B2 final-review fixes)"
     data_run_status: NOT_STARTED
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
