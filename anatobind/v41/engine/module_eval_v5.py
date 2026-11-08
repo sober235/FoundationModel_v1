@@ -1,8 +1,11 @@
 """v5.1 module baseline evaluation on development_val (plan_v5 T10; Proposal §1.1, §6.1, §8.3).
 
 References are frozen before any prediction: each array is copied read-only and hashed with the patient, split
-and geometry, and the set carries reference_set_hash; evaluation recomputes both and refuses a mismatch. Only
-development_val references can be frozen. A is scored per tissue with T06a segmentation_metrics_v5 on
+and geometry, and the set carries reference_set_hash over the scope, the frozen split registry and the entries;
+evaluation recomputes both and refuses a mismatch. The split of a reference is its frozen assignment (a 3D
+observation's uid is its sample uid), never a caller's field (Proposal §3.3): only development_val can be frozen,
+and a run is scored only on its own split with development_val among its readable roles, so the exposure is
+recorded at registration. A is scored per tissue with T06a segmentation_metrics_v5 on
 pred = (anatomy_map == k): a rejected voxel is no prediction and stays in the denominator; U the same way on
 accepted positives, plus T06c lesion detection with instances from extract_instances_v5 on both sides under the
 acceptance policy's connectivity (the reference keeps every component). Millimetre metrics are None unless the
@@ -19,19 +22,22 @@ import re
 import numpy as np
 
 from ..contracts_v5 import (
-    GEOMETRY_KEYS, UNKNOWN_KEY, ActiveScope, ModuleOutput, V5Error, array_sha256, canonical_sha256)
+    GEOMETRY_KEYS, UNKNOWN_KEY, ActiveScope, ModuleOutput, V5Error, _check_schema, array_sha256, canonical_sha256)
 from ..evaluation.instances import lesion_detection_metrics_v5, summarize_lesion_detection_v5
 from ..evaluation.policy import validate_metric_policy_v5
 from ..evaluation.segmentation import segmentation_metrics_v5
 from ..perception import extract_instances_v5, validate_acceptance_policy_v5
+from ..splits_v5 import verify_split_registry_v5
+from .registration_v5 import run_sha256_v5
 from .smoke_v5 import _count, _number, _text
 
 SPLIT = "development_val"
 CONCLUSION = "NOT_EVALUATED"
-_REFERENCE_KEYS = ("patient_uid", "split", "geometry", "tasks")
-_FROZEN_KEYS = ("scope", "scope_hash", "entries", "entry_sha256", "reference_set_hash")
-_ROW_SHARED = ("split", "scope_id", "scope_hash", "reference_set_hash", "reference_entries", "checkpoint_sha256",
-               "acceptance_policy_id", "metric_policy_sha256", "metrics")
+_REFERENCE_KEYS = ("patient_uid", "geometry", "tasks")
+_FROZEN_KEYS = ("scope", "scope_hash", "split_sha256", "entries", "entry_sha256", "reference_set_hash")
+_ROW_SHARED = ("split", "scope_id", "scope_hash", "split_sha256", "run_sha256", "reference_set_hash",
+               "reference_entries", "checkpoint_sha256", "acceptance_policy_id", "metric_policy_sha256", "metrics")
+_REPORT_HASHES = ("split_sha256", "run_sha256", "checkpoint_sha256", "reference_set_hash", "metric_policy_sha256")
 _SEGMENTATION_FIELDS = (("dice", "dice"), ("hd95", "hd95_mm"), ("nsd", "nsd"))
 _DETECTION_FIELDS = ("pooled_sensitivity", "fp_per_scan")
 _HEX64 = re.compile(r"[0-9a-f]{64}")
@@ -61,8 +67,6 @@ def _check_reference(reference: object, scope: ActiveScope, path: str) -> None:
             raise V5Error("MISSING_FIELD", f"{path}.{key}")
     if not isinstance(reference["patient_uid"], str) or not reference["patient_uid"]:
         raise V5Error("INVALID_REFERENCE", f"{path}.patient_uid")
-    if reference["split"] != SPLIT:
-        raise V5Error("SPLIT_NOT_ALLOWED", f"{path}.split")
     geometry = reference["geometry"]
     if not isinstance(geometry, dict) or set(geometry) != set(GEOMETRY_KEYS) \
             or not isinstance(geometry["shape"], (list, tuple)) \
@@ -101,33 +105,41 @@ def _entry_sha256(entry: dict) -> str:
                                        for task, block in entry["tasks"].items()}})
 
 
-def _set_sha256(scope_hash: str, entry_hashes: dict) -> str:
-    return canonical_sha256({"scope_hash": scope_hash, "entries": entry_hashes})
+def _set_sha256(scope_hash: str, split_sha256: str, entry_hashes: dict) -> str:
+    return canonical_sha256({"scope_hash": scope_hash, "split_sha256": split_sha256, "entries": entry_hashes})
 
 
-def freeze_module_reference_v5(references: dict, scope: ActiveScope) -> dict:
-    """Freeze {observation_uid: {patient_uid, split, geometry, tasks: {A|U: {truth, eligible}}}} before prediction.
+def freeze_module_reference_v5(references: dict, scope: ActiveScope, registry: dict) -> dict:
+    """Freeze {observation_uid: {patient_uid, geometry, tasks: {A|U: {truth, eligible}}}} before prediction.
 
-    Returns {scope, scope_hash, entries (read-only copies), entry_sha256, reference_set_hash}. Error paths use the
-    position in sorted observation order, never the identifier.
+    Every uid must be assigned development_val in the frozen `registry`. Returns {scope, scope_hash, split_sha256,
+    entries (read-only copies), entry_sha256, reference_set_hash}. Error paths use the position in sorted
+    observation order, never the identifier.
     """
     if not isinstance(scope, ActiveScope):
         raise V5Error("INVALID_TYPE", "$.scope")
+    verify_split_registry_v5(registry)
     if not isinstance(references, dict) or not references:
         raise V5Error("REFERENCES_REQUIRED", "$.references")
     if not all(isinstance(uid, str) and uid for uid in references):
         raise V5Error("INVALID_TYPE", "$.references")
     entries, hashes = {}, {}
     for index, uid in enumerate(sorted(references)):
-        reference = references[uid]
-        _check_reference(reference, scope, f"$.references[{index}]")
+        reference, path = references[uid], f"$.references[{index}]"
+        role = registry["assignment"].get(uid)
+        if role is None:
+            raise V5Error("SPLIT_ASSIGNMENT_MISSING", path)
+        if role != SPLIT:
+            raise V5Error("SPLIT_NOT_ALLOWED", path)
+        _check_reference(reference, scope, path)
         entries[uid] = {"patient_uid": reference["patient_uid"], "split": SPLIT,
                         "geometry": copy.deepcopy(reference["geometry"]),
                         "tasks": {task: {key: _read_only(block[key]) for key in ("truth", "eligible")}
                                   for task, block in reference["tasks"].items()}}
         hashes[uid] = _entry_sha256(entries[uid])
-    return {"scope": scope, "scope_hash": scope.scope_hash, "entries": entries, "entry_sha256": hashes,
-            "reference_set_hash": _set_sha256(scope.scope_hash, hashes)}
+    return {"scope": scope, "scope_hash": scope.scope_hash, "split_sha256": registry["split_sha256"],
+            "entries": entries, "entry_sha256": hashes,
+            "reference_set_hash": _set_sha256(scope.scope_hash, registry["split_sha256"], hashes)}
 
 
 def _verified_entry(reference: dict, uid: str) -> dict:
@@ -141,7 +153,8 @@ def _verified_entry(reference: dict, uid: str) -> dict:
     if not intact:
         raise V5Error("REFERENCE_HASH_MISMATCH", "$.reference")
     if set(reference["entry_sha256"]) != set(reference["entries"]) \
-            or _set_sha256(reference["scope_hash"], reference["entry_sha256"]) != reference["reference_set_hash"]:
+            or _set_sha256(reference["scope_hash"], reference["split_sha256"], reference["entry_sha256"]) \
+            != reference["reference_set_hash"]:
         raise V5Error("REFERENCE_HASH_MISMATCH", "$.reference_set_hash")
     return entry
 
@@ -163,10 +176,12 @@ def _lesion_detection(output: ModuleOutput, block: dict, scope: ActiveScope, met
     return lesion_detection_metrics_v5(predicted, truth, metric_policy, voxel_volume)
 
 
-def module_metrics_v5(output: ModuleOutput, reference: dict, metric_policy: dict, acceptance_policy: dict) -> dict:
-    """Metrics of one development_val observation against the frozen reference set.
+def module_metrics_v5(output: ModuleOutput, reference: dict, metric_policy: dict, acceptance_policy: dict,
+                      run: dict) -> dict:
+    """Metrics of one development_val observation against the frozen reference set, for the registered `run`.
 
-    The acceptance policy must be the engineering policy the output was produced under (B2); its connectivity
+    The run must be on the reference's scope and split and have registered development_val as readable. The
+    acceptance policy must be the engineering policy the output was produced under (B2); its connectivity
     builds the instances. metric_policy is the registered development policy; lesion detection also needs its
     class_aware and size_strata_voxels.
     """
@@ -178,6 +193,13 @@ def module_metrics_v5(output: ModuleOutput, reference: dict, metric_policy: dict
     scope = reference["scope"]
     if reference["scope_hash"] != scope.scope_hash or output.scope_hash != scope.scope_hash:
         raise V5Error("SCOPE_MISMATCH", "$.scope_hash")
+    _check_schema(run, "run", "$.run")
+    if run["scope"] != {"scope_id": scope.scope_id, "scope_hash": scope.scope_hash}:
+        raise V5Error("SCOPE_MISMATCH", "$.run.scope")
+    if run["split"]["split_sha256"] != reference["split_sha256"]:
+        raise V5Error("SPLIT_HASH_MISMATCH", "$.run.split.split_sha256")
+    if SPLIT not in run["split"]["readable_roles"]:
+        raise V5Error("ROLE_NOT_READABLE", "$.run.split.readable_roles")
     entry = _verified_entry(reference, output.observation_uid)
     validate_acceptance_policy_v5(acceptance_policy, scope)
     if acceptance_policy["policy_role"] != "engineering":
@@ -216,8 +238,9 @@ def module_metrics_v5(output: ModuleOutput, reference: dict, metric_policy: dict
             detection_reasons.append("POLICY_VALUE_UNSET" if "lesion_detection" in checked["blocked_metrics"]
                                      else "NOT_REQUESTED")
     return {"observation_uid": output.observation_uid, "patient_uid": entry["patient_uid"], "split": SPLIT,
-            "scope_id": scope.scope_id, "scope_hash": scope.scope_hash,
-            "reference_set_hash": reference["reference_set_hash"], "reference_entries": len(reference["entries"]),
+            "scope_id": scope.scope_id, "scope_hash": scope.scope_hash, "split_sha256": reference["split_sha256"],
+            "run_sha256": run_sha256_v5(run), "reference_set_hash": reference["reference_set_hash"],
+            "reference_entries": len(reference["entries"]),
             "checkpoint_sha256": output.checkpoint_sha256, "acceptance_policy_id": acceptance_policy["policy_id"],
             "metric_policy_sha256": canonical_sha256(metric_policy), "metrics": list(metric_policy["metrics"]),
             "segmentation": segmentation, "detection": detection, "detection_reasons": detection_reasons}
@@ -297,6 +320,7 @@ def summarize_module_metrics_v5(rows: list) -> dict:
         detection = _detection_stats([[row["detection"] for row in group] for group in groups])
     return {"scope_id": first["scope_id"], "scope_hash": first["scope_hash"], "split": SPLIT,
             "scientific_conclusion": CONCLUSION, "aggregation": "patient_equal_weight",
+            "split_sha256": first["split_sha256"], "run_sha256": first["run_sha256"],
             "reference_set_hash": first["reference_set_hash"], "checkpoint_sha256": first["checkpoint_sha256"],
             "acceptance_policy_id": first["acceptance_policy_id"],
             "metric_policy_sha256": first["metric_policy_sha256"], "n_patients": len(groups), "n_scans": len(rows),
@@ -322,7 +346,7 @@ def render_module_baseline_md_v5(summary: dict) -> str:
         raise V5Error("INVALID_SUMMARY", "$.split")
     if summary.get("scientific_conclusion") != CONCLUSION:
         raise V5Error("INVALID_SUMMARY", "$.scientific_conclusion")
-    for key in ("checkpoint_sha256", "reference_set_hash", "metric_policy_sha256"):
+    for key in _REPORT_HASHES:
         if not isinstance(summary.get(key), str) or not _HEX64.fullmatch(summary[key]):
             raise V5Error("INVALID_SUMMARY", f"$.{key}")
     segmentation = summary.get("segmentation")
@@ -336,9 +360,7 @@ def render_module_baseline_md_v5(summary: dict) -> str:
              f"- 患者数：{_count(summary.get('n_patients'), '$.n_patients')}；"
              f"扫描数：{_count(summary.get('n_scans'), '$.n_scans')}",
              f"- acceptance_policy_id: {_text(summary.get('acceptance_policy_id'), '$.acceptance_policy_id')}",
-             f"- checkpoint_sha256: {summary['checkpoint_sha256']}",
-             f"- reference_set_hash: {summary['reference_set_hash']}",
-             f"- metric_policy_sha256: {summary['metric_policy_sha256']}"]
+             *[f"- {key}: {summary[key]}" for key in _REPORT_HASHES]]
     titles = {"A": "A（解剖）分割", "U": "U（异常）分割"}
     for task in sorted(segmentation):
         path = f"$.segmentation.{task}"

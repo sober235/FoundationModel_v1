@@ -444,6 +444,21 @@ def make_run(**overrides) -> dict:
     return register_run_v5(**kwargs)
 
 
+def make_dev_split(scope, sample_uids, roles=None, readable_roles=("train", "development_val")):
+    """(registry, run): a frozen registry assigning each uid development_val unless `roles` maps it to another
+    split (one train sample "s-train" is always added), and a baseline run on `scope` that reads `readable_roles`.
+    The same uids and roles give the same split_sha256."""
+    roles = dict(roles or {})
+    entries = [("s-train", "train")] + [(uid, roles.get(uid, "development_val")) for uid in sample_uids]
+    records = [validate_sample_v5(make_sample_v5(sample_uid=uid, split=split, patient_uid=f"synthetic:dev{i:04d}",
+                                                 leakage_group_uid=f"synthetic:dev{i:04d}"))
+               for i, (uid, split) in enumerate(entries)]
+    registry = make_split_registry(records)
+    run = make_run(scope=scope, records=records, split_registry=registry,
+                   recipe=make_recipe(model={"tasks": _trainable(scope)}, readable_roles=list(readable_roles)))
+    return registry, run
+
+
 # ---------------------------------------------------------------------------
 # Volume, sample and model fixtures (plan_v5 T09b). Arrays are (x, y, z) voxel order.
 
@@ -650,7 +665,8 @@ def make_metric_policy(**overrides) -> dict:
 
 def make_module_reference(scope, patient_uid: str, shape, anatomy_truth=None, abnormality_truth=None,
                           units_reliable: bool = True, **overrides) -> dict:
-    """A development_val reference on the identity grid of make_original_geometry, evaluable everywhere."""
+    """A reference on the identity grid of make_original_geometry, evaluable everywhere; its split comes from the
+    frozen registry it is frozen against (make_dev_split), never from the reference."""
     shape = tuple(shape)
     geometry = make_original_geometry(shape)
     geometry["units_reliable"] = units_reliable
@@ -661,7 +677,7 @@ def make_module_reference(scope, patient_uid: str, shape, anatomy_truth=None, ab
     if abnormality_truth is not None:
         tasks["U"] = {"truth": np.array(abnormality_truth, dtype=bool),
                       "eligible": np.ones((len(scope.abnormality_classes), *shape), dtype=bool)}
-    reference = {"patient_uid": patient_uid, "split": "development_val", "geometry": geometry, "tasks": tasks}
+    reference = {"patient_uid": patient_uid, "geometry": geometry, "tasks": tasks}
     reference.update(overrides)
     return reference
 

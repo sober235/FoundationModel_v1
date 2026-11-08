@@ -19,6 +19,7 @@ from .contracts_v5 import (
     GEOMETRY_KEYS, MODULE_TASK_KEYS, OUTPUT_VERSION_V5, UNKNOWN_KEY, ActiveScope, V5Error, array_sha256,
     canonical_sha256, validate_module_output_v5, validate_perception_output_v5)
 from .engine.infer_v5 import predict_volume_v5, restore_probabilities_v5
+from .engine.registration_v5 import readable_role_v5
 from .models.interface_v5 import PerceptionModelV5
 from .paths import PrivatePathError, resolve_private_output
 from .perception_io import output_prefix_v5, save_output_v5
@@ -249,11 +250,13 @@ def run_perception_v5(model: PerceptionModelV5, batch, scope: ActiveScope, *, ob
 
 def infer_and_save_v5(model: PerceptionModelV5, batch, scope: ActiveScope, *, observation_uid: str,
                       checkpoint_sha256: str, original_geometry: dict, acceptance_policy: dict, window: tuple,
-                      stride: tuple, precision: str, out_dir: Path, private_root: Path, repo: Path,
-                      relation_fn=None) -> tuple:
-    """The formal inference entry: run_perception_v5, then save_output_v5. The destination is checked first."""
+                      stride: tuple, precision: str, out_dir: Path, private_root: Path, repo: Path, run: dict,
+                      registry: dict, relation_fn=None) -> tuple:
+    """The formal inference entry: run_perception_v5, then save_output_v5. The observation must be one the run may
+    read through its frozen split (never locked_test); that and the destination are checked first."""
     if not isinstance(observation_uid, str) or not observation_uid:
         raise V5Error("INVALID_TYPE", "$.observation_uid")
+    readable_role_v5(observation_uid, registry, run)
     record = resolve_private_output(Path(out_dir) / f"{output_prefix_v5(observation_uid)}.record.json",
                                     private_root, repo)
     if record.exists():

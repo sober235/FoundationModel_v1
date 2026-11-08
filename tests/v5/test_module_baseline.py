@@ -8,15 +8,16 @@ import numpy as np
 import pytest
 import torch
 
-from anatobind.v41.contracts_v5 import V5Error, validate_scope_v5
+from anatobind.v41.contracts_v5 import UNKNOWN_KEY, V5Error, validate_scope_v5
 from anatobind.v41.engine.module_eval_v5 import (
     freeze_module_reference_v5, module_metrics_v5, render_module_baseline_md_v5, summarize_module_metrics_v5)
+from anatobind.v41.engine.registration_v5 import run_sha256_v5
 from anatobind.v41.engine.smoke_v5 import measure_candidates_v5, overfit_check_v5, render_measurement_md_v5
 from anatobind.v41.models.interface_v5 import PerceptionModelV5, collate_model_inputs_v5
 from anatobind.v41.models.resunet_v5 import build_model_v5
 from tests.v5.factories import (
-    make_acceptance_policy, make_metric_policy, make_model_input_v5, make_module_reference, make_module_scope,
-    make_recipe, make_scored_output, make_supervision, make_training_sample_v5)
+    make_acceptance_policy, make_dev_split, make_metric_policy, make_model_input_v5, make_module_reference,
+    make_module_scope, make_recipe, make_scored_output, make_supervision, make_training_sample_v5)
 
 CANDIDATE = {"patch_size": [4, 8, 8], "batch_size": 2, "precision": "fp32"}
 SHAPE = (6, 6, 6)
@@ -187,62 +188,95 @@ def _lesion() -> np.ndarray:
     return truth
 
 
+def _freeze(references, scope):
+    """Freeze against a registry assigning every reference uid development_val; returns (frozen, run)."""
+    registry, run = make_dev_split(scope, sorted(references))
+    return freeze_module_reference_v5(references, scope, registry), run
+
+
 def test_module_reference_frozen_before_prediction():
     scope = _a_scope()
     references = {uid: make_module_reference(scope, patient, SHAPE, anatomy_truth=_tissue())
                   for uid, patient in (("obs-1", "synthetic-patient-a"), ("obs-2", "synthetic-patient-b"))}
-    frozen = freeze_module_reference_v5(references, scope)
+    frozen, run = _freeze(references, scope)
     assert re.fullmatch(r"[0-9a-f]{64}", frozen["reference_set_hash"])
-    assert freeze_module_reference_v5(copy.deepcopy(references), scope)["reference_set_hash"] \
-        == frozen["reference_set_hash"]
+    assert _freeze(copy.deepcopy(references), scope)[0]["reference_set_hash"] == frozen["reference_set_hash"]
     changed = copy.deepcopy(references)
     changed["obs-2"]["tasks"]["A"]["eligible"][0, 0, 0, 0] = False
-    other = freeze_module_reference_v5(changed, scope)
+    other, _ = _freeze(changed, scope)
     assert other["reference_set_hash"] != frozen["reference_set_hash"]
     output = make_scored_output(scope, "obs-1", SHAPE, anatomy_map=_tissue())
     policy, acceptance = make_metric_policy(), make_acceptance_policy(scope)
     # Editing the caller's arrays after freezing reaches nothing that is evaluated.
     references["obs-1"]["tasks"]["A"]["truth"][:] = 0
-    row = module_metrics_v5(output, frozen, policy, acceptance)
+    row = module_metrics_v5(output, frozen, policy, acceptance, run)
     assert row["segmentation"]["A"]["tissue_a"]["dice"] == 1.0
     assert row["reference_set_hash"] == frozen["reference_set_hash"]
     # An entry re-signed after freezing no longer matches the set hash.
     resigned = dict(frozen, entries=dict(frozen["entries"], **{"obs-2": other["entries"]["obs-2"]}),
                     entry_sha256=dict(frozen["entry_sha256"], **{"obs-2": other["entry_sha256"]["obs-2"]}))
     _raises("REFERENCE_HASH_MISMATCH", "$.reference_set_hash", module_metrics_v5,
-            make_scored_output(scope, "obs-2", SHAPE, anatomy_map=_tissue()), resigned, policy, acceptance)
+            make_scored_output(scope, "obs-2", SHAPE, anatomy_map=_tissue()), resigned, policy, acceptance, run)
     # Frozen arrays are read-only, and a swapped evaluation region is refused at evaluation.
     entry = frozen["entries"]["obs-1"]
     with pytest.raises(ValueError):
         entry["tasks"]["A"]["eligible"][0, 0, 0, 0] = False
     entry["tasks"]["A"]["eligible"] = np.zeros_like(entry["tasks"]["A"]["eligible"])
-    _raises("REFERENCE_HASH_MISMATCH", "$.reference", module_metrics_v5, output, frozen, policy, acceptance)
+    _raises("REFERENCE_HASH_MISMATCH", "$.reference", module_metrics_v5, output, frozen, policy, acceptance, run)
 
 
 def test_module_evaluation_binds_reference_scope_and_policy():
     scope = _a_scope()
     reference = make_module_reference(scope, "synthetic-patient-a", SHAPE, anatomy_truth=_tissue())
-    frozen = freeze_module_reference_v5({"obs-1": reference}, scope)
+    registry, run = make_dev_split(scope, ["obs-1"])
+    frozen = freeze_module_reference_v5({"obs-1": reference}, scope, registry)
     policy, acceptance = make_metric_policy(), make_acceptance_policy(scope)
     output = make_scored_output(scope, "obs-1", SHAPE, anatomy_map=_tissue())
-    _raises("SPLIT_NOT_ALLOWED", "$.references[0].split", freeze_module_reference_v5,
-            {"obs-1": dict(reference, split="locked_test")}, scope)
-    _raises("REFERENCES_REQUIRED", "$.references", freeze_module_reference_v5, {}, scope)
+    _raises("REFERENCES_REQUIRED", "$.references", freeze_module_reference_v5, {}, scope, registry)
     _raises("REFERENCE_MISSING", "$.observation_uid", module_metrics_v5,
-            make_scored_output(scope, "obs-9", SHAPE, anatomy_map=_tissue()), frozen, policy, acceptance)
+            make_scored_output(scope, "obs-9", SHAPE, anatomy_map=_tissue()), frozen, policy, acceptance, run)
     other = validate_scope_v5(make_module_scope("A", scope_id="synthetic_a_other"))
     _raises("SCOPE_MISMATCH", "$.scope_hash", module_metrics_v5,
             make_scored_output(other, "obs-1", SHAPE, anatomy_map=_tissue()), frozen, policy,
-            make_acceptance_policy(other))
+            make_acceptance_policy(other), run)
     _raises("POLICY_ROLE_NOT_ALLOWED", "$.acceptance_policy.policy_role", module_metrics_v5, output, frozen, policy,
-            make_acceptance_policy(scope, policy_role="calibrated"))
+            make_acceptance_policy(scope, policy_role="calibrated"), run)
     _raises("POLICY_MISMATCH", "$.acceptance_policy.policy_id", module_metrics_v5, output, frozen, policy,
-            make_acceptance_policy(scope, policy_id="synthetic_acceptance_v2"))
+            make_acceptance_policy(scope, policy_id="synthetic_acceptance_v2"), run)
     _raises("GRID_MISMATCH", "$.geometry", module_metrics_v5,
             make_scored_output(scope, "obs-1", SHAPE, anatomy_map=_tissue(), units_reliable=False), frozen, policy,
-            acceptance)
+            acceptance, run)
     _raises("METRIC_POLICY_NULL", "$.metrics", module_metrics_v5, output, frozen, make_metric_policy(metrics=None),
-            acceptance)
+            acceptance, run)
+
+
+def test_module_evaluation_reads_the_frozen_registry():
+    """The frozen assignment decides the split, never a field of the reference (Proposal §3.3); a run is scored
+    only on the split it registered, with development_val among its readable roles so the exposure is recorded."""
+    scope = _a_scope()
+    reference = make_module_reference(scope, "synthetic-patient-a", SHAPE, anatomy_truth=_tissue())
+    roles = {"obs-2": "locked_test", "obs-3": "train"}
+    registry, run = make_dev_split(scope, ["obs-1", "obs-2", "obs-3"], roles)
+    _raises("SPLIT_NOT_ALLOWED", "$.references[0]", freeze_module_reference_v5, {"obs-2": reference}, scope, registry)
+    _raises("SPLIT_NOT_ALLOWED", "$.references[0]", freeze_module_reference_v5, {"obs-3": reference}, scope, registry)
+    _raises("SPLIT_ASSIGNMENT_MISSING", "$.references[0]", freeze_module_reference_v5, {"obs-9": reference}, scope,
+            registry)
+    _raises("UNKNOWN_FIELD", f"$.references[0].{UNKNOWN_KEY}", freeze_module_reference_v5,
+            {"obs-1": dict(reference, split="development_val")}, scope, registry)
+    frozen = freeze_module_reference_v5({"obs-1": reference}, scope, registry)
+    assert frozen["split_sha256"] == registry["split_sha256"]
+    output = make_scored_output(scope, "obs-1", SHAPE, anatomy_map=_tissue())
+    policy, acceptance = make_metric_policy(), make_acceptance_policy(scope)
+    row = module_metrics_v5(output, frozen, policy, acceptance, run)
+    assert (row["split_sha256"], row["run_sha256"]) == (registry["split_sha256"], run_sha256_v5(run))
+    _, train_only = make_dev_split(scope, ["obs-1", "obs-2", "obs-3"], roles, readable_roles=["train"])
+    _raises("ROLE_NOT_READABLE", "$.run.split.readable_roles", module_metrics_v5, output, frozen, policy, acceptance,
+            train_only)
+    _, other_split = make_dev_split(scope, ["obs-1"])
+    _raises("SPLIT_HASH_MISMATCH", "$.run.split.split_sha256", module_metrics_v5, output, frozen, policy, acceptance,
+            other_split)
+    _, other_scope = make_dev_split(_au_scope(), ["obs-1", "obs-2", "obs-3"], roles)
+    _raises("SCOPE_MISMATCH", "$.run.scope", module_metrics_v5, output, frozen, policy, acceptance, other_scope)
 
 
 def test_rejected_voxels_stay_in_denominator():
@@ -255,10 +289,10 @@ def test_rejected_voxels_stay_in_denominator():
     accepted_u[0, 3] = False  # one slab of the lesion rejected
     reference = make_module_reference(scope, "synthetic-patient-a", SHAPE, anatomy_truth=truth_a,
                                       abnormality_truth=_lesion())
-    frozen = freeze_module_reference_v5({"obs-1": reference}, scope)
+    frozen, run = _freeze({"obs-1": reference}, scope)
     output = make_scored_output(scope, "obs-1", SHAPE, anatomy_map=predicted_a, abnormality_map=_lesion(),
                                 abnormality_accepted=accepted_u)
-    row = module_metrics_v5(output, frozen, make_metric_policy(), make_acceptance_policy(scope))
+    row = module_metrics_v5(output, frozen, make_metric_policy(), make_acceptance_policy(scope), run)
     assert row["segmentation"]["A"]["tissue_a"]["dice"] == pytest.approx(2 * 36 / (36 + 72))
     assert row["segmentation"]["A"]["tissue_b"]["dice"] is None  # absent on both sides
     assert row["segmentation"]["U"]["target_a"]["dice"] == pytest.approx(2 * 4 / (4 + 8))
@@ -274,8 +308,8 @@ def test_module_mm_metrics_need_verified_geometry():
                                           abnormality_truth=_lesion(), units_reliable=reliable)
         output = make_scored_output(scope, "obs-1", SHAPE, anatomy_map=np.roll(_tissue(), 1, axis=0),
                                     abnormality_map=np.roll(_lesion(), 1, axis=1), units_reliable=reliable)
-        row = module_metrics_v5(output, freeze_module_reference_v5({"obs-1": reference}, scope),
-                                make_metric_policy(), make_acceptance_policy(scope))
+        frozen, run = _freeze({"obs-1": reference}, scope)
+        row = module_metrics_v5(output, frozen, make_metric_policy(), make_acceptance_policy(scope), run)
         tissue, lesion = row["segmentation"]["A"]["tissue_a"], row["segmentation"]["U"]["target_a"]
         assert tissue["dice"] == pytest.approx(0.5) and lesion["dice"] == pytest.approx(0.5)
         millimetres = (tissue["hd95_mm"], tissue["nsd"], lesion["hd95_mm"],
@@ -295,8 +329,8 @@ def test_reference_lesions_keep_every_component():
                                       abnormality_truth=truth)
     output = make_scored_output(scope, "obs-1", SHAPE, anatomy_map=_tissue(), abnormality_map=_lesion())
     acceptance = make_acceptance_policy(scope, instances={"connectivity": 26, "min_voxels": 2})
-    row = module_metrics_v5(output, freeze_module_reference_v5({"obs-1": reference}, scope), make_metric_policy(),
-                            acceptance)
+    frozen, run = _freeze({"obs-1": reference}, scope)
+    row = module_metrics_v5(output, frozen, make_metric_policy(), acceptance, run)
     # The size filter shapes predictions only; the small reference lesion stays in the denominator as a miss.
     detection = row["detection"]
     assert (detection["tp"], detection["fn"], detection["sensitivity"]) == (1, 1, 0.5)
@@ -307,7 +341,7 @@ def _patient_rows() -> list:
     scope = _au_scope()
     plan = (("obs-1", "synthetic-patient-a"), ("obs-2", "synthetic-patient-a"), ("obs-3", "synthetic-patient-a"),
             ("obs-4", "synthetic-patient-b"))
-    frozen = freeze_module_reference_v5(
+    frozen, run = _freeze(
         {uid: make_module_reference(scope, patient, SHAPE, anatomy_truth=_tissue(), abnormality_truth=_lesion())
          for uid, patient in plan}, scope)
     missed = np.zeros((1, *SHAPE), dtype=bool)
@@ -319,7 +353,7 @@ def _patient_rows() -> list:
         else:
             output = make_scored_output(scope, uid, SHAPE, anatomy_map=np.zeros(SHAPE, dtype=np.int16),
                                         abnormality_map=missed)
-        rows.append(module_metrics_v5(output, frozen, make_metric_policy(), make_acceptance_policy(scope)))
+        rows.append(module_metrics_v5(output, frozen, make_metric_policy(), make_acceptance_policy(scope), run))
     return rows
 
 
@@ -327,6 +361,7 @@ def test_module_summary_is_patient_weighted():
     rows = _patient_rows()
     summary = summarize_module_metrics_v5(rows)
     assert (summary["n_patients"], summary["n_scans"]) == (2, 4)
+    assert (summary["split_sha256"], summary["run_sha256"]) == (rows[0]["split_sha256"], rows[0]["run_sha256"])
     assert summary["split"] == "development_val" and summary["scientific_conclusion"] == "NOT_EVALUATED"
     segmentation = summary["segmentation"]
     # Patient-equal weight gives 0.5; the scan mean would give 0.75.
@@ -360,7 +395,8 @@ def test_module_report_is_redacted_and_not_a_conclusion():
                                              source="/private/raw/synthetic-case-0042_0000.nii.gz"))
     assert not any(secret in text for secret in SECRETS + ("obs-", "synthetic-patient"))
     for shown in ("synthetic_au", "split: development_val", "scientific_conclusion: NOT_EVALUATED", "不相加",
-                  "tissue_a", "target_a", "0.500", "1.000", summary["reference_set_hash"]):
+                  "tissue_a", "target_a", "0.500", "1.000", summary["reference_set_hash"], summary["split_sha256"],
+                  summary["run_sha256"]):
         assert shown in text
     _raises("INVALID_SUMMARY", "$.split", render_module_baseline_md_v5, dict(summary, split="locked_test"))
     _raises("INVALID_SUMMARY", "$.scientific_conclusion", render_module_baseline_md_v5,

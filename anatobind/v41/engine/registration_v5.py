@@ -223,6 +223,24 @@ def select_samples_v5(records: list[SampleV5], registry: dict, roles: list[str])
     return selected
 
 
+def readable_role_v5(sample_uid: str, registry: dict, run: dict) -> str:
+    """Frozen role of one sample when `run` may read it (L4): the registry must be the run's split; locked_test and
+    roles the run did not register are refused. A 3D observation's uid is its sample uid. `record.split` is never
+    read."""
+    _check_schema(run, "run", "$.run")
+    verify_split_registry_v5(registry)
+    if registry["split_sha256"] != run["split"]["split_sha256"]:
+        raise V5Error("SPLIT_HASH_MISMATCH", "$.split.split_sha256")
+    role = registry["assignment"].get(sample_uid) if isinstance(sample_uid, str) else None
+    if role is None:
+        raise V5Error("SPLIT_ASSIGNMENT_MISSING", "$.sample_uid")
+    if role == "locked_test":
+        raise V5Error("LOCKED_TEST_NOT_READABLE", "$.sample_uid")
+    if role not in run["split"]["readable_roles"]:
+        raise V5Error("ROLE_NOT_READABLE", "$.sample_uid")
+    return role
+
+
 def inherit_lineage_v5(parents: list[dict], lineage_id: str) -> list[str]:
     """Union of every parent's lineage and ancestors, minus `lineage_id` itself (Proposal_v5 §3.3)."""
     locked_test_blockers_v5([], lineage_id)

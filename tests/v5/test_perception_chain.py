@@ -21,8 +21,8 @@ from anatobind.v41.perception import (
 from anatobind.v41.perception_io import load_output_v5
 from anatobind.v41.state_rule_v5 import REASON_BITS, derive_state_map_v5
 from tests.v5.factories import (
-    CONFIG_DIR_V5, StubPerceptionModel, make_acceptance_policy, make_model_input_v5, make_module_scope,
-    make_original_geometry, make_recipe, make_scope, write_volume_case)
+    CONFIG_DIR_V5, StubPerceptionModel, make_acceptance_policy, make_dev_split, make_model_input_v5,
+    make_module_scope, make_original_geometry, make_recipe, make_scope, write_volume_case)
 
 REPO = Path(__file__).resolve().parents[2]
 SHAPE = (6, 6, 6)
@@ -254,7 +254,9 @@ def test_observation_chain_restores_to_original_grid(tmp_path):
                         "transform_chain": []}
     model = StubPerceptionModel(scope, ("A",), anatomy_fn=_constant([0.0, 3.0, 0.0]))
     root = tmp_path / "private"
+    registry, run = make_dev_split(scope, [record.sample_uid])
     output, path = infer_and_save_v5(model, batch, scope, out_dir=root / "outputs", private_root=root, repo=REPO,
+                                     run=run, registry=registry,
                                      **_kwargs(scope, observation_uid=record.sample_uid, original_geometry=geometry))
     assert output.anatomy_map.shape == (8, 8, 8) and (output.anatomy_map == 1).all() and output.geometry == geometry
     loaded = load_output_v5(path, scope)
@@ -275,3 +277,28 @@ def test_model_grid_fov_maps_back_conservatively():
     output = run_perception_v5(model, batch, scope, **_kwargs(scope, original_geometry=make_original_geometry((8, 4, 4))))
     assert (output.reason["anatomy"][5:] == OUT_OF_FOV).all() and (output.anatomy_map[5:] == -1).all()
     assert (output.reason["anatomy"][:5] == 0).all() and (output.anatomy_map[:5] == 1).all()
+
+
+def test_inference_reads_only_roles_the_run_registered(tmp_path):
+    """The formal inference entry reads an observation only through the run's frozen split (L4): locked_test and
+    roles the run did not register are refused before the model runs or anything is written."""
+    scope = validate_scope_v5(make_module_scope("A"))
+    batch = make_model_input_v5(scope, SHAPE)
+    model = StubPerceptionModel(scope, ("A",), anatomy_fn=_constant([0.0, 3.0, 0.0]))
+    roles = {"obs-locked": "locked_test"}
+    registry, run = make_dev_split(scope, ["obs-dev", "obs-locked"], roles)
+    _, train_only = make_dev_split(scope, ["obs-dev", "obs-locked"], roles, readable_roles=["train"])
+    other_registry, _ = make_dev_split(scope, ["obs-dev"])
+    root = tmp_path / "private"
+
+    def infer(uid, run_, registry_):
+        return infer_and_save_v5(model, batch, scope, out_dir=root / "outputs", private_root=root, repo=REPO,
+                                 run=run_, registry=registry_, **_kwargs(scope, observation_uid=uid))
+
+    _raises("LOCKED_TEST_NOT_READABLE", "$.sample_uid", infer, "obs-locked", run, registry)
+    _raises("ROLE_NOT_READABLE", "$.sample_uid", infer, "obs-dev", train_only, registry)
+    _raises("SPLIT_ASSIGNMENT_MISSING", "$.sample_uid", infer, "obs-9", run, registry)
+    _raises("SPLIT_HASH_MISMATCH", "$.split.split_sha256", infer, "obs-dev", run, other_registry)
+    assert model.calls == 0 and not (root / "outputs").exists()
+    output, path = infer("obs-dev", run, registry)
+    assert output.observation_uid == "obs-dev" and path.is_file()
