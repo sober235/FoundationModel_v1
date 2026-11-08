@@ -3,7 +3,9 @@
 The loss is Σ task_weight·L_t over the supervised tasks, each from masked_objective_v5, so a task without
 eligible voxels adds a differentiable zero and leaves the other tasks' scale alone. Training does not start
 until the run and its exposure are on disk and the recipe, supervision, model and samples are the registered
-ones (L6). A fresh start records the digest of the sample content in data.json (written once; it also marks
+ones (L6). A fresh start must use build_model_v5's seeded random init, bit for bit (another init would hide an
+undeclared ancestor); a run that declares a parent is refused until parent initialisation is built. A fresh
+start records the digest of the sample content in data.json (written once; it also marks
 the run as started) and every checkpoint carries it: a resume on other content is DATA_MISMATCH. A checkpoint
 holds every state a bitwise CPU resume needs; it is written once and never overwritten,
 and it is loaded only after its file hash matches, with weights_only=True. A non-finite logit or loss, an OOM or
@@ -27,6 +29,7 @@ import torch
 from ..contracts_v5 import V5Error, canonical_sha256
 from ..losses import masked_objective_v5
 from ..models.interface_v5 import ModelOutputV5, PerceptionModelV5
+from ..models.resunet_v5 import build_model_v5
 from ..paths import PrivatePathError, _make_private_dirs, resolve_private_output, write_private_bytes, write_private_json
 from .data_v5 import (
     PatchSamplerV5, TrainingSampleV5, make_batch_v5, positive_centers_v5, training_data_sha256_v5)
@@ -224,6 +227,15 @@ def _check_binding(run: dict, model: PerceptionModelV5, samples: dict, recipe: d
         raise V5Error("SAMPLE_NOT_REGISTERED", "$.samples")
 
 
+def _check_init(model: PerceptionModelV5, recipe: dict) -> None:
+    """A run without a parent starts from build_model_v5's seeded random init: same class, bitwise-equal weights."""
+    expected = build_model_v5(recipe, model.scope)
+    actual, reference = model.state_dict(), expected.state_dict()
+    if type(model) is not type(expected) or set(actual) != set(reference) \
+            or any(not torch.equal(actual[key].detach().cpu(), reference[key]) for key in reference):
+        raise V5Error("MODEL_INIT_MISMATCH", "$.model")
+
+
 def _append_jsonl(path: Path, value: dict) -> None:
     _make_private_dirs(path.parent)
     with os.fdopen(os.open(path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600), "a") as handle:
@@ -256,6 +268,10 @@ def train_v5(run: dict, model: PerceptionModelV5, samples: dict, recipe: dict, s
     exposure = _registered_exposure(run, run_dir, private_root, repo)
     _check_binding(run, model, samples, recipe, supervision, exposure)
     validate_supervision_v5(supervision, model.scope)
+    if run["parents"]:
+        raise V5Error("PARENT_INIT_NOT_SUPPORTED", "$.run.parents")
+    if resume is None:
+        _check_init(model, recipe)
     data_sha256 = training_data_sha256_v5(samples)
     run_dir = Path(run_dir)
     metrics_path = resolve_private_output(run_dir / "metrics.jsonl", private_root, repo)

@@ -20,6 +20,7 @@ from anatobind.v41.engine.train_v5 import (
     training_loss_v5)
 from anatobind.v41.losses import masked_objective_v5
 from anatobind.v41.models.interface_v5 import ModelOutputV5
+from anatobind.v41.models.resunet_v5 import build_model_v5
 from anatobind.v41.paths import PrivatePathError, write_private_json
 from tests.v5.factories import (
     TinyPerceptionModel, make_module_scope, make_recipe, make_run, make_split_records, make_split_registry,
@@ -67,9 +68,34 @@ def _setup(tmp_path, name="private", scope=None, **recipe_overrides):
             "root": root, "run_dir": run_dir}
 
 
-def _model(scope, seed=0, cls=TinyPerceptionModel, tasks=None, **kwargs):
-    torch.manual_seed(seed)
-    return cls(scope, tuple(tasks or _tasks(scope)), **kwargs)
+def _model(ctx, perturb_seed=None):
+    """The run's registered initialisation (build_model_v5 on the recipe's init seed), counting forward calls in
+    `calls`; `perturb_seed` shifts every weight to stand in for a model with other weights."""
+    model = build_model_v5(ctx["recipe"], ctx["scope"])
+    if perturb_seed is not None:
+        generator = torch.Generator().manual_seed(perturb_seed)
+        with torch.no_grad():
+            for parameter in model.parameters():
+                parameter.add_(torch.randn(parameter.shape, generator=generator))
+    model.calls = 0
+    model.register_forward_pre_hook(lambda module, args: setattr(module, "calls", module.calls + 1))
+    return model
+
+
+def _fail_at(model, fail_on_call, failure):
+    """From forward call `fail_on_call` on, the model returns inf logits or raises OOM."""
+    forward = model._forward_v5
+
+    def failing(batch):
+        output = forward(batch)
+        if model.calls < fail_on_call:
+            return output
+        if failure == "oom":
+            raise torch.cuda.OutOfMemoryError("synthetic")
+        return ModelOutputV5(anatomy_logits=output.anatomy_logits + math.inf, abnormality_logits=None)
+
+    model._forward_v5 = failing
+    return model
 
 
 def _train(ctx, model, resume=None, **replace):
@@ -159,7 +185,7 @@ def test_optimizer_scheduler_and_scaler_follow_recipe():
     scope = _scope("A")
     recipe = make_recipe(optimizer={"lr": 0.01, "weight_decay": 0.5}, scheduler={"exponent": 2.0},
                          budget={"max_steps": 4})
-    model = _model(scope)
+    model = TinyPerceptionModel(scope, ("A",))
     optimizer = build_optimizer_v5(model, recipe)
     assert isinstance(optimizer, torch.optim.AdamW)
     assert optimizer.param_groups[0]["lr"] == 0.01 and optimizer.param_groups[0]["weight_decay"] == 0.5
@@ -177,7 +203,7 @@ def test_optimizer_scheduler_and_scaler_follow_recipe():
 
 def test_resume_is_bitwise_identical_on_cpu(tmp_path):
     first = _setup(tmp_path, "first")
-    model = _model(first["scope"], seed=0)
+    model = _model(first)
     result = _train(first, model)
     assert result["status"] == "COMPLETED" and result["step"] == 6 and result["failure_code"] is None
     middle = first["run_dir"] / "checkpoints" / "step_00000003.pt"
@@ -185,7 +211,7 @@ def test_resume_is_bitwise_identical_on_cpu(tmp_path):
     # The same registered run under a second private root, a model with other weights, resumed at step 3.
     second = _setup(tmp_path, "second")
     assert second["run"] == first["run"]
-    resumed = _model(second["scope"], seed=99)
+    resumed = _model(second, perturb_seed=99)
     again = _train(second, resumed, resume=(middle, middle_sha))
     assert again["status"] == "COMPLETED" and again["step"] == 6 and resumed.calls == 3
     _assert_same(dict(model.state_dict()), dict(resumed.state_dict()))
@@ -202,7 +228,7 @@ def test_resume_is_bitwise_identical_on_cpu(tmp_path):
 
 def test_checkpoint_contains_all_states(tmp_path):
     ctx = _setup(tmp_path)
-    model = _model(ctx["scope"])
+    model = _model(ctx)
     result = _train(ctx, model)
     path = result["last_checkpoint"]
     assert path == ctx["run_dir"] / "checkpoints" / "step_00000006.pt"
@@ -227,7 +253,7 @@ def test_checkpoint_contains_all_states(tmp_path):
 
 def test_resume_refuses_hash_or_run_mismatch(tmp_path):
     ctx = _setup(tmp_path)
-    result = _train(ctx, _model(ctx["scope"]))
+    result = _train(ctx, _model(ctx))
     path, digest = result["last_checkpoint"], result["last_checkpoint_sha256"]
     data = bytearray(path.read_bytes())
     data[len(data) // 2] ^= 0x01
@@ -235,7 +261,7 @@ def test_resume_refuses_hash_or_run_mismatch(tmp_path):
     tampered.write_bytes(bytes(data))
     _raises("CHECKPOINT_HASH_MISMATCH", "$.checkpoint", load_checkpoint_v5, tampered, ctx["run"], digest, "cpu")
     fresh = _setup(tmp_path, "fresh")
-    model = _model(fresh["scope"])
+    model = _model(fresh)
     _raises("CHECKPOINT_HASH_MISMATCH", "$.checkpoint", _train, fresh, model, resume=(tampered, digest))
     # One recipe value changed makes a different run; its checkpoints are not this run's.
     other = _setup(tmp_path, "other", checkpoint_every=2)
@@ -251,7 +277,7 @@ def test_resume_refuses_changed_data(tmp_path):
     """Review Focus 5 for data: the same uids with one changed target voxel (a re-migrated record or an edited
     label map) cannot resume a run trained on the old content."""
     ctx = _setup(tmp_path)
-    result = _train(ctx, _model(ctx["scope"]))
+    result = _train(ctx, _model(ctx))
     middle = ctx["run_dir"] / "checkpoints" / "step_00000003.pt"
     middle_sha = json.loads(middle.with_name(middle.name + ".json").read_text())["sha256"]
     second = _setup(tmp_path, "second")
@@ -259,7 +285,7 @@ def test_resume_refuses_changed_data(tmp_path):
     targets = {task: value.copy() for task, value in sample.targets.items()}
     targets["A"][0, 0, 0] = (targets["A"][0, 0, 0] + 1) % 3
     changed = dict(second["samples"], **{"s-1": dataclasses.replace(sample, targets=targets)})
-    model = _model(second["scope"])
+    model = _model(second)
     _raises("DATA_MISMATCH", "$.samples", _train, second, model, samples=changed, resume=(middle, middle_sha))
     assert model.calls == 0 and not (second["run_dir"] / "metrics.jsonl").exists()
     assert _train(second, model, resume=(middle, middle_sha))["status"] == "COMPLETED"
@@ -270,9 +296,39 @@ def test_resume_refuses_changed_data(tmp_path):
     assert stat.S_IMODE(record.stat().st_mode) == 0o600 and len(state["data_sha256"]) == 64
 
 
+def test_fresh_start_trains_only_the_registered_initialisation(tmp_path):
+    """L6 / Proposal §6.3: a run that declares no parent starts from the recipe's seeded random init. Weights from
+    anywhere else (a smoke or overfit model, another lineage, another seed or class) are refused before anything
+    is written, and a run that declares a parent cannot start until parent initialisation exists."""
+    ctx = _setup(tmp_path)
+    reseeded = copy.deepcopy(ctx["recipe"])
+    reseeded["seeds"]["init"] = 7
+    for model in (_model(ctx, perturb_seed=3), build_model_v5(reseeded, ctx["scope"]),
+                  TinyPerceptionModel(ctx["scope"], ("A",))):
+        _raises("MODEL_INIT_MISMATCH", "$.model", _train, ctx, model)
+    assert not any((ctx["run_dir"] / name).exists() for name in ("metrics.jsonl", "data.json", "checkpoints"))
+    result = _train(ctx, _model(ctx))
+    assert result["status"] == "COMPLETED"
+    child = _child(tmp_path, ctx, result["last_checkpoint_sha256"])
+    model = _model(child)
+    _raises("PARENT_INIT_NOT_SUPPORTED", "$.run.parents", _train, child, model)
+    assert model.calls == 0 and not (child["run_dir"] / "data.json").exists()
+
+
+def _child(tmp_path, parent, checkpoint_sha256):
+    """`parent`'s recipe and samples registered as run lin-b that declares `parent` (that checkpoint) its parent."""
+    records = make_split_records(SPLITS)
+    registry = make_split_registry(records, lineage_id="lin-b", ancestor_lineages=["lin-a"])
+    run = make_run(scope=parent["scope"], records=records, split_registry=registry, recipe=parent["recipe"],
+                   supervision=parent["supervision"], run_id="run-synthetic-0002", lineage_id="lin-b",
+                   parents=[{"run": parent["run"], "checkpoint_sha256": checkpoint_sha256}])
+    root = tmp_path / "child"
+    return dict(parent, run=run, root=root, run_dir=write_run_v5(run, registry, root, REPO))
+
+
 def test_checkpoints_never_overwrite(tmp_path):
     ctx = _setup(tmp_path)
-    result = _train(ctx, _model(ctx["scope"]))
+    result = _train(ctx, _model(ctx))
     path = result["last_checkpoint"]
     before = path.read_bytes()
     state = load_checkpoint_v5(path, ctx["run"], result["last_checkpoint_sha256"], "cpu")
@@ -288,7 +344,7 @@ def test_checkpoints_never_overwrite(tmp_path):
             {k: v for k, v in body.items() if k != "rng"}, ctx["run"], ctx["root"], REPO)
     # A second fresh start in a run directory that already trained is refused before any step,
     # and so is resuming from an older checkpoint while a newer one exists.
-    again = _model(ctx["scope"])
+    again = _model(ctx)
     _raises("RUN_ALREADY_STARTED", "$.run_dir", _train, ctx, again)
     middle = path.with_name("step_00000003.pt")
     middle_sha = json.loads(middle.with_name(middle.name + ".json").read_text())["sha256"]
@@ -296,26 +352,10 @@ def test_checkpoints_never_overwrite(tmp_path):
     assert again.calls == 0 and path.read_bytes() == before
 
 
-class _FailingModel(TinyPerceptionModel):
-    """Behaves like TinyPerceptionModel until forward call `fail_on_call`, which returns inf or raises OOM."""
-
-    def __init__(self, scope, tasks, fail_on_call, failure):
-        super().__init__(scope, tasks)
-        self.fail_on_call, self.failure = fail_on_call, failure
-
-    def _forward_v5(self, batch):
-        output = super()._forward_v5(batch)
-        if self.calls < self.fail_on_call:
-            return output
-        if self.failure == "oom":
-            raise torch.cuda.OutOfMemoryError("synthetic")
-        return ModelOutputV5(anatomy_logits=output.anatomy_logits + math.inf, abnormality_logits=None)
-
-
 @pytest.mark.parametrize("failure, code", [("inf", "NON_FINITE_LOGITS"), ("oom", "OUT_OF_MEMORY")])
 def test_nonfinite_or_oom_writes_failure_without_retry(tmp_path, failure, code):
     ctx = _setup(tmp_path)
-    model = _model(ctx["scope"], cls=_FailingModel, fail_on_call=5, failure=failure)
+    model = _fail_at(_model(ctx), 5, failure)
     result = _train(ctx, model)
     kept = ctx["run_dir"] / "checkpoints" / "step_00000003.pt"
     assert result == {"status": "FAILED", "step": 4, "last_checkpoint": kept,
@@ -326,13 +366,13 @@ def test_nonfinite_or_oom_writes_failure_without_retry(tmp_path, failure, code):
     assert sorted(p.name for p in kept.parent.glob("*.pt")) == ["step_00000003.pt"]
     assert [line["step"] for line in _metrics(ctx)] == [1, 2, 3, 4]
     # A failed run is final; a new attempt is a new run.
-    _raises("RUN_FAILED", "$.run_dir", _train, ctx, _model(ctx["scope"]),
+    _raises("RUN_FAILED", "$.run_dir", _train, ctx, _model(ctx),
             resume=(kept, result["last_checkpoint_sha256"]))
 
 
 def test_wall_budget_is_cumulative_and_fails_without_retry(tmp_path, monkeypatch):
     ctx = _setup(tmp_path)
-    done = _train(ctx, _model(ctx["scope"]))
+    done = _train(ctx, _model(ctx))
     state = load_checkpoint_v5(done["last_checkpoint"].with_name("step_00000003.pt"), ctx["run"],
                                json.loads(done["last_checkpoint"].with_name("step_00000003.pt.json").read_text())
                                ["sha256"], "cpu")
@@ -341,7 +381,7 @@ def test_wall_budget_is_cumulative_and_fails_without_retry(tmp_path, monkeypatch
     body = dict({key: state[key] for key in STATE_KEYS}, wall_seconds=3600.5)
     path = spent["root"] / "carried" / "step_00000003.pt"
     digest = save_checkpoint_v5(path, body, spent["run"], spent["root"], REPO)
-    model = _model(spent["scope"])
+    model = _model(spent)
     result = _train(spent, model, resume=(path, digest))
     assert (result["status"], result["step"], result["failure_code"]) == ("FAILED", 3, "WALL_BUDGET_EXCEEDED")
     assert model.calls == 0 and result["last_checkpoint"] == path
@@ -349,7 +389,7 @@ def test_wall_budget_is_cumulative_and_fails_without_retry(tmp_path, monkeypatch
     ticks = iter(range(0, 10 ** 6, 1800))
     monkeypatch.setattr(train_module, "_monotonic", lambda: float(next(ticks)))
     clocked = _setup(tmp_path, "clocked")
-    model = _model(clocked["scope"])
+    model = _model(clocked)
     result = _train(clocked, model)
     assert result["status"] == "FAILED" and result["failure_code"] == "WALL_BUDGET_EXCEEDED"
     assert 0 < result["step"] < 6 and model.calls == result["step"]
@@ -359,7 +399,7 @@ def test_wall_budget_is_cumulative_and_fails_without_retry(tmp_path, monkeypatch
 
 def test_training_requires_registered_run_and_exposure(tmp_path):
     ctx = _setup(tmp_path)
-    model = _model(ctx["scope"])
+    model = _model(ctx)
     run = ctx["run"]
     _raises("RUN_NOT_REGISTERED", "$.run_dir", _train, ctx, model, run_dir=ctx["root"] / "runs" / "never-written")
     # run.json without its exposure file: no recorded exposure, no training (L6).
@@ -375,9 +415,9 @@ def test_training_requires_registered_run_and_exposure(tmp_path):
     _raises("RUN_MISMATCH", "$.recipe", _train, ctx, model, recipe=other["recipe"])
     _raises("RUN_MISMATCH", "$.supervision", _train, ctx, model,
             supervision=make_supervision(ctx["scope"], tasks={"A": {"task_weight": 2.0}}))
-    _raises("RUN_MISMATCH", "$.model", _train, ctx, _model(_au_scope()))
     au = _setup(tmp_path, "au", scope=_au_scope())
-    _raises("RUN_MISMATCH", "$.model", _train, au, _model(au["scope"], tasks=["A"]))
+    _raises("RUN_MISMATCH", "$.model", _train, ctx, _model(au))
+    _raises("RUN_MISMATCH", "$.model", _train, au, _model(dict(au, recipe=ctx["recipe"])))   # A-only on the AU scope
     locked = make_training_sample_v5(ctx["scope"], "s-4", shape=(6, 6, 6))    # s-4 is locked_test
     _raises("SAMPLE_NOT_REGISTERED", "$.samples", _train, ctx, model, samples=dict(ctx["samples"], **{"s-4": locked}))
     fewer = {uid: sample for uid, sample in ctx["samples"].items() if uid != "s-2"}
