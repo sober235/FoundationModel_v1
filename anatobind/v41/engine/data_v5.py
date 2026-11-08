@@ -17,7 +17,7 @@ import numpy as np
 import torch
 import yaml
 
-from ..contracts_v5 import ActiveScope, SampleV5, V5Error
+from ..contracts_v5 import ActiveScope, SampleV5, V5Error, array_sha256, canonical_sha256
 from ..eligibility import annotation_channel_v5, build_eligibility_v5
 from ..geometry import audit_geometry
 from ..geometry_v5 import downsample_loss_report_v5
@@ -274,6 +274,29 @@ def load_training_set_v5(root: Path, records: list[SampleV5], registry: dict, sc
     return {record.sample_uid: load_training_sample_v5(root, record, scope, supervision, recipe, label_maps,
                                                        regions.get(record.sample_uid, empty))
             for record in select_samples_v5(records, registry, ["train"])}
+
+
+def training_data_sha256_v5(samples: dict) -> str:
+    """Digest of exactly what training reads, uids sorted: per sample every array (channels in scope order,
+    valid_fov, targets, e_pos, e_neg), the model and original grids and the transform chain. Records, label maps
+    and regions enter through the arrays they produce, so editing any of them changes the digest."""
+    if not isinstance(samples, dict) or not samples:
+        raise V5Error("INVALID_TYPE", "$.samples")
+    digests = {}
+    for uid in sorted(samples):
+        sample = samples[uid]
+        if not isinstance(sample, TrainingSampleV5):
+            raise V5Error("INVALID_TYPE", "$.samples")
+        observation = sample.observation
+        digests[uid] = canonical_sha256({
+            "patient_uid": observation.patient_uid,
+            "channels": [[name, array_sha256(array)] for name, array in observation.channels.items()],
+            "valid_fov": array_sha256(observation.valid_fov), "grid": observation.grid,
+            "to_original": observation.to_original, "original_shape": list(observation.original_shape),
+            "original_header": observation.original_header,
+            **{key: {task: array_sha256(array) for task, array in getattr(sample, key).items()}
+               for key in ("targets", "e_pos", "e_neg")}})
+    return canonical_sha256(digests)
 
 
 # ---------------------------------------------------------------------------

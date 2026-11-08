@@ -3,7 +3,9 @@
 The loss is Σ task_weight·L_t over the supervised tasks, each from masked_objective_v5, so a task without
 eligible voxels adds a differentiable zero and leaves the other tasks' scale alone. Training does not start
 until the run and its exposure are on disk and the recipe, supervision, model and samples are the registered
-ones (L6). A checkpoint holds every state a bitwise CPU resume needs; it is written once and never overwritten,
+ones (L6). A fresh start records the digest of the sample content in data.json (written once; it also marks
+the run as started) and every checkpoint carries it: a resume on other content is DATA_MISMATCH. A checkpoint
+holds every state a bitwise CPU resume needs; it is written once and never overwritten,
 and it is loaded only after its file hash matches, with weights_only=True. A non-finite logit or loss, an OOM or
 an exhausted wall budget writes failure.json (code, step, time; no values) and stops without retrying.
 """
@@ -26,11 +28,12 @@ from ..contracts_v5 import V5Error, canonical_sha256
 from ..losses import masked_objective_v5
 from ..models.interface_v5 import ModelOutputV5, PerceptionModelV5
 from ..paths import PrivatePathError, _make_private_dirs, resolve_private_output, write_private_bytes, write_private_json
-from .data_v5 import PatchSamplerV5, TrainingSampleV5, make_batch_v5, positive_centers_v5
+from .data_v5 import (
+    PatchSamplerV5, TrainingSampleV5, make_batch_v5, positive_centers_v5, training_data_sha256_v5)
 from .registration_v5 import run_sha256_v5, validate_recipe_v5, validate_supervision_v5
 
 CHECKPOINT_FORMAT = "anatobind_ckpt_v5"
-STATE_KEYS = ("step", "model", "optimizer", "scheduler", "scaler", "sampler", "rng", "wall_seconds")
+STATE_KEYS = ("step", "model", "optimizer", "scheduler", "scaler", "sampler", "rng", "wall_seconds", "data_sha256")
 STOP_CODES = ("NON_FINITE_LOGITS", "NON_FINITE_LOSS")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _CHECKPOINT_NAME = re.compile(r"step_(\d{8})\.pt")
@@ -253,11 +256,13 @@ def train_v5(run: dict, model: PerceptionModelV5, samples: dict, recipe: dict, s
     exposure = _registered_exposure(run, run_dir, private_root, repo)
     _check_binding(run, model, samples, recipe, supervision, exposure)
     validate_supervision_v5(supervision, model.scope)
+    data_sha256 = training_data_sha256_v5(samples)
     run_dir = Path(run_dir)
     metrics_path = resolve_private_output(run_dir / "metrics.jsonl", private_root, repo)
     failure_path = resolve_private_output(run_dir / "failure.json", private_root, repo)
     checkpoint_dir = resolve_private_output(run_dir / "checkpoints", private_root, repo)
-    if resume is None and (metrics_path.exists() or failure_path.exists() or checkpoint_dir.exists()):
+    data_path = resolve_private_output(run_dir / "data.json", private_root, repo)
+    if resume is None and any(path.exists() for path in (metrics_path, failure_path, checkpoint_dir, data_path)):
         raise V5Error("RUN_ALREADY_STARTED", "$.run_dir")
     if resume is not None and failure_path.exists():
         raise V5Error("RUN_FAILED", "$.run_dir")
@@ -275,6 +280,8 @@ def train_v5(run: dict, model: PerceptionModelV5, samples: dict, recipe: dict, s
         state = load_checkpoint_v5(resume[0], run, resume[1], device.type)
         if any(other > state["step"] for other in _checkpoint_steps(checkpoint_dir)):
             raise V5Error("CHECKPOINT_NOT_LATEST", "$.resume")
+        if state["data_sha256"] != data_sha256:
+            raise V5Error("DATA_MISMATCH", "$.samples")
         model.load_state_dict(state["model"])
         optimizer.load_state_dict(state["optimizer"])
         scheduler.load_state_dict(state["scheduler"])
@@ -283,6 +290,8 @@ def train_v5(run: dict, model: PerceptionModelV5, samples: dict, recipe: dict, s
         _set_rng_state(state["rng"])
         step, prior_wall, last = state["step"], float(state["wall_seconds"]), (Path(resume[0]), resume[1])
         _append_jsonl(metrics_path, {"event": "resume", "step": step, "checkpoint_sha256": resume[1]})
+    else:
+        write_private_json(data_path, {"data_sha256": data_sha256})    # exclusive create: the start marker
 
     def stop(code: str) -> dict:
         write_private_json(failure_path, {"code": code, "step": step,
@@ -316,7 +325,7 @@ def train_v5(run: dict, model: PerceptionModelV5, samples: dict, recipe: dict, s
             state = {"step": step, "model": model.state_dict(), "optimizer": optimizer.state_dict(),
                      "scheduler": scheduler.state_dict(), "scaler": scaler.state_dict(),
                      "sampler": sampler.state_dict(), "rng": _rng_state(),
-                     "wall_seconds": prior_wall + (_monotonic() - start)}
+                     "wall_seconds": prior_wall + (_monotonic() - start), "data_sha256": data_sha256}
             last = (path, save_checkpoint_v5(path, state, run, private_root, repo))
     return {"status": "COMPLETED", "step": step, "last_checkpoint": last[0], "last_checkpoint_sha256": last[1],
             "failure_code": None}

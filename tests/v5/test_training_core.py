@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import hashlib
 import json
 import math
@@ -27,7 +28,7 @@ from tests.v5.factories import (
 REPO = Path(__file__).resolve().parents[2]
 SPLITS = ["train", "train", "train", "development_val", "locked_test"]
 TRAIN_UIDS = ["s-0", "s-1", "s-2"]
-STATE_KEYS = {"step", "model", "optimizer", "scheduler", "scaler", "sampler", "rng", "wall_seconds"}
+STATE_KEYS = {"step", "model", "optimizer", "scheduler", "scaler", "sampler", "rng", "wall_seconds", "data_sha256"}
 
 
 def _raises(error_code, error_path, fn, *args, **kwargs):
@@ -244,6 +245,29 @@ def test_resume_refuses_hash_or_run_mismatch(tmp_path):
     _raises("INVALID_SHA256", "$.expected_sha256", load_checkpoint_v5, path, ctx["run"], "x" * 64, "cpu")
     assert model.calls == 0
     assert not (fresh["run_dir"] / "metrics.jsonl").exists() and not (other["run_dir"] / "metrics.jsonl").exists()
+
+
+def test_resume_refuses_changed_data(tmp_path):
+    """Review Focus 5 for data: the same uids with one changed target voxel (a re-migrated record or an edited
+    label map) cannot resume a run trained on the old content."""
+    ctx = _setup(tmp_path)
+    result = _train(ctx, _model(ctx["scope"]))
+    middle = ctx["run_dir"] / "checkpoints" / "step_00000003.pt"
+    middle_sha = json.loads(middle.with_name(middle.name + ".json").read_text())["sha256"]
+    second = _setup(tmp_path, "second")
+    sample = second["samples"]["s-1"]
+    targets = {task: value.copy() for task, value in sample.targets.items()}
+    targets["A"][0, 0, 0] = (targets["A"][0, 0, 0] + 1) % 3
+    changed = dict(second["samples"], **{"s-1": dataclasses.replace(sample, targets=targets)})
+    model = _model(second["scope"])
+    _raises("DATA_MISMATCH", "$.samples", _train, second, model, samples=changed, resume=(middle, middle_sha))
+    assert model.calls == 0 and not (second["run_dir"] / "metrics.jsonl").exists()
+    assert _train(second, model, resume=(middle, middle_sha))["status"] == "COMPLETED"
+    # The fresh start recorded the digest once (private, never overwritten); every checkpoint carries it.
+    state = load_checkpoint_v5(result["last_checkpoint"], ctx["run"], result["last_checkpoint_sha256"], "cpu")
+    record = ctx["run_dir"] / "data.json"
+    assert json.loads(record.read_text()) == {"data_sha256": state["data_sha256"]}
+    assert stat.S_IMODE(record.stat().st_mode) == 0o600 and len(state["data_sha256"]) == 64
 
 
 def test_checkpoints_never_overwrite(tmp_path):
