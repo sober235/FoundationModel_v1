@@ -255,7 +255,7 @@ U采用masked BCE和masked Dice；A采用匹配本体的masked CE/Dice。Dice分
 
 ### 5.0 前期原标签场景（2026-11-07）
 
-前期联合参照只来自FM_data原有标注，不引入医生，不新增人工标注（§0.5）。计数与编码见 `reports/v5/same_case_label_check_amax.md`；类别、排除规则与评价准则的建议值及依据见 `reports/v5/early_phase_scope_research_20261107.md`（待研究者批准）。
+前期联合参照只来自FM_data原有标注，不引入医生，不新增人工标注（§0.5）。计数与编码见 `reports/v5/same_case_label_check_amax.md`；类别、排除规则与评价准则的取值及依据见 `reports/v5/early_phase_scope_research_20261107.md`（研究者 2026-11-07 全部采纳）。
 
 **粒度单列。** 每条参照登记 `reference_granularity`（voxel / box / tissue）与原标注来源。框级、组织级参照不转成体素正负资格（§4.2），评价结果按粒度分别报告。
 

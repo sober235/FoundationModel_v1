@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python ≥3.9（本机 `.venv` 为 3.9.6；数据服务器为 3.11），NumPy、SciPy、PyTorch、PyYAML、pytest（均已安装）；Google DeepMind surface-distance 源码按固定提交内置（仅 T06a）。不新增运行时依赖。
 
-**Spec:** [Proposal_v5.md](Proposal_v5.md)，v5.1（2026-11-07 修订），SHA256 `fa750a0e280d8ce9dfdd040edd4b94a8493feea886d5299ee0fcddaeefedd592`。其 §1–12 是本计划的约束依据；本计划与之冲突时以 Proposal 为准。
+**Spec:** [Proposal_v5.md](Proposal_v5.md)，v5.1（2026-11-07 修订），SHA256 `4224791f52d20aba893636921a9b497032c9a9c2fd340d5055481bb25db1a430`。其 §1–12 是本计划的约束依据；本计划与之冲突时以 Proposal 为准。
 
 **本次修订（相对提交 `8dc38be` 的上一版）：**
 - 执行基线改为 GitHub `sober235/FoundationModel_v1` 当前内容（本地 `restart-dev`，代码与 `main`/`d7cbd5b` 相同）。上一版依赖的 `02a2447`、`9c972f9` 不在仓库内，相关“复用/适配”假设全部取消，缺失模块改为新建。远端 `docs/skm-a-200step-summary-20261106` 报告的服务器实现与试训结果不作为本计划任何任务的完成证据。
@@ -26,6 +26,7 @@
   - SKM-TEA 为主场景（框级/组织级），SPIDER 为第二场景（组织级）。
   - X0 专家试点移到后期；上一条中“X0 与 B2 同级并行”改为后期启动后才适用。T11 改为先导入原标签（§1.1、§1.2、§1.4）。
   - 体素级核心目标不变；前期结果进 `early_phase_status`，`core_target_validated` 保持 `null`。
+  - 同日研究者全部采纳前期范围建议 S1–S7、P1–P6（`reports/v5/early_phase_scope_research_20261107.md`，§1.4）。
 
 ## Global Constraints
 
@@ -180,11 +181,14 @@ flowchart TD
   - A：椎体、椎管、椎间盘分割。
   - S、R：每个椎间盘的组织级状态与归属。
   - 无 U。
-- **由研究者填写（Agent 不代填，Global Constraint 7）：**
+- **由研究者决定（Agent 不代填，Global Constraint 7）：**
   - SKM：启用的异常类别；排除规则（类别与组织不符的框、低置信阈值）。
   - SPIDER：序列选择；“目标异常”的分级阈值；终板分级的归属语义。
   - 两个场景的 scope 字段。
-  - 建议值与依据见 `reports/v5/early_phase_scope_research_20261107.md`（S1–S7、P1–P6）。研究者批准前，这些字段保持 `null`。
+  - **2026-11-07 研究者全部采纳** `reports/v5/early_phase_scope_research_20261107.md` 的 S1–S7、P1–P6：
+    - SKM 主分析为软骨病变 2A/2B/3 加半月板撕裂（不含挤出），1 级单列；只排除置信度 0 分、类别与组织不符、零尺寸和不含宿主组织的框。
+    - SPIDER 输入矢状 T2；主目标为 Pfirrmann ≥ III，终板改变作次要目标。
+    - scope 实例在 T11/T12 建立时引用这一决定；模板字段仍保持 `null`。评价准则的数值在开发集上选定，锁定评价前冻结。
 - **结果去向：** 前期结果进 `early_phase_status`，不进八格表；`core_target_validated` 保持 `null`。
 - **需要的批准：** SKM-TEA 与 SPIDER 的 G-DATA，按来源与版本。
 

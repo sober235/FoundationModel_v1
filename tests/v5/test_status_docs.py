@@ -69,11 +69,14 @@ def test_same_case_label_check_is_redacted_and_not_an_approval():
     assert "不是 G-DATA 批准" in report and "不是体素级" in report
 
 
-def test_early_phase_research_is_redacted_and_pending_approval():
+def test_early_phase_research_is_redacted_and_adopted():
     report = Path("reports/v5/early_phase_scope_research_20261107.md").read_text(encoding="utf-8")
     assert not re.search(PRIVATE_PATH_PATTERN, report) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", report)
     assert not re.search(r"MTR_\d|\b\d+_t[12]\b", report)
-    assert "待研究者批准" in report and "不是 G-DATA 批准" in report
+    assert "研究者 2026-11-07 全部采纳" in report and "待研究者批准" not in report
+    assert "不是 G-DATA 批准" in report
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    assert "scope values adopted 2026-11-07" in status
 
 
 def test_memory_md_untracked_and_ignored():
