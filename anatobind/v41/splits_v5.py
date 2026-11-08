@@ -5,16 +5,19 @@ group mapping that puts one patient or leakage group into two groups is
 rejected. Official source splits come first; otherwise groups are ordered within
 each stratum by a seeded hash and cut by the policy fractions. Every value
 comes from the policy (no defaults). A group whose exposure ledger blocks the
-lineage's locked test is moved out of ``locked_test`` to the policy's
-``exposed_groups`` split. Pure function: nothing is written.
+locked test of the lineage or of any ancestor lineage (L6) is moved out of
+``locked_test`` to the policy's ``exposed_groups`` split. Pure function:
+nothing is written. The returned registry carries its lineage, ancestors and
+policy, so ``verify_split_registry_v5`` can recompute its hash (L4).
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import math
 
 from .contracts_v5 import SampleV5, V5Error, canonical_sha256
-from .exposure_v5 import locked_test_blockers_v5
+from .exposure_v5 import lineage_blockers_v5
 
 SPLITS_V5 = ("train", "development_val", "locked_test", "unassigned", "excluded")
 OFFICIAL_MAP = {"train": "train", "val": "development_val", "test": "locked_test"}
@@ -118,8 +121,15 @@ def _stratified(policy: dict, group_names: list[str]) -> dict[str, str]:
     return out
 
 
-def freeze_splits_v5(records: list[SampleV5], groups: dict[str, str], policy: dict, lineage_id: str) -> dict:
-    locked_test_blockers_v5([], lineage_id)
+def split_registry_sha256_v5(assignment: dict, lineage_id: str, ancestor_lineages: list[str], policy: dict) -> str:
+    return canonical_sha256({"assignment": assignment, "lineage_id": lineage_id,
+                             "ancestor_lineages": ancestor_lineages, "policy": policy})
+
+
+def freeze_splits_v5(records: list[SampleV5], groups: dict[str, str], policy: dict, lineage_id: str, *,
+                     ancestor_lineages: list[str]) -> dict:
+    lineage_blockers_v5([], lineage_id, ancestor_lineages)
+    ancestors = sorted(ancestor_lineages)
     if not isinstance(policy, dict):
         raise V5Error("INVALID_SPLIT_POLICY", "$.policy")
     members = _record_groups(records, groups)
@@ -134,7 +144,7 @@ def freeze_splits_v5(records: list[SampleV5], groups: dict[str, str], policy: di
     exposed = 0
     for g in group_names:
         if by_group[g] == "locked_test" and any(
-                locked_test_blockers_v5(list(r.exposure_history), lineage_id) for r in members[g]):
+                lineage_blockers_v5(list(r.exposure_history), lineage_id, ancestors) for r in members[g]):
             by_group[g] = exposed_target
             exposed += 1
     assignment = {r.sample_uid: by_group[g] for g in group_names for r in members[g]}
@@ -142,6 +152,32 @@ def freeze_splits_v5(records: list[SampleV5], groups: dict[str, str], policy: di
     counts = {split: 0 for split in sorted(SPLITS_V5)}
     for split in by_group.values():
         counts[split] += 1
+    frozen_policy = copy.deepcopy(policy)
     return {"assignment": assignment, "counts": counts, "exposed_groups": exposed,
-            "unassigned_groups": counts["unassigned"],
-            "split_sha256": canonical_sha256({"assignment": assignment, "lineage_id": lineage_id, "policy": policy})}
+            "unassigned_groups": counts["unassigned"], "lineage_id": lineage_id, "ancestor_lineages": ancestors,
+            "policy": frozen_policy,
+            "split_sha256": split_registry_sha256_v5(assignment, lineage_id, ancestors, frozen_policy)}
+
+
+_REGISTRY_KEYS = ("assignment", "lineage_id", "ancestor_lineages", "policy", "split_sha256")
+
+
+def verify_split_registry_v5(registry: dict) -> dict:
+    """Recompute a frozen registry's hash; only a registry that proves itself may be read (L4)."""
+    if not isinstance(registry, dict):
+        raise V5Error("INVALID_SPLIT_REGISTRY", "$")
+    for key in _REGISTRY_KEYS:
+        if key not in registry:
+            raise V5Error("INVALID_SPLIT_REGISTRY", f"$.{key}")
+    assignment = registry["assignment"]
+    if not isinstance(assignment, dict) or any(
+            not isinstance(uid, str) or split not in SPLITS_V5 for uid, split in assignment.items()):
+        raise V5Error("INVALID_SPLIT_REGISTRY", "$.assignment")
+    if not isinstance(registry["policy"], dict):
+        raise V5Error("INVALID_SPLIT_REGISTRY", "$.policy")
+    lineage_blockers_v5([], registry["lineage_id"], registry["ancestor_lineages"])
+    expected = split_registry_sha256_v5(assignment, registry["lineage_id"], registry["ancestor_lineages"],
+                                        registry["policy"])
+    if registry["split_sha256"] != expected:
+        raise V5Error("SPLIT_HASH_MISMATCH", "$.split_sha256")
+    return registry

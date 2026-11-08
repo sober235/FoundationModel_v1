@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "anatobind/v5/run.schema.json",
+  "title": "AnatoBind-MRI v5.1 run registration",
+  "description": "Written before any training step (plan_v5 T09a; Proposal_v5 §3.3, §6.3). Hashes bind the recipe, supervision policy, frozen split and selected data; parents carry inherited lineage.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "run_kind", "lineage_id", "ancestor_lineages", "parents", "scope", "source",
+               "split", "data_manifest_sha256", "supervision_sha256", "recipe_sha256", "code", "environment",
+               "gate_decisions", "approvals", "fixture_mode", "created_at"],
+  "properties": {
+    "schema_version": {"type": "string", "const": "v5.1"},
+    "run_id": {"type": "string"},
+    "run_kind": {"type": "string", "enum": ["smoke", "baseline"]},
+    "lineage_id": {"type": "string"},
+    "ancestor_lineages": {"type": "array", "items": {"type": "string"}},
+    "parents": {"type": "array", "items": {"$ref": "#/definitions/parent"}},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_id", "scope_hash"],
+      "properties": {"scope_id": {"type": "string"}, "scope_hash": {"type": "string"}}
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "source_version"],
+      "properties": {"source_id": {"type": "string"}, "source_version": {"type": "string"}}
+    },
+    "split": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["split_sha256", "readable_roles"],
+      "properties": {
+        "split_sha256": {"type": "string"},
+        "readable_roles": {"type": "array", "minItems": 1,
+                           "items": {"type": "string", "enum": ["train", "development_val"]}}
+      }
+    },
+    "data_manifest_sha256": {"type": "string"},
+    "supervision_sha256": {"type": "string"},
+    "recipe_sha256": {"type": "string"},
+    "code": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["git_commit", "dirty"],
+      "properties": {"git_commit": {"type": "string"}, "dirty": {"type": "boolean"}}
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python", "torch", "numpy", "cuda", "devices"],
+      "properties": {
+        "python": {"type": "string"},
+        "torch": {"type": "string"},
+        "numpy": {"type": "string"},
+        "cuda": {"type": ["string", "null"]},
+        "devices": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "gate_decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["gate_id", "decision_sha256"],
+        "properties": {"gate_id": {"type": "string"}, "decision_sha256": {"type": "string"}}
+      }
+    },
+    "approvals": {"type": "object"},
+    "fixture_mode": {"type": "boolean"},
+    "created_at": {"type": "string"}
+  },
+  "definitions": {
+    "parent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "run_sha256", "checkpoint_sha256", "lineage_id"],
+      "properties": {
+        "run_id": {"type": "string"},
+        "run_sha256": {"type": "string"},
+        "checkpoint_sha256": {"type": "string"},
+        "lineage_id": {"type": "string"}
+      }
+    }
+  }
+}

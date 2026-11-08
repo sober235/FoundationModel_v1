@@ -49,3 +49,21 @@ def locked_test_blockers_v5(exposure_history: list[dict], lineage_id: str) -> li
                                                  or entry_lineage.strip() == lineage_id.strip()):
             blockers.add(role)
     return sorted(blockers)
+
+
+def lineage_blockers_v5(exposure_history: list[dict], lineage_id: str, ancestor_lineages: list[str]) -> list[str]:
+    """Locked-test blockers for a lineage and every lineage its weights descend from (Proposal_v5 §3.3).
+
+    A model initialised from a checkpoint inherits that checkpoint's exposure; a new lineage ID does not clear it.
+    """
+    locked_test_blockers_v5([], lineage_id)
+    if not isinstance(ancestor_lineages, list) or any(
+            not isinstance(name, str) or not name.strip() for name in ancestor_lineages):
+        raise V5Error("INVALID_LINEAGE", "$.ancestor_lineages")
+    names = [name.strip() for name in ancestor_lineages]
+    if len(set(names)) != len(names) or lineage_id.strip() in names:
+        raise V5Error("INVALID_LINEAGE", "$.ancestor_lineages")
+    blockers = set(locked_test_blockers_v5(exposure_history, lineage_id))
+    for name in names:
+        blockers.update(locked_test_blockers_v5(exposure_history, name))
+    return sorted(blockers)

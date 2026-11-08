@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import copy
 import hashlib
+from pathlib import Path
 
 import numpy as np
+import yaml
 
-from anatobind.v41.contracts_v5 import validate_sample_v5
+from anatobind.v41.contracts_v5 import validate_sample_v5, validate_scope_v5
 from anatobind.v41.evaluation.reference import ReferenceLesion
-from anatobind.v41.gates_v5 import gate_task_v5
+from anatobind.v41.gates_v5 import GATE_REQUIREMENTS, evaluate_gate_v5, gate_task_v5
+from anatobind.v41.splits_v5 import freeze_splits_v5
 from anatobind.v41.source_policy_v5 import validate_source_policy_v5
 from anatobind.v41.state_rule_v5 import REASON_BITS, derive_state_map_v5
 from tests.v41.conftest import _sample
@@ -292,3 +295,144 @@ def make_source_policy(**overrides):
              "physical_units_policy": "trust_header", "physical_units_evidence": "synthetic"}
     entry.update(overrides)
     return validate_source_policy_v5("synthetic_source", entry)
+
+
+# ---------------------------------------------------------------------------
+# Run registration fixtures (plan_v5 T09a). Every value here is synthetic.
+
+CONFIG_DIR_V5 = Path(__file__).resolve().parents[2] / "configs" / "v5"
+SYNTH_ENVIRONMENT = {"python": "3.9.6", "torch": "0.0.0", "numpy": "0.0.0", "cuda": None, "devices": []}
+SYNTH_CODE = {"git_commit": "0" * 40, "dirty": False}
+SYNTH_CREATED_AT = "2026-11-07T00:00:00Z"
+
+_RECIPE_VALUES = {
+    "recipe_id": "synthetic_recipe_v1",
+    "model": {"architecture": "resunet3d", "tasks": ["A"], "widths": [4, 8], "strides": [[1, 1, 1], [1, 2, 2]],
+              "blocks_per_stage": 1},
+    "seeds": {"init": 0, "sampler": 1},
+    "patch_size": [4, 8, 8],
+    "batch_size": 2,
+    "precision": "fp32",
+    "optimizer": {"name": "adamw", "lr": 0.001, "weight_decay": 0.0},
+    "scheduler": {"name": "poly", "exponent": 0.9},
+    "downsample_factor": [1, 1, 1],
+    "normalization": "zscore_volume",
+    "sampling": {"positive_fraction": 0.5},
+    "readable_roles": ["train"],
+    "selection_rule": "last",
+    "inference": {"window": [4, 8, 8], "stride": [2, 4, 4]},
+    "checkpoint_every": 2,
+    "budget": {"max_steps": 4, "max_wall_hours": 0.1},
+}
+_SUPERVISION_VALUES = {"policy_id": "synthetic_supervision_v1", "track": "released_reference",
+                       "allow_unknown_visibility": False, "channel": "expert"}
+_TASK_LOSS = {"A": {"kind": "softmax", "ce_weight": 1.0, "dice_weight": 1.0, "task_weight": 1.0},
+              "U": {"kind": "sigmoid", "ce_weight": 1.0, "dice_weight": 1.0, "task_weight": 1.0}}
+_OFFICIAL_NAMES = {"train": "train", "development_val": "val", "locked_test": "test"}
+
+
+def load_template_v5(name: str) -> dict:
+    return yaml.safe_load((CONFIG_DIR_V5 / name).read_text())
+
+
+def _fill(template, values, path: str = "$"):
+    """Fill every null leaf of a template; template and values must have the same keys."""
+    if isinstance(template, dict):
+        if not isinstance(values, dict) or set(template) != set(values):
+            raise AssertionError(f"template keys differ at {path}")
+        return {key: _fill(template[key], values[key], f"{path}.{key}") for key in template}
+    if template is not None:
+        raise AssertionError(f"template leaf is not null at {path}")
+    return copy.deepcopy(values)
+
+
+def _merge(base: dict, overrides: dict) -> dict:
+    out = copy.deepcopy(base)
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _merge(out[key], value)
+        else:
+            out[key] = copy.deepcopy(value)
+    return out
+
+
+def _trainable(scope) -> list:
+    return [task for task, classes in (("A", scope.anatomy_classes), ("U", scope.abnormality_classes)) if classes]
+
+
+def make_recipe(**overrides) -> dict:
+    """The null recipe template filled with synthetic values (A-only); dict overrides merge into nested keys."""
+    return _merge(_fill(load_template_v5("run_recipe.template.yaml"), _RECIPE_VALUES), overrides)
+
+
+def make_supervision(scope, **overrides) -> dict:
+    """The null supervision template filled for every trainable task of the scope; dict overrides merge."""
+    template = load_template_v5("supervision.template.yaml")
+    values = dict(_SUPERVISION_VALUES, scope_id=scope.scope_id, reference_policy_id=scope.reference_policy_id)
+    policy = _fill({key: value for key, value in template.items() if key != "tasks"}, values)
+    policy["tasks"] = {task: _fill(template["tasks"][task], _TASK_LOSS[task]) for task in _trainable(scope)}
+    return _merge(policy, overrides)
+
+
+def make_split_records(splits) -> list:
+    """One SampleV5 per entry, one patient each; the entry is the record's own split field, not the registry."""
+    return [validate_sample_v5(make_sample_v5(sample_uid=f"s-{i}", split=split, patient_uid=f"synthetic:p{i:04d}",
+                                              leakage_group_uid=f"synthetic:p{i:04d}"))
+            for i, split in enumerate(splits)]
+
+
+def make_split_registry(records, **overrides) -> dict:
+    """Official-kind frozen registry grouped by leakage group.
+
+    By default a group's official split mirrors its records' split field; other groups stay unassigned.
+    Overrides: official_split, exposed_groups, lineage_id, ancestor_lineages.
+    """
+    groups = {record.sample_uid: record.leakage_group_uid for record in records}
+    official = {r.leakage_group_uid: _OFFICIAL_NAMES[r.split] for r in records if r.split in _OFFICIAL_NAMES}
+    policy = {"kind": "official", "official_split": overrides.pop("official_split", official),
+              "exposed_groups": overrides.pop("exposed_groups", "excluded")}
+    lineage_id = overrides.pop("lineage_id", "lin-a")
+    ancestors = overrides.pop("ancestor_lineages", [])
+    if overrides:
+        raise TypeError(f"unknown overrides: {sorted(overrides)}")
+    return freeze_splits_v5(records, groups, policy, lineage_id, ancestor_lineages=ancestors)
+
+
+def make_gate_decisions(scope, run_kind: str, source=SYNTH_SOURCE) -> dict:
+    """Fixture PASS decisions a run needs: G-DATA for smoke, G-BASE-A/-U per trainable task otherwise."""
+    gate_ids = ["G-DATA"] if run_kind == "smoke" else [f"G-BASE-{task}" for task in _trainable(scope)]
+    decisions = {}
+    for gate_id in gate_ids:
+        requirement = GATE_REQUIREMENTS[gate_id]
+        bound = source if requirement.get("source_bound_approvals") else None
+        decisions[gate_id] = evaluate_gate_v5(gate_id, scope, make_evidence(requirement["evidence"], scope, source),
+                                              make_approvals(scope, requirement["approvals"], bound), source,
+                                              fixture_mode=True)
+    return decisions
+
+
+def make_run(**overrides) -> dict:
+    """A registered fixture run: an A-only baseline on the synthetic A module scope unless overridden.
+
+    Any register_run_v5 keyword can be overridden. `scope`, `run_kind`, `lineage_id`, `parents` and `records`
+    also drive the other defaults; the default split registry is frozen with the inherited ancestors.
+    """
+    from anatobind.v41.engine.registration_v5 import inherit_lineage_v5, register_run_v5
+
+    scope = overrides.get("scope") or validate_scope_v5(make_module_scope("A"))
+    run_kind = overrides.get("run_kind", "baseline")
+    lineage_id = overrides.get("lineage_id", "lin-a")
+    parents = overrides.get("parents", [])
+    records = overrides.get("records") or make_split_records(["train", "development_val", "locked_test"])
+    kwargs = {"run_id": "run-synthetic-0001", "lineage_id": lineage_id, "run_kind": run_kind,
+              "recipe": make_recipe(model={"tasks": _trainable(scope)}), "supervision": make_supervision(scope),
+              "scope": scope, "source": dict(SYNTH_SOURCE), "records": records,
+              "gate_decisions": make_gate_decisions(scope, run_kind),
+              "approvals": make_approvals(scope, ["resources"]) if run_kind == "smoke" else {},
+              "parents": parents, "environment": dict(SYNTH_ENVIRONMENT), "code": dict(SYNTH_CODE),
+              "created_at": SYNTH_CREATED_AT, "fixture_mode": True}
+    kwargs.update(overrides)
+    if "split_registry" not in overrides:
+        kwargs["split_registry"] = make_split_registry(records, lineage_id=lineage_id,
+                                                       ancestor_lineages=inherit_lineage_v5(parents, lineage_id))
+    return register_run_v5(**kwargs)
