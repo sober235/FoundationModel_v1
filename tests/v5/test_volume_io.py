@@ -141,3 +141,23 @@ def test_ref_must_stay_inside_root(tmp_path):
     _raises("UNSUPPORTED_FORMAT", "$.ref", read_volume_v5, tmp_path, "img/a.mhd", "image")
     _raises("VOLUME_MISSING", "$.ref", read_volume_v5, tmp_path, "img/missing.nii.gz", "image")
     assert read_volume_v5(tmp_path, "img/a.nii.gz", "image").array.shape == (2, 2, 2)
+
+
+def test_unreadable_volume_does_not_echo_file_name(tmp_path):
+    """A corrupt file is VOLUME_UNREADABLE at $.ref; neither the message nor a chained exception carries its name."""
+    (tmp_path / "img").mkdir()
+    (tmp_path / "img" / "secret-name.nii").write_bytes(b"not a nifti file at all" * 20)
+    write_nifti(tmp_path / "img" / "secret-name.nii.gz", np.zeros((8, 8, 8), dtype=np.float32), AFFINE)
+    packed = (tmp_path / "img" / "secret-name.nii.gz").read_bytes()
+    (tmp_path / "img" / "secret-name.nii.gz").write_bytes(packed[: len(packed) // 2])
+    (tmp_path / "skm").mkdir()
+    (tmp_path / "skm" / "secret-name.h5").write_bytes(b"not an hdf5 file" * 20)
+    cases = [("img/secret-name.nii", "image"), ("img/secret-name.nii", "label"),
+             ("img/secret-name.nii.gz", "image"), ("img/secret-name.nii.gz", "label"),
+             ("skm/secret-name.h5#echo1", "image"), ("skm/secret-name.h5#seg", "label")]
+    for ref, kind in cases:
+        with pytest.raises(V5Error) as err:
+            read_volume_v5(tmp_path, ref, kind)
+        assert (err.value.code, err.value.path) == ("VOLUME_UNREADABLE", "$.ref"), (ref, kind)
+        assert "secret-name" not in str(err.value) and "secret-name" not in repr(err.value)
+        assert err.value.__cause__ is None and err.value.__suppress_context__

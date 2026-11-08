@@ -166,6 +166,15 @@ def read_volume_v5(root: Path, ref: str, kind: str) -> VolumeV5:
         raise V5Error("INVALID_REF", "$.ref")
     if not path.is_file():
         raise V5Error("VOLUME_MISSING", "$.ref")
+    try:
+        return _read_any(path, name, dataset, kind)
+    except (V5Error, MemoryError):
+        raise
+    except Exception:   # library errors (nibabel, h5py, OS) can carry the file name: never chain them
+        raise V5Error("VOLUME_UNREADABLE", "$.ref") from None
+
+
+def _read_any(path: Path, name: str, dataset: str | None, kind: str) -> VolumeV5:
     if name.endswith(".h5"):
         return _read_h5(path, dataset, kind)
     if name.endswith(".mha"):
