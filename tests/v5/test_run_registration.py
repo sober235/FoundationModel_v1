@@ -21,7 +21,7 @@ from anatobind.v41.paths import PrivatePathError
 from anatobind.v41.splits_v5 import split_registry_sha256_v5, verify_split_registry_v5
 from tests.v5.factories import (
     CONFIG_DIR_V5, FIXTURE_APPROVER, SYNTH_SOURCE, make_approvals, make_gate_decisions, make_module_scope,
-    make_recipe, make_run, make_split_records, make_split_registry, make_supervision)
+    make_parent_entry, make_recipe, make_run, make_split_records, make_split_registry, make_supervision)
 
 REPO = Path(__file__).resolve().parents[2]
 CHECKPOINT = "c" * 64
@@ -90,9 +90,12 @@ def test_unassigned_record_rejected():
 
 
 def test_lineage_inherits_all_ancestors():
-    grand = make_run(run_id="run-g", lineage_id="lin-g")
-    parent = make_run(run_id="run-p", lineage_id="lin-p", parents=[{"run": grand, "checkpoint_sha256": CHECKPOINT}])
-    child = make_run(run_id="run-c", lineage_id="lin-c", parents=[{"run": parent, "checkpoint_sha256": CHECKPOINT}])
+    records = make_split_records(["train", "development_val", "locked_test"])
+    grand = make_run(run_id="run-g", lineage_id="lin-g", records=records)
+    grand_entry, records = make_parent_entry(grand, records, CHECKPOINT)
+    parent = make_run(run_id="run-p", lineage_id="lin-p", parents=[grand_entry], records=records)
+    parent_entry, records = make_parent_entry(parent, records, CHECKPOINT)
+    child = make_run(run_id="run-c", lineage_id="lin-c", parents=[parent_entry], records=records)
     assert (grand["ancestor_lineages"], parent["ancestor_lineages"], child["ancestor_lineages"]) == (
         [], ["lin-g"], ["lin-g", "lin-p"])
     assert child["parents"] == [{"run_id": "run-p", "run_sha256": run_sha256_v5(parent),
@@ -113,6 +116,34 @@ def test_split_registry_must_cover_run_lineage():
     _raises("SPLIT_LINEAGE_MISMATCH", "$.split_registry.lineage_id", make_run, run_id="run-c", lineage_id="lin-c",
             parents=parents, records=records,
             split_registry=make_split_registry(records, lineage_id="lin-x", ancestor_lineages=["lin-g"]))
+
+
+def test_parent_exposure_must_be_merged_before_registration():
+    """L6 end to end: the parent trained on s-0. Its exposure file is required, must be the parent's own and must
+    already be in the child's records, and a child split frozen before that merge (s-0 still locked_test) is
+    refused; frozen from the merged records, s-0 leaves the locked test and the child registers."""
+    records = make_split_records(["train", "development_val", "locked_test"])
+    parent = make_run(run_id="run-p", lineage_id="lin-a", records=records)
+    entry, merged = make_parent_entry(parent, records)
+    official = {"synthetic:p0000": "test", "synthetic:p0001": "val", "synthetic:p0002": "train"}
+    stale = make_split_registry(records, official_split=official, lineage_id="lin-b", ancestor_lineages=["lin-a"])
+    assert stale["assignment"]["s-0"] == "locked_test"
+    child = {"run_id": "run-c", "lineage_id": "lin-b", "records": records, "split_registry": stale}
+    _raises("PARENT_EXPOSURE_REQUIRED", "$.parents[0].exposure", make_run,
+            parents=[{"run": parent, "checkpoint_sha256": CHECKPOINT}], **child)
+    _raises("PARENT_EXPOSURE_NOT_MERGED", "$.parents[0].exposure", make_run, parents=[entry], **child)
+    _raises("LOCKED_TEST_EXPOSED", "$.split_registry.assignment", make_run, parents=[entry],
+            **dict(child, records=merged))
+    fresh = make_split_registry(merged, official_split=official, lineage_id="lin-b", ancestor_lineages=["lin-a"])
+    assert fresh["assignment"]["s-0"] == "excluded"
+    run = make_run(parents=[entry], **dict(child, records=merged, split_registry=fresh))
+    assert run["ancestor_lineages"] == ["lin-a"]
+    other, _ = make_parent_entry(make_run(run_id="run-o", lineage_id="lin-a", records=records), records)
+    _raises("PARENT_EXPOSURE_MISMATCH", "$.parents[0].exposure", make_run,
+            parents=[dict(entry, exposure=other["exposure"])], **dict(child, records=merged, split_registry=fresh))
+    # The records must hold every locked_test sample of the split, or its exposure cannot be checked.
+    _raises("RECORDS_INCOMPLETE", "$.records", make_run, parents=[entry],
+            **dict(child, records=[r for r in merged if r.sample_uid != "s-0"]))
 
 
 def test_parent_without_run_record_or_smoke_parent_rejected():

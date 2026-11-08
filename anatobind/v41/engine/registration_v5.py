@@ -20,7 +20,7 @@ from pathlib import Path
 from ..contracts_v5 import (UNKNOWN_KEY, ActiveScope, SampleV5, V5Error, _check_schema, canonical_sha256,
                             validate_sample_v5)
 from ..eligibility import TRACKS_V5
-from ..exposure_v5 import locked_test_blockers_v5
+from ..exposure_v5 import lineage_blockers_v5, locked_test_blockers_v5
 from ..gates_v5 import FIXTURE_APPROVERS, gate_task_v5
 from ..paths import PrivatePathError, resolve_private_output, write_private_json
 from ..splits_v5 import verify_split_registry_v5
@@ -336,6 +336,34 @@ def _gate_records(gate_decisions: dict, scope: ActiveScope, source: dict, requir
     return records
 
 
+def _check_parent_exposure(parents: list[dict], records: list[SampleV5], registry: dict, lineage_id: str) -> None:
+    """L6: each parent's exposure file (bound to its run) must already be merged into `records`, and no locked_test
+    record may carry exposure that blocks this lineage or an ancestor, so a split frozen before the merge fails."""
+    by_uid = {record.sample_uid: record for record in records}
+    for index, parent in enumerate(parents):
+        path = f"$.parents[{index}].exposure"
+        exposure = parent.get("exposure")
+        if exposure is None:
+            raise V5Error("PARENT_EXPOSURE_REQUIRED", path)
+        if not (isinstance(exposure, dict) and isinstance(exposure.get("entries"), dict) and exposure["entries"]):
+            raise V5Error("INVALID_EXPOSURE_FILE", path)
+        if exposure.get("run_id") != parent["run"]["run_id"] \
+                or exposure.get("run_sha256") != run_sha256_v5(parent["run"]):
+            raise V5Error("PARENT_EXPOSURE_MISMATCH", path)
+        for uid, entries in exposure["entries"].items():
+            if uid not in by_uid:
+                continue    # a sample this run does not hold cannot sit in its locked test
+            if not isinstance(entries, list) or any(entry not in by_uid[uid].exposure_history for entry in entries):
+                raise V5Error("PARENT_EXPOSURE_NOT_MERGED", path)
+    for uid, split in registry["assignment"].items():
+        if split != "locked_test":
+            continue
+        if uid not in by_uid:
+            raise V5Error("RECORDS_INCOMPLETE", "$.records")
+        if lineage_blockers_v5(list(by_uid[uid].exposure_history), lineage_id, registry["ancestor_lineages"]):
+            raise V5Error("LOCKED_TEST_EXPOSED", "$.split_registry.assignment")
+
+
 def _check_approvals(approvals: dict, scope: ActiveScope, required: tuple, fixture_mode: bool) -> None:
     _check_keys_are_strings(approvals, "$.approvals")
     for key in sorted(set(approvals) | set(required)):
@@ -388,6 +416,7 @@ def register_run_v5(*, run_id: str, lineage_id: str, run_kind: str, recipe: dict
     if not set(ancestors) <= set(split_registry["ancestor_lineages"]):
         raise V5Error("SPLIT_LINEAGE_MISMATCH", "$.split_registry.ancestor_lineages")
     selected = select_samples_v5(records, split_registry, roles)
+    _check_parent_exposure(parents, records, split_registry, lineage_id)
     required = ["G-DATA"] if run_kind == "smoke" else [f"G-BASE-{task}" for task in sorted(tasks)]
     gates = _gate_records(gate_decisions, scope, source, required, fixture_mode)
     _check_approvals(approvals, scope, ("resources",) if run_kind == "smoke" else (), fixture_mode)

@@ -14,7 +14,7 @@ import torch
 
 from anatobind.v41.contracts_v5 import V5Error, validate_scope_v5
 from anatobind.v41.engine import train_v5 as train_module
-from anatobind.v41.engine.registration_v5 import run_sha256_v5, write_run_v5
+from anatobind.v41.engine.registration_v5 import merge_run_exposure_v5, run_sha256_v5, write_run_v5
 from anatobind.v41.engine.train_v5 import (
     build_optimizer_v5, build_scaler_v5, build_scheduler_v5, load_checkpoint_v5, save_checkpoint_v5, train_v5,
     training_loss_v5)
@@ -316,12 +316,14 @@ def test_fresh_start_trains_only_the_registered_initialisation(tmp_path):
 
 
 def _child(tmp_path, parent, checkpoint_sha256):
-    """`parent`'s recipe and samples registered as run lin-b that declares `parent` (that checkpoint) its parent."""
-    records = make_split_records(SPLITS)
+    """`parent`'s recipe and samples registered as run lin-b that declares `parent` (that checkpoint) its parent,
+    with the parent's exposure file merged into the records first (L6)."""
+    exposure = json.loads((parent["run_dir"] / "exposure.json").read_text())
+    records = merge_run_exposure_v5(make_split_records(SPLITS), [exposure])
     registry = make_split_registry(records, lineage_id="lin-b", ancestor_lineages=["lin-a"])
     run = make_run(scope=parent["scope"], records=records, split_registry=registry, recipe=parent["recipe"],
                    supervision=parent["supervision"], run_id="run-synthetic-0002", lineage_id="lin-b",
-                   parents=[{"run": parent["run"], "checkpoint_sha256": checkpoint_sha256}])
+                   parents=[{"run": parent["run"], "checkpoint_sha256": checkpoint_sha256, "exposure": exposure}])
     root = tmp_path / "child"
     return dict(parent, run=run, root=root, run_dir=write_run_v5(run, registry, root, REPO))
 

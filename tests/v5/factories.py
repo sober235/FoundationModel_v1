@@ -444,6 +444,17 @@ def make_run(**overrides) -> dict:
     return register_run_v5(**kwargs)
 
 
+def make_parent_entry(run, records, checkpoint_sha256: str = "c" * 64):
+    """(parent entry with the run's exposure file, `records` with that exposure merged) for a run that make_run
+    registered on `records` with its default split registry."""
+    from anatobind.v41.engine.registration_v5 import merge_run_exposure_v5, run_exposure_file_v5
+
+    registry = make_split_registry(records, lineage_id=run["lineage_id"], ancestor_lineages=run["ancestor_lineages"])
+    exposure = run_exposure_file_v5(run, registry)
+    return ({"run": run, "checkpoint_sha256": checkpoint_sha256, "exposure": exposure},
+            merge_run_exposure_v5(records, [exposure]))
+
+
 def make_dev_split(scope, sample_uids, roles=None, readable_roles=("train", "development_val")):
     """(registry, run): a frozen registry assigning each uid development_val unless `roles` maps it to another
     split (one train sample "s-train" is always added), and a baseline run on `scope` that reads `readable_roles`.
