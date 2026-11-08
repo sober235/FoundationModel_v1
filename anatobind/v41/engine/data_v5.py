@@ -177,6 +177,10 @@ def load_observation_v5(root: Path, record: SampleV5, scope: ActiveScope, recipe
             header = volume.header
         channels[name] = volume.array
     shape = next(iter(channels.values())).shape
+    if header is None and record.image_geometry is not None \
+            and list(record.image_geometry.get("shape") or []) != list(shape):
+        # headerless (H5) channels take spacing/affine from the record: only when it describes this grid
+        raise V5Error("GRID_MISMATCH", "$.image_geometry.shape")
     factor = tuple(int(f) for f in recipe["downsample_factor"])
     fov = np.ones(shape, dtype=bool)
     to_original: list[dict] = []

@@ -319,3 +319,18 @@ def test_patch_chain_lists_ops_in_application_order():
     patch = extract_patch_v5(dataclasses.replace(sample, observation=observation), (3, 3, 3), (4, 4, 4))
     crop = {"op": "crop", "start": [1, 1, 1], "input_shape": [6, 6, 6]}
     assert patch["to_original"] == [down, crop] and patch["grid"]["transform_chain"] == [down, crop]
+
+
+def test_headerless_image_grid_must_match_record_geometry(tmp_path):
+    """H5 images carry no header, so the model grid takes spacing/affine from the record; a record geometry
+    whose shape differs from the array describes another grid and is refused, not used."""
+    scope = _scope("A")
+    record = write_volume_case(tmp_path, scope)
+    recipe = _recipe(scope)
+    ramp = np.arange(512, dtype=np.float32).reshape(8, 8, 8)
+    write_skm_h5(tmp_path / "img" / "case-1.h5", ramp, ramp * 2.0 + 1.0, np.zeros((8, 8, 8, 2), dtype=np.uint8))
+    headerless = _with(record, image_paths=["img/case-1.h5#echo1", "img/case-1.h5#echo2"])
+    observation = load_observation_v5(tmp_path, headerless, scope, recipe)
+    assert observation.original_header is None and observation.grid["spacing_mm"] == [1.0, 1.0, 2.0]
+    stale = _with(headerless, image_geometry={**record.image_geometry, "shape": [8, 8, 6]})
+    _raises("GRID_MISMATCH", "$.image_geometry.shape", load_observation_v5, tmp_path, stale, scope, recipe)
