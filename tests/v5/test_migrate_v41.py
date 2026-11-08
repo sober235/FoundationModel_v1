@@ -14,7 +14,7 @@ from anatobind.v41.source_policy_v5 import load_source_policies_v5
 from tests.v41.conftest import _sample
 from tests.v5.factories import make_module_scope, make_source_policy
 
-U_SCOPE = validate_scope_v5(make_module_scope("U"))
+U_SCOPE = validate_scope_v5(make_module_scope("U", input_modalities=["qdess_e1"]))
 
 
 def _record(**overrides):
@@ -89,7 +89,7 @@ def test_template_unknowns_fail_closed():
     policy = load_source_policies_v5(Path("configs/v5/sources_v5.template.yaml"))["skm_tea"]
     scope = validate_scope_v5(yaml.safe_load(Path("configs/v5/scope_skm_a.yaml").read_text()))
     body = _sample()
-    body.update(source_dataset="SKM-TEA_ltr", image_paths=["e1.nii.gz", "e2.nii.gz"],
+    body.update(source_dataset="SKM-TEA_ltr", source_release="SKM-TEA v1.0.0", image_paths=["e1.nii.gz", "e2.nii.gz"],
                 modality_names=["qdess_e1", "qdess_e2"], modality_is_synthetic=[False, False],
                 available_modality_mask=[True, True])
     body["annotation_records"][0].update(task="A", class_scope=["femoral_cartilage"])
@@ -129,3 +129,32 @@ def test_verified_geometry_needs_evidence(field, key):
     with pytest.raises(V5Error) as error:
         validate_sample_v5(make_sample_v5(**{field: "verified"}))
     assert (error.value.code, error.value.path) == ("GEOMETRY_EVIDENCE_MISSING", f"$.geometry_evidence.{key}")
+
+
+def test_record_release_must_match_policy_version():
+    """L1: a record is migrated only under the policy for its own release string."""
+    with pytest.raises(V5Error) as error:
+        migrate_v41_record_v5(_record(source_release="other-release"), make_source_policy(), U_SCOPE)
+    assert (error.value.code, error.value.path) == ("SOURCE_VERSION_MISMATCH", "$.source_release")
+    migrated, failures = migrate_v41_records_v5([_record(source_release="other-release")], make_source_policy(),
+                                                U_SCOPE)
+    assert migrated == [] and failures == [{"index": 0, "code": "SOURCE_VERSION_MISMATCH",
+                                            "path": "$.source_release"}]
+
+
+def test_policy_modalities_must_match_scope_inputs():
+    """L2: training and evaluation see the same observation condition."""
+    scope = validate_scope_v5(make_module_scope("U", input_modalities=["qdess_e1", "qdess_e2"]))
+    with pytest.raises(V5Error) as error:
+        migrate_v41_record_v5(_record(), make_source_policy(), scope)
+    assert (error.value.code, error.value.path) == ("MODALITY_SCOPE_MISMATCH", "$.model_modalities")
+
+
+def test_passed_geometry_without_image_geometry_fails_closed():
+    """L3: a record claiming geometry 'pass' with no geometry is refused, and a batch keeps going."""
+    with pytest.raises(V5Error) as error:
+        migrate_v41_record_v5(_record(geometry_status="pass", image_geometry=None), make_source_policy(), U_SCOPE)
+    assert (error.value.code, error.value.path) == ("GEOMETRY_MISSING", "$.image_geometry")
+    migrated, failures = migrate_v41_records_v5(
+        [_record(geometry_status="pass", image_geometry=None), _record()], make_source_policy(), U_SCOPE)
+    assert len(migrated) == 1 and failures == [{"index": 0, "code": "GEOMETRY_MISSING", "path": "$.image_geometry"}]

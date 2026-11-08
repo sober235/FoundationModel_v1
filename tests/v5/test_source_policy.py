@@ -26,6 +26,8 @@ def test_policies_load_and_bind_sources():
                                                       "source_version": "skm_tea_annotations_v1.0.0"}
     assert isles.annotation_modalities == {"U": None} and isles.index_evidence is None
     assert isles.physical_units_policy is None and isles.physical_units_evidence is None
+    # L1: the release strings the real v41 records carry (read-only count on amax, 2026-11-08)
+    assert (isles.source_release, policies["skm_tea"].source_release) == ("ISLES-2022", "SKM-TEA v1.0.0")
 
 
 @pytest.mark.parametrize("mutate", [
@@ -35,6 +37,8 @@ def test_policies_load_and_bind_sources():
     lambda e: e.update(physical_units_policy="guess"),
     lambda e: e.update(annotation_modalities={"U": ["dwi", 3]}),
     lambda e: e.update(source_version=""),
+    lambda e: e.pop("source_release"),
+    lambda e: e.update(source_release=" "),
     lambda e: e.update(physical_units_policy="trust_header"),
     lambda e: e.update(physical_units_policy="trust_header", physical_units_evidence=""),
 ])

@@ -34,7 +34,7 @@ def test_v41_roles_are_mapped_on_migration():
     body["exposure_history"] = [{"experiment_id": f"exp-{i}", "role": role, "recorded_at": "2026-11-02T00:00:00Z"}
                                 for i, role in enumerate(v41_roles)]
     migrated = migrate_v41_record_v5(validate_sample(body), make_source_policy(),
-                                     validate_scope_v5(make_module_scope("U")))
+                                     validate_scope_v5(make_module_scope("U", input_modalities=["qdess_e1"])))
     assert [e["role"] for e in migrated.exposure_history] == [V41_ROLE_MAP[r] for r in v41_roles]
     assert [e["role"] for e in migrated.exposure_history] == [
         "training", "model_selection", "test_results_seen", "unlabeled_pretraining", "training", "unknown"]

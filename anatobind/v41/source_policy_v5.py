@@ -1,7 +1,8 @@
 """Per-source data policies for v5.1 (Proposal_v5 §3.1-3.2).
 
-A SourcePolicy names one data source (id + version) and the facts migration
-needs about it. Facts that need real-data evidence (annotation modalities,
+A SourcePolicy names one data source (id + version), the release string its
+v41 records carry (migration accepts only records with that string), and the
+facts migration needs about it. Facts that need real-data evidence (annotation modalities,
 index-alignment evidence, unit policy and the evidence for it) stay null until verified; migration of
 real records then fails closed instead of guessing.
 """
@@ -14,7 +15,7 @@ import yaml
 
 from .contracts_v5 import V5Error
 
-POLICY_FIELDS = ("source_version", "source_dataset", "scope_id", "reference_policy_id", "model_modalities",
+POLICY_FIELDS = ("source_version", "source_release", "source_dataset", "scope_id", "reference_policy_id", "model_modalities",
                  "annotation_modalities", "index_evidence", "physical_units_policy", "physical_units_evidence")
 UNITS_POLICIES = ("trust_header",)
 _TASKS = ("A", "U")
@@ -24,6 +25,7 @@ _TASKS = ("A", "U")
 class SourcePolicy:
     source_id: str
     source_version: str
+    source_release: str
     source_dataset: str
     scope_id: str
     reference_policy_id: str
@@ -46,7 +48,7 @@ def validate_source_policy_v5(source_id: str, entry: dict) -> SourcePolicy:
     path = f"$.{source_id}"
     if not _is_name(source_id) or not isinstance(entry, dict) or set(entry) != set(POLICY_FIELDS):
         raise V5Error("INVALID_SOURCE_POLICY", path)
-    for name in ("source_version", "source_dataset", "scope_id", "reference_policy_id"):
+    for name in ("source_version", "source_release", "source_dataset", "scope_id", "reference_policy_id"):
         if not _is_name(entry[name]):
             raise V5Error("INVALID_SOURCE_POLICY", f"{path}.{name}")
     if not _names(entry["model_modalities"]):
@@ -63,7 +65,8 @@ def validate_source_policy_v5(source_id: str, entry: dict) -> SourcePolicy:
     if (evidence is not None and not _is_name(evidence)) or (entry["physical_units_policy"] and evidence is None):
         raise V5Error("INVALID_SOURCE_POLICY", f"{path}.physical_units_evidence")
     return SourcePolicy(
-        source_id=source_id, source_version=entry["source_version"], source_dataset=entry["source_dataset"],
+        source_id=source_id, source_version=entry["source_version"], source_release=entry["source_release"],
+        source_dataset=entry["source_dataset"],
         scope_id=entry["scope_id"], reference_policy_id=entry["reference_policy_id"],
         model_modalities=tuple(entry["model_modalities"]),
         annotation_modalities={task: None if v is None else tuple(v) for task, v in modalities.items()},

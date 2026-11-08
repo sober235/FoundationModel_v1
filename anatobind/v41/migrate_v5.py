@@ -4,7 +4,9 @@ Migration adds the v5.1 fields, never upgrades evidence: geometry status can
 only stay unknown or fail unless the source policy registers the evidence,
 headers and units are not edited, and v41 "limited" visibility (which has no
 region) is refused rather than rewritten. v41 exposure roles are mapped to the
-v5 roles with no lineage. Each status records its evidence (the policy's
+v5 roles with no lineage. A record is accepted only under the policy for its
+own release string, and only when the policy's model modalities are the
+scope's input modalities. Each status records its evidence (the policy's
 evidence when verified, the v41 status when failed). Only v41 records are
 accepted, so a migrated record cannot be migrated again. The input record is
 not modified.
@@ -29,6 +31,8 @@ def _index_status(record: dict, policy: SourcePolicy) -> str:
 
 
 def _physical_status(record: dict, policy: SourcePolicy) -> str:
+    if record["geometry_status"] == "pass" and not isinstance(record["image_geometry"], dict):
+        raise V5Error("GEOMETRY_MISSING", "$.image_geometry")
     if record["geometry_status"] == "fail":
         return "failed"
     if record["geometry_status"] == "pass" and policy.physical_units_policy == "trust_header" \
@@ -64,8 +68,12 @@ def migrate_v41_record_v5(record: SampleRecord, policy: SourcePolicy, scope: Act
     body = dataclasses.asdict(record)
     if body["source_dataset"] != policy.source_dataset:
         raise V5Error("SOURCE_MISMATCH", "$.source_dataset")
+    if body["source_release"] != policy.source_release:
+        raise V5Error("SOURCE_VERSION_MISMATCH", "$.source_release")
     if policy.scope_id != scope.scope_id or policy.reference_policy_id != scope.reference_policy_id:
         raise V5Error("SCOPE_MISMATCH", "$.active_scope_id")
+    if list(policy.model_modalities) != list(scope.input_modalities):
+        raise V5Error("MODALITY_SCOPE_MISMATCH", "$.model_modalities")
     body["annotation_records"] = [_annotation(a, policy, f"$.annotation_records[{i}]")
                                   for i, a in enumerate(body["annotation_records"])]
     body["exposure_history"] = [migrate_exposure_v41(e, f"$.exposure_history[{i}]")

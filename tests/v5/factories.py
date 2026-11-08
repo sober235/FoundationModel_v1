@@ -294,7 +294,7 @@ def make_state_reference_inputs(scope, **overrides) -> dict:
 
 def make_source_policy(**overrides):
     """Synthetic SourcePolicy matching tests.v41.conftest._sample() and make_module_scope("U")."""
-    entry = {"source_version": "v0", "source_dataset": "synthetic", "scope_id": "synthetic_u",
+    entry = {"source_version": "v0", "source_release": "unknown", "source_dataset": "synthetic", "scope_id": "synthetic_u",
              "reference_policy_id": "synthetic_policy_v1", "model_modalities": ["qdess_e1"],
              "annotation_modalities": {"U": ["qdess_e1"]}, "index_evidence": "synthetic",
              "physical_units_policy": "trust_header", "physical_units_evidence": "synthetic"}
