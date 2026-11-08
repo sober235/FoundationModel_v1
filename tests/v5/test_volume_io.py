@@ -161,3 +161,28 @@ def test_unreadable_volume_does_not_echo_file_name(tmp_path):
         assert (err.value.code, err.value.path) == ("VOLUME_UNREADABLE", "$.ref"), (ref, kind)
         assert "secret-name" not in str(err.value) and "secret-name" not in repr(err.value)
         assert err.value.__cause__ is None and err.value.__suppress_context__
+
+
+def _vec(values):
+    return " ".join(repr(float(v)) for v in np.asarray(values, dtype=float).ravel())
+
+
+def test_mha_geometry_synonyms_are_read_or_refused(tmp_path):
+    """MetaIO also spells Offset as Origin/Position, TransformMatrix as Rotation/Orientation, and takes ElementSize
+    as the spacing when ElementSpacing is absent; a synonym is never silently replaced by the default."""
+    array = np.arange(8, dtype=np.int16).reshape(2, 2, 2)
+    expected = _expected_ras()
+    spellings = [{"Offset": None, "Position": _vec(OFFSET), "TransformMatrix": None, "Orientation": _vec(DIRECTION)},
+                 {"Offset": None, "Origin": _vec(OFFSET), "TransformMatrix": None, "Rotation": _vec(DIRECTION)},
+                 {"Origin": _vec(OFFSET), "Rotation": _vec(DIRECTION)},
+                 {"ElementSpacing": None, "ElementSize": _vec(SPACING)},
+                 {"ElementSize": _vec((9.0, 9.0, 9.0))}]
+    for index, header in enumerate(spellings):
+        write_mha(tmp_path / f"s{index}.mha", array, SPACING, DIRECTION, OFFSET, compressed=False, **header)
+        volume = read_mha_v5(tmp_path / f"s{index}.mha")
+        assert np.allclose(volume.header["affine"], expected), header
+        assert volume.header["spacing_mm"] == list(SPACING), header
+    write_mha(tmp_path / "o.mha", array, SPACING, DIRECTION, OFFSET, compressed=False, Origin=_vec((0, 0, 0)))
+    _raises("MHA_UNSUPPORTED", "$.Offset", read_mha_v5, tmp_path / "o.mha")
+    write_mha(tmp_path / "r.mha", array, SPACING, DIRECTION, OFFSET, compressed=False, Orientation=_vec(np.eye(3)))
+    _raises("MHA_UNSUPPORTED", "$.TransformMatrix", read_mha_v5, tmp_path / "r.mha")

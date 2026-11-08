@@ -24,6 +24,8 @@ HEADER_KEYS = ("shape", "spacing_mm", "affine", "axis_codes")
 _LPS_TO_RAS = np.diag([-1.0, -1.0, 1.0, 1.0])
 _MET_TYPES = {"MET_UCHAR": "u1", "MET_CHAR": "i1", "MET_USHORT": "u2", "MET_SHORT": "i2", "MET_UINT": "u4",
               "MET_INT": "i4", "MET_FLOAT": "f4", "MET_DOUBLE": "f8"}
+_MET_SYNONYMS = {"Offset": ("Offset", "Origin", "Position"),
+                 "TransformMatrix": ("TransformMatrix", "Rotation", "Orientation")}
 
 
 @dataclass(frozen=True, eq=False)
@@ -96,8 +98,20 @@ def _flag(fields: dict, key: str, default: bool) -> bool:
     return value.lower() == "true"
 
 
+def _synonym(fields: dict, key: str, count: int, default: list[float]) -> list[float]:
+    """MetaIO spellings of one header value; all present spellings must agree, none present gives the default."""
+    values = [_numbers(fields, name, count) for name in _MET_SYNONYMS[key] if name in fields]
+    if any(value != values[0] for value in values[1:]):
+        raise V5Error("MHA_UNSUPPORTED", f"$.{key}")
+    return values[0] if values else default
+
+
 def read_mha_v5(path: Path) -> VolumeV5:
-    """MetaImage (.mha, data LOCAL) as (x, y, z); TransformMatrix triple j is axis j's direction (LPS)."""
+    """MetaImage (.mha, data LOCAL) as (x, y, z); TransformMatrix triple j is axis j's direction (LPS).
+
+    Origin/Position spell Offset and Rotation/Orientation spell TransformMatrix (conflicting spellings are
+    refused); ElementSize is the spacing only when ElementSpacing is absent, as in MetaIO.
+    """
     blob = Path(path).read_bytes()
     fields: dict[str, str] = {}
     position = 0
@@ -131,10 +145,10 @@ def read_mha_v5(path: Path) -> VolumeV5:
     if not all(d.is_integer() and d > 0 for d in dims):
         raise V5Error("MHA_UNSUPPORTED", "$.DimSize")
     shape = tuple(int(d) for d in dims)
-    spacing = _numbers(fields, "ElementSpacing", 3) if "ElementSpacing" in fields else [1.0, 1.0, 1.0]
-    offset = _numbers(fields, "Offset", 3) if "Offset" in fields else [0.0, 0.0, 0.0]
-    direction = (_numbers(fields, "TransformMatrix", 9) if "TransformMatrix" in fields
-                 else [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0])
+    spacing_key = next((key for key in ("ElementSpacing", "ElementSize") if key in fields), None)
+    spacing = _numbers(fields, spacing_key, 3) if spacing_key else [1.0, 1.0, 1.0]
+    offset = _synonym(fields, "Offset", 3, [0.0, 0.0, 0.0])
+    direction = _synonym(fields, "TransformMatrix", 9, [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0])
     data = blob[position:]
     if compressed:
         try:
