@@ -117,8 +117,8 @@ tasks:
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T09a:
-    code_status: TODO
-    test_evidence: null
+    code_status: PASS
+    test_evidence: "tests/v5/test_run_registration.py: 66 passed; test_model_interface.py: 9 passed; test_exposure_v5.py: 8 passed; test_splits_v5.py: 12 passed"
     data_run_status: NOT_STARTED
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
