@@ -42,6 +42,8 @@ def test_complete_outputs_give_passing_bound_evidence():
     decision = evaluate_gate_v5("G-DATA", SCOPE, evidence, APPROVAL, source_binding_v5(POLICY))
     assert decision["engineering_status"] == "PASS" and decision["evidence_hashes"] == [digest] * 6
     assert "a" * 64 in markdown and "b" * 64 in markdown and "ALL_ZERO" in markdown
+    rows = [line for line in markdown.splitlines() if line.startswith("| ") and "---" not in line]
+    assert len(rows) == 7 and all(line.count("|") == 4 for line in rows)      # no cell breaks the table
 
 
 @pytest.mark.parametrize("changes,failed", [

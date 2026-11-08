@@ -66,7 +66,7 @@ def gdata_evidence_v5(*, scope: ActiveScope, policy: SourcePolicy, prepare: dict
              f"| readability | {'PASS' if passed['readability'] else 'FAIL'} | 准备记录 {records}，失败 "
              f"{len(prepare['failures'])} |",
              f"| semantics | {'PASS' if passed['semantics'] else 'FAIL'} | 标签取值 QC："
-             + "；".join(f"{'|'.join(k.split('|')[1:])} {v}" for k, v in sorted(label_counts.items()))
+             + "；".join(f"{'/'.join(k.split('|')[1:])} {v}" for k, v in sorted(label_counts.items()))
              + f"；通道核验 {channel['consistent']}/{channel['cases_checked']} |",
              f"| identity | {'PASS' if passed['identity'] else 'FAIL'} | 划分覆盖样本 {split['samples']}/"
              f"{migrate['records']}，患者组 {split['groups']} |",
