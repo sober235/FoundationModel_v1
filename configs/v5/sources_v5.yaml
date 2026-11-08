@@ -1,0 +1,27 @@
+# v5.1 source policies used by the real T07 run (plan_v5 §2B T07a/T07c). Same fields as
+# sources_v5.template.yaml; the null facts are filled only from real-run evidence, cited inline.
+isles_2022:
+  source_version: isles2022_bids1.6.0
+  source_release: ISLES-2022
+  source_dataset: ISLES_ltr
+  scope_id: isles_u
+  reference_policy_id: isles_released_reference_v1
+  model_modalities: [dwi, adc]
+  # ISLES 2022 protocol (doi:10.1038/s41597-022-01875-5; v41 audits ISLES_PROTOCOL_EVIDENCE): the DWI-defined
+  # infarct mask was edited by trained raters who also read FLAIR, which is not a model input; input
+  # visibility therefore stays unknown (Proposal_v5 §2.3).
+  annotation_modalities: {U: [dwi, adc, flair]}
+  index_evidence: "reports/v5/source_check_isles_2022.md (sha256 dc7658e36bee1e18cab42b3010504a4c42408f48e18c7757bff2c94fe1e62734): DWI and ADC vs mask shape, spacing, affine and axis codes agree in 500/500 pairs; 250/250 paired"
+  physical_units_policy: trust_header
+  physical_units_evidence: "real T07 run 2026-11-08: all 250 DWI headers declare mm, and image and mask spacing and affine agree within 1e-3 in 500/500 pairs (reports/v5/source_check_isles_2022.md, sha256 dc7658e36bee1e18cab42b3010504a4c42408f48e18c7757bff2c94fe1e62734)"
+skm_tea:
+  source_version: skm_tea_annotations_v1.0.0
+  source_release: SKM-TEA v1.0.0
+  source_dataset: SKM-TEA_ltr
+  scope_id: skm_a
+  reference_policy_id: skm_a6_released_reference_v1
+  model_modalities: [qdess_e1, qdess_e2]
+  annotation_modalities: {A: null}
+  index_evidence: null
+  physical_units_policy: null
+  physical_units_evidence: null
