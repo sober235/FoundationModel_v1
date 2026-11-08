@@ -123,8 +123,8 @@ tasks:
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T09b:
-    code_status: TODO
-    test_evidence: null
+    code_status: PASS
+    test_evidence: "tests/v5/test_volume_io.py: 12 passed, 1 skipped (SimpleITK comparison runs on amax); test_training_data.py: 12 passed; test_training_core.py: 12 passed"
     data_run_status: NOT_STARTED
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
