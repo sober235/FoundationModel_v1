@@ -6,12 +6,12 @@ model:
   architecture: null        # resunet3d
   tasks: null               # non-empty subset of [A, U]
   widths: null              # channels per stage
-  strides: null             # one [z, y, x] stride per stage
+  strides: null             # one [x, y, z] stride per stage
   blocks_per_stage: null
 seeds:
   init: null
   sampler: null
-patch_size: null            # [z, y, x]
+patch_size: null            # [x, y, z]
 batch_size: null
 precision: null             # fp32 | amp_bf16 | amp_fp16
 optimizer:
@@ -21,15 +21,18 @@ optimizer:
 scheduler:
   name: null                # poly: lr * (1 - step / max_steps) ** exponent; exponent 0 keeps lr constant
   exponent: null
-downsample_factor: null     # [z, y, x]; strided sampling, origin-aligned
+downsample_factor: null     # [x, y, z]; strided sampling, origin-aligned
+grid_tolerance:             # mm; channel-channel and image-label grids are compared with v41 audit_geometry
+  atol_affine: null
+  atol_spacing: null
 normalization: null         # zscore_volume
 sampling:
   positive_fraction: null
 readable_roles: null        # must contain train; development_val optional; never locked_test
 selection_rule: null        # last (B2 does not select on the development split)
 inference:
-  window: null              # [z, y, x]
-  stride: null              # [z, y, x], each <= window
+  window: null              # [x, y, z]
+  stride: null              # [x, y, z], each <= window
 checkpoint_every: null
 budget:
   max_steps: null

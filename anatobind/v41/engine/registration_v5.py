@@ -96,6 +96,8 @@ _RECIPE_SPEC = {
     },
     "scheduler": {"name": _one_of("poly"), "exponent": lambda v: _is_number(v) and v >= 0},
     "downsample_factor": _vector3,
+    "grid_tolerance": {"atol_affine": lambda v: _is_number(v) and v >= 0,
+                       "atol_spacing": lambda v: _is_number(v) and v >= 0},
     "normalization": _one_of("zscore_volume"),
     "sampling": {"positive_fraction": lambda v: _is_number(v) and 0 <= v <= 1},
     "readable_roles": lambda v: _unique_strings(v, READABLE_ROLES) and "train" in v,

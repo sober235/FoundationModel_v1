@@ -3,14 +3,19 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import zlib
 from pathlib import Path
 
+import h5py
+import nibabel as nib
 import numpy as np
+import torch
 import yaml
 
 from anatobind.v41.contracts_v5 import validate_sample_v5, validate_scope_v5
 from anatobind.v41.evaluation.reference import ReferenceLesion
 from anatobind.v41.gates_v5 import GATE_REQUIREMENTS, evaluate_gate_v5, gate_task_v5
+from anatobind.v41.models.interface_v5 import ModelOutputV5, PerceptionModelV5
 from anatobind.v41.splits_v5 import freeze_splits_v5
 from anatobind.v41.source_policy_v5 import validate_source_policy_v5
 from anatobind.v41.state_rule_v5 import REASON_BITS, derive_state_map_v5
@@ -316,6 +321,7 @@ _RECIPE_VALUES = {
     "optimizer": {"name": "adamw", "lr": 0.001, "weight_decay": 0.0},
     "scheduler": {"name": "poly", "exponent": 0.9},
     "downsample_factor": [1, 1, 1],
+    "grid_tolerance": {"atol_affine": 1e-4, "atol_spacing": 1e-4},
     "normalization": "zscore_volume",
     "sampling": {"positive_fraction": 0.5},
     "readable_roles": ["train"],
@@ -436,3 +442,148 @@ def make_run(**overrides) -> dict:
         kwargs["split_registry"] = make_split_registry(records, lineage_id=lineage_id,
                                                        ancestor_lineages=inherit_lineage_v5(parents, lineage_id))
     return register_run_v5(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Volume, sample and model fixtures (plan_v5 T09b). Arrays are (x, y, z) voxel order.
+
+SYNTH_LABEL_MAPS = {
+    "synthetic_a_values_v1": {"encoding": "values", "classes": {"tissue_a": 1, "tissue_b": 2}},
+    "synthetic_a_channels_v1": {"encoding": "channels", "classes": {"tissue_a": 0, "tissue_b": 1}},
+    "synthetic_u_values_v1": {"encoding": "values", "classes": {"target_a": 1}},
+}
+_MET_TYPES = {"uint8": "MET_UCHAR", "int8": "MET_CHAR", "uint16": "MET_USHORT", "int16": "MET_SHORT",
+              "uint32": "MET_UINT", "int32": "MET_INT", "float32": "MET_FLOAT", "float64": "MET_DOUBLE"}
+
+
+def write_nifti(path, array, affine, slope=None) -> None:
+    array = np.asarray(array)
+    image = nib.Nifti1Image(array, np.asarray(affine, dtype=float))
+    if slope is not None:
+        image.header.set_slope_inter(slope, 0.0)
+        image.header.set_data_dtype(array.dtype)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    nib.save(image, str(path))
+
+
+def write_skm_h5(path, echo1, echo2, seg) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(path, "w") as handle:
+        handle.create_dataset("echo1", data=echo1)
+        handle.create_dataset("echo2", data=echo2)
+        handle.create_dataset("seg", data=seg)
+
+
+def write_mha(path, array, spacing, direction, offset, compressed, msb=False, **header) -> None:
+    """MetaImage writer: `array` is (x, y, z); row j of `direction` is the direction of axis j (MetaIO).
+
+    Keyword `header` entries replace or add keys; a value of None drops the key.
+    """
+    array = np.asarray(array)
+    order = ">" if msb else "<"
+    raw = np.ascontiguousarray(array.transpose(2, 1, 0)).astype(array.dtype.newbyteorder(order)).tobytes()
+    data = zlib.compress(raw) if compressed else raw
+    fields = {"ObjectType": "Image", "NDims": "3", "BinaryData": "True",
+              "BinaryDataByteOrderMSB": "True" if msb else "False",
+              "CompressedData": "True" if compressed else "False",
+              "TransformMatrix": " ".join(repr(float(v)) for v in np.asarray(direction, dtype=float).ravel()),
+              "Offset": " ".join(repr(float(v)) for v in offset),
+              "ElementSpacing": " ".join(repr(float(v)) for v in spacing),
+              "DimSize": " ".join(str(n) for n in array.shape),
+              "ElementType": _MET_TYPES[array.dtype.name], "ElementDataFile": "LOCAL"}
+    if compressed:
+        fields["CompressedDataSize"] = str(len(data))
+    for key, value in header.items():
+        if value is None:
+            fields.pop(key, None)
+        else:
+            fields[key] = str(value)
+    datafile = fields.pop("ElementDataFile", None)
+    lines = [f"{key} = {value}" for key, value in fields.items()]
+    if datafile is not None:
+        lines.append(f"ElementDataFile = {datafile}")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_bytes(("\n".join(lines) + "\n").encode("ascii") + data)
+
+
+def write_volume_case(root, scope, uid: str = "case-1", shape=(8, 8, 8), label=None, **record_overrides):
+    """Synthetic NIfTI case under `root` for a module scope; returns its validated SampleV5.
+
+    Channel i is filled with i+1 plus a ramp so each modality is recognisable. The default label puts
+    tissue_a / target_a in one block (A) or one voxel (U). `label=False` writes no label file.
+    """
+    root = Path(root)
+    affine = np.diag([1.0, 1.0, 2.0, 1.0])
+    ramp = np.arange(int(np.prod(shape)), dtype=np.float32).reshape(shape) / 100.0
+    modalities = list(scope.input_modalities)
+    paths = []
+    for i, name in enumerate(modalities):
+        paths.append(f"img/{uid}_{name}.nii.gz")
+        write_nifti(root / paths[-1], ramp + float(i + 1) * 10.0, affine)
+    task = "A" if scope.anatomy_classes else "U"
+    if label is None:
+        label = np.zeros(shape, dtype=np.int16)
+        if task == "A":
+            label[:4] = 1
+            label[4:6] = 2
+        else:
+            label[2, 2, 2] = 1
+    label_path = f"lab/{uid}.nii.gz"
+    if label is not False:
+        write_nifti(root / label_path, np.asarray(label, dtype=np.int16), affine)
+    annotation = {"annotation_uid": f"ann-{uid}", "task": task,
+                  "class_scope": list(scope.anatomy_classes if task == "A" else scope.abnormality_classes),
+                  "path": label_path, "annotation_modalities": modalities[:1],
+                  "label_map_version": "synthetic_a_values_v1" if task == "A" else "synthetic_u_values_v1"}
+    fields = {"sample_uid": uid, "patient_uid": f"synthetic:{uid}", "leakage_group_uid": f"synthetic:{uid}",
+              "image_paths": paths, "modality_names": modalities, "modality_is_synthetic": [False] * len(paths),
+              "available_modality_mask": [True] * len(paths), "model_modalities": modalities,
+              "active_scope_id": scope.scope_id, "reference_policy_id": scope.reference_policy_id,
+              "image_geometry": {"shape": list(shape), "spacing_mm": [1.0, 1.0, 2.0], "affine": affine.tolist(),
+                                 "axis_codes": ["R", "A", "S"], "units": "mm"}}
+    fields.update(record_overrides)
+    return validate_sample_v5(make_sample_v5(annotation=annotation, **fields))
+
+
+def make_training_sample_v5(scope, uid: str, shape=(6, 6, 6), seed: int = 0):
+    """In-memory TrainingSampleV5 with random channels and labels, eligible everywhere."""
+    from anatobind.v41.engine.data_v5 import ObservationV5, TrainingSampleV5
+
+    rng = np.random.default_rng(seed)
+    channels = {name: rng.standard_normal(shape).astype(np.float32) for name in scope.input_modalities}
+    grid = {"shape": list(shape), "axis_order": "xyz", "spacing_mm": [1.0, 1.0, 1.0],
+            "affine": np.eye(4).tolist(), "units_reliable": True, "transform_chain": []}
+    observation = ObservationV5(sample_uid=uid, patient_uid=f"synthetic:{uid}", channels=channels,
+                                valid_fov=np.ones(shape, dtype=bool), grid=grid, to_original=[],
+                                original_shape=tuple(shape), original_header=None)
+    targets, e_pos, e_neg = {}, {}, {}
+    if scope.anatomy_classes:
+        k = len(scope.anatomy_classes)
+        targets["A"] = rng.integers(0, k + 1, size=shape).astype(np.int64)
+        e_pos["A"] = np.ones((k, *shape), dtype=bool)
+        e_neg["A"] = np.ones((k, *shape), dtype=bool)
+    if scope.abnormality_classes:
+        c = len(scope.abnormality_classes)
+        targets["U"] = rng.random((c, *shape)) < 0.2
+        e_pos["U"] = np.ones((c, *shape), dtype=bool)
+        e_neg["U"] = np.ones((c, *shape), dtype=bool)
+    return TrainingSampleV5(observation=observation, targets=targets, e_pos=e_pos, e_neg=e_neg)
+
+
+class TinyPerceptionModel(PerceptionModelV5):
+    """One 3x3x3 convolution per enabled head (A: 1+K channels, U: C_U channels); counts forward calls."""
+
+    def __init__(self, scope, tasks):
+        super().__init__(scope, tasks)
+        channels = len(scope.input_modalities)
+        self.heads = torch.nn.ModuleDict()
+        if "A" in self.tasks:
+            self.heads["A"] = torch.nn.Conv3d(channels, 1 + len(scope.anatomy_classes), 3, padding=1)
+        if "U" in self.tasks:
+            self.heads["U"] = torch.nn.Conv3d(channels, len(scope.abnormality_classes), 3, padding=1)
+        self.calls = 0
+
+    def _forward_v5(self, batch):
+        self.calls += 1
+        return ModelOutputV5(anatomy_logits=self.heads["A"](batch.image) if "A" in self.heads else None,
+                             abnormality_logits=self.heads["U"](batch.image) if "U" in self.heads else None)
