@@ -345,6 +345,15 @@ def test_module_summary_is_patient_weighted():
     _raises("ROWS_REQUIRED", "$.rows", summarize_module_metrics_v5, [])
 
 
+def test_module_summary_requires_every_frozen_observation():
+    rows = _patient_rows()
+    assert all(row["reference_entries"] == 4 for row in rows)
+    # Dropping the failed scan would turn a 0.5 baseline into 1.0: a partial evaluation is refused.
+    _raises("MISSING_OBSERVATION", "$.rows", summarize_module_metrics_v5, rows[:3])
+    mixed = copy.deepcopy(rows)
+    mixed[1]["reference_entries"] = 3
+    _raises("MIXED_ROWS", "$.rows[1].reference_entries", summarize_module_metrics_v5, mixed)
+
 def test_module_report_is_redacted_and_not_a_conclusion():
     summary = summarize_module_metrics_v5(_patient_rows())
     text = render_module_baseline_md_v5(dict(summary, case_id="synthetic-case-0042",

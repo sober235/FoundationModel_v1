@@ -6,7 +6,8 @@ development_val references can be frozen. A is scored per tissue with T06a segme
 pred = (anatomy_map == k): a rejected voxel is no prediction and stays in the denominator; U the same way on
 accepted positives, plus T06c lesion detection with instances from extract_instances_v5 on both sides under the
 acceptance policy's connectivity (the reference keeps every component). Millimetre metrics are None unless the
-physical geometry is verified. The summary averages within each patient, then weights patients equally; it
+physical geometry is verified. The summary needs one row per frozen observation (no partial baseline), averages
+within each patient, then weights patients equally; it
 describes development_val only (no intervals; scientific_conclusion NOT_EVALUATED) and never adds module
 results together. Reports carry no observation or patient identifiers.
 """
@@ -29,8 +30,8 @@ SPLIT = "development_val"
 CONCLUSION = "NOT_EVALUATED"
 _REFERENCE_KEYS = ("patient_uid", "split", "geometry", "tasks")
 _FROZEN_KEYS = ("scope", "scope_hash", "entries", "entry_sha256", "reference_set_hash")
-_ROW_SHARED = ("split", "scope_id", "scope_hash", "reference_set_hash", "checkpoint_sha256", "acceptance_policy_id",
-               "metric_policy_sha256", "metrics")
+_ROW_SHARED = ("split", "scope_id", "scope_hash", "reference_set_hash", "reference_entries", "checkpoint_sha256",
+               "acceptance_policy_id", "metric_policy_sha256", "metrics")
 _SEGMENTATION_FIELDS = (("dice", "dice"), ("hd95", "hd95_mm"), ("nsd", "nsd"))
 _DETECTION_FIELDS = ("pooled_sensitivity", "fp_per_scan")
 _HEX64 = re.compile(r"[0-9a-f]{64}")
@@ -216,8 +217,8 @@ def module_metrics_v5(output: ModuleOutput, reference: dict, metric_policy: dict
                                      else "NOT_REQUESTED")
     return {"observation_uid": output.observation_uid, "patient_uid": entry["patient_uid"], "split": SPLIT,
             "scope_id": scope.scope_id, "scope_hash": scope.scope_hash,
-            "reference_set_hash": reference["reference_set_hash"], "checkpoint_sha256": output.checkpoint_sha256,
-            "acceptance_policy_id": acceptance_policy["policy_id"],
+            "reference_set_hash": reference["reference_set_hash"], "reference_entries": len(reference["entries"]),
+            "checkpoint_sha256": output.checkpoint_sha256, "acceptance_policy_id": acceptance_policy["policy_id"],
             "metric_policy_sha256": canonical_sha256(metric_policy), "metrics": list(metric_policy["metrics"]),
             "segmentation": segmentation, "detection": detection, "detection_reasons": detection_reasons}
 
@@ -277,6 +278,8 @@ def summarize_module_metrics_v5(rows: list) -> dict:
         if row.get("observation_uid") in seen:
             raise V5Error("DUPLICATE_OBSERVATION", path)
         seen.add(row["observation_uid"])
+    if len(rows) != first["reference_entries"]:   # every frozen observation is scored: no partial baseline
+        raise V5Error("MISSING_OBSERVATION", "$.rows")
     if first["split"] != SPLIT:
         raise V5Error("SPLIT_NOT_ALLOWED", "$.rows[0].split")
     patients = {}
