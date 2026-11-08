@@ -1,7 +1,7 @@
 ---
 plan_revision: "2026-11-07"
 execution_base: "GitHub sober235/FoundationModel_v1 current content (branch restart-dev); code identical to d7cbd5b"
-spec_sha256: "c4657d7ba2b335db9a57e3a24c1d7a938e3054ee81e2e77ef8979a0c01e4efa7"
+spec_sha256: "fa750a0e280d8ce9dfdd040edd4b94a8493feea886d5299ee0fcddaeefedd592"
 scientific_conclusion: NOT_EVALUATED
 core_target_validated: null
 study_package_complete: false
@@ -231,7 +231,7 @@ tasks:
   - SPIDER 为第二场景：A 体素级，S 与 R 组织级，无 U。
   - 前期结果登记为 `early_phase_status`，`core_target_validated` 保持 `null`；体素级核心目标留到后期。
   - 这一决定取代 2026-11-07 核心目标复核中“X0 与 B2 同级并行”的建议。`BLOCKED_EXPERT_REVIEW` 保留，只约束后期体素级参照与核心目标验证。
-  - 实现状态 `TODO`：T11 原标签导入未做；scope 字段待研究者填写；SKM-TEA、SPIDER 的 G-DATA 未批准。
+  - 实现状态 `TODO`：T11 原标签导入未做；scope 字段待研究者填写（建议值见 `reports/v5/early_phase_scope_research_20261107.md`，未批准）；SKM-TEA、SPIDER 的 G-DATA 未批准。
 - **D3 原决定（2026-11-06，留作后期方案）：** 保留 SKM 联合场景；先准备 20–30 次非锁定开发扫描试点，明确主读、独立复读、仲裁责任，以及异常边界、不确定带与单层可判读规则。人员与预算未落实前 X0 不标完成，相关科学验证保持 `BLOCKED_EXPERT_REVIEW`。框、分级或伪标签不能替代原定联合验证；试点不能形成稳定体素参照时，再按实际资源提出替代场景。
 - **D4 执行主机：** 选定 amax 数据服务器。2026-11-06 已完成只读预检（`reports/v5/host_precheck_amax.md`）：硬件与 ISLES/SKM 数据就位；服务器检出仍是旧 `main`，v5 测试尚未在其 Python 3.11 / NumPy 2.4 / SciPy 1.17 上运行，故仍未登记为正式执行环境（blocker `EXECUTION_HOST_UNVERIFIED`）。在服务器解释器上跑通 v5 测试后才登记为正式执行环境；解释器路径以实测为准，真实路径只进本地配置。
 - **D5 长期目标定位（2026-11-07 提出，待决定）：** v5.1 是否作为“可迁移 MRI 基础模型”长期目标中的一个能力验证阶段；若是，是否在 v5.1 之后另立复用/迁移/泛化里程碑（Proposal §1.4，plan §1.5）。不改变 v5.1 的任务与完成判定。
