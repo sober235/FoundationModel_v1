@@ -136,7 +136,7 @@ tasks:
     scientific_conclusion: NOT_EVALUATED
   T10:
     code_status: PASS   # 2026-11-09: real smoke driver, G-DATA chain guard, full-step measurement, G-BASE gate; the baseline driver is not written yet
-    test_evidence: "2026-11-09 local (Python 3.9, torch 2.8): tests/v5/test_real_t10.py: 14 passed; test_real_gdata.py: 21 passed; test_module_baseline.py: 17 passed; test_training_core.py: 21 passed; test_run_registration.py: 76 passed; test_resunet_v5.py: 7 passed. amax at 2c2b7ab: 664 passed"
+    test_evidence: "2026-11-09 local (Python 3.9, torch 2.8): tests/v5/test_real_t10.py: 14 passed; test_real_gdata.py: 21 passed; test_module_baseline.py: 17 passed; test_training_core.py: 21 passed; test_run_registration.py: 76 passed; test_resunet_v5.py: 7 passed. amax (Python 3.11, torch 2.5.1, CPU): 664 passed at 2c2b7ab, 691 passed at 3a478cb"
     data_run_status: NOT_STARTED   # pre-approval only (synthetic GPU pre-measurement, CPU batch check); the real smoke waits for G-DATA data_use and smoke resources approvals
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
@@ -262,7 +262,11 @@ tasks:
 
 ## T10 真实运行准备与 T11 前期导入（2026-11-09）
 
-本轮与历史分开记录。本轮在 amax 上的运行都用提交 `2c2b7ab`，没有重跑 T07/T08。
+本轮与历史分开记录。
+
+- 本轮在 amax 上的运行（数据链复核、预测量、batch 检查）用的是提交 `2c2b7ab`。
+- 收尾时把代码同步到 `3a478cb`，服务器 CPU 测试 691 passed，检出无改动，两个 smoke 计划的哈希不变。
+- 没有重跑 T07/T08。
 
 | 项 | 本轮结果 | 依据 |
 | --- | --- | --- |
