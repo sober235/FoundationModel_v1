@@ -174,7 +174,9 @@ def test_end_to_end_smoke_on_synthetic_volumes(tmp_path):
 def test_end_to_end_smoke_runs_on_cuda(tmp_path):
     """The whole chain on the GPU: checkpoints load mapped to CUDA, the paused run resumes, inference restores
     the original grid (the real isles_u smoke on amax stopped at resume on 2026-11-09)."""
-    summary, _, _ = _smoke(tmp_path, _plan(), device="cuda")
+    plan = _plan()
+    plan["resume"]["deterministic"] = True                  # as in the real plans; cuDNN is otherwise free to vary
+    summary, _, _ = _smoke(tmp_path, plan, device="cuda")
     assert summary["stop_code"] is None, summary
     assert summary["resumed"]["pause_status"] == "PAUSED" and summary["resume_check"]["passed"]
     assert summary["inference"]["validated"] and summary["inference"]["reloaded_by_hash"]
