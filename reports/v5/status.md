@@ -255,6 +255,7 @@ tasks:
 
 - 全部 v41 记录带遗留曝光 `legacy_foundation_model_unverified`（角色 unknown），按 Proposal §3.3 阻断所有 lineage 的 locked_test，规则原本分到 locked_test 的组移到 `excluded`（blocker `LEGACY_EXPOSURE_UNKNOWN:isles_u,skm_a`）。B2 只用开发集，不受影响；G-LOCKED 之前须由研究者核实旧模型的实际曝光，并按同一规则与种子重新冻结。
 - §1.6 关闭：L1–L3（`dfbef2d`），L8（规则登记于 `configs/v5/split_rule_*.yaml`，划分随真实 T08 冻结）。
+- 本轮上下文、裁定与待办汇总：`reports/v5/real_run_t07_t08_report_20261108.md`。
 
 ## 阶段 A 补修（plan_v5.md §2A，外部审查后）
 

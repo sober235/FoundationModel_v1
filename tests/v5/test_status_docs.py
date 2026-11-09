@@ -129,7 +129,7 @@ def test_host_precheck_report_is_redacted_and_not_overclaimed():
 
 def test_real_t07_t08_reports_are_redacted_and_recorded():
     names = ["source_check_isles_2022", "source_check_skm_tea", "split_isles_u", "split_skm_a",
-             "gdata_evidence_isles_2022", "gdata_evidence_skm_tea"]
+             "gdata_evidence_isles_2022", "gdata_evidence_skm_tea", "real_run_t07_t08_report_20261108"]
     for name in names:
         text = Path(f"reports/v5/{name}.md").read_text(encoding="utf-8")
         assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
