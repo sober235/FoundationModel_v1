@@ -26,6 +26,10 @@ A failure, out-of-memory or timeout stops the smoke at that phase; it is recorde
 
 Private products stay under the private root (700/600, never overwritten); render_smoke_md_v5 shows counts,
 configuration, metrics and hashes only.
+
+After a PASS smoke, `gbase-gate` assembles the five G-BASE-A/-U evidence items (gbase_evidence_v5) from the
+G-DATA decision, the smoke plan, the frozen split summary and the smoke evidence, and evaluates the gate with the
+researcher's `resources` approval (never in fixture mode). A PASS gate is what a baseline run registers against.
 """
 from __future__ import annotations
 
@@ -529,6 +533,43 @@ def training_smoke_evidence_v5(summary: dict, markdown: str, scope: ActiveScope,
             "task": gate_task_v5(scope), "source_id": source["source_id"], "source_version": source["source_version"]}
 
 
+INPUT_POLICY_KEYS = ("normalization", "downsample_factor", "grid_tolerance")
+
+
+def gbase_evidence_v5(*, scope: ActiveScope, source: dict, plan: dict, gdata_decision: dict, split_markdown: str,
+                      development_groups: int, smoke_evidence: dict) -> dict:
+    """The five G-BASE-A/-U evidence items (plan_v5 §2C T10), each bound to this scope, source and task.
+
+    g_data hashes the G-DATA decision and passes only if it passed; supervision_policy and input_policy hash
+    the smoke plan's supervision and input recipe (modalities, normalization, grid); frozen_dev_split hashes
+    the redacted split report and needs development_val groups; training_smoke is the smoke evidence as
+    written. A decision or smoke evidence bound to another scope or source raises instead of being judged.
+    """
+    binding = {"scope_hash": scope.scope_hash, "task": gate_task_v5(scope), "source_id": source["source_id"],
+               "source_version": source["source_version"]}
+    for name, item in (("g_data", gdata_decision), ("training_smoke", smoke_evidence)):
+        if not isinstance(item, dict) or any(item.get(field) != value for field, value in binding.items()):
+            raise V5Error("EVIDENCE_BINDING_MISMATCH", f"$.{name}")
+    if gdata_decision.get("gate_id") != "G-DATA" or plan.get("scope_hash") != scope.scope_hash:
+        raise V5Error("EVIDENCE_BINDING_MISMATCH", "$.g_data.gate_id")
+    if not isinstance(split_markdown, str) or not split_markdown or not isinstance(development_groups, int):
+        raise V5Error("INVALID_TYPE", "$.frozen_dev_split")
+    input_policy = {"input_modalities": list(scope.input_modalities),
+                    **{key: plan["recipe"][key] for key in INPUT_POLICY_KEYS}}
+    items = {
+        "g_data": (gdata_decision.get("engineering_status") == "PASS", canonical_sha256(gdata_decision)),
+        "supervision_policy": (True, canonical_sha256(plan["supervision"])),
+        "input_policy": (True, canonical_sha256(input_policy)),
+        "frozen_dev_split": (development_groups > 0, hashlib.sha256(split_markdown.encode()).hexdigest()),
+        "training_smoke": (smoke_evidence.get("status") == "PASS", smoke_evidence.get("sha256")),
+    }
+    evidence = {key: {"status": "PASS" if ok else "FAIL", "sha256": digest, **binding}
+                for key, (ok, digest) in items.items()}
+    if gdata_decision.get("fixture_mode") is True:
+        evidence["g_data"]["fixture_mode"] = True
+    return evidence
+
+
 # ---------------------------------------------------------------------------
 # Command line
 
@@ -571,6 +612,10 @@ def main(argv: list | None = None) -> int:
     gate = sub.add_parser("gdata-gate")
     for key in ("--evidence", "--approvals", "--scope", "--policies", "--source-id", "--out"):
         gate.add_argument(key, required=True)
+    base = sub.add_parser("gbase-gate")
+    for key in ("--plan", "--scope", "--policies", "--source-id", "--gdata-decision", "--split-summary",
+                "--smoke-evidence", "--approvals", "--out"):
+        base.add_argument(key, required=True)
     args = parser.parse_args(argv)
     scope = validate_scope_v5(_load_yaml(args.scope))
     source = source_binding_v5(load_source_policies_v5(Path(args.policies))[args.source_id])
@@ -586,6 +631,26 @@ def main(argv: list | None = None) -> int:
         return 0
 
     plan = validate_smoke_plan_v5(_load_yaml(args.plan), scope, source)
+    if args.command == "gbase-gate":
+        from .real_t08_v5 import render_split_md_v5
+
+        split = json.loads(Path(args.split_summary).read_text())
+        if split.get("lineage_id") != plan["lineage_id"]:
+            raise V5Error("SPLIT_LINEAGE_MISMATCH", "$.split_summary.lineage_id")
+        evidence = gbase_evidence_v5(scope=scope, source=source, plan=plan,
+                                     gdata_decision=json.loads(Path(args.gdata_decision).read_text()),
+                                     split_markdown=render_split_md_v5(split),
+                                     development_groups=split["counts"]["development_val"],
+                                     smoke_evidence=json.loads(Path(args.smoke_evidence).read_text()))
+        approvals = (_load_yaml(args.approvals) or {}).get(scope.scope_id, {})
+        decision = evaluate_gate_v5(f"G-BASE-{gate_task_v5(scope)}", scope, evidence,
+                                    {"resources": approvals.get("resources")}, source)
+        out = Path(args.out)
+        out.mkdir(mode=0o700)                                            # FileExistsError: never overwritten
+        write_private_json(out / "gbase_evidence.json", evidence)
+        write_private_json(out / "gbase_decision.json", decision)
+        print(json.dumps({k: decision[k] for k in ("gate_id", "scope_id", "engineering_status", "blockers")}))
+        return 0
     digest = smoke_plan_sha256_v5(plan)
     if args.command == "plan-hash":
         print(digest)

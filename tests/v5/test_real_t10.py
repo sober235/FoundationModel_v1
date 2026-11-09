@@ -243,3 +243,101 @@ def test_registered_smoke_proposals_validate_and_say_they_are_proposals(scope_id
     assert plan["supervision"]["track"] == "released_reference"
     assert plan["supervision"]["allow_unknown_visibility"] is (scope_id == "isles_u")
     assert plan["acceptance_policy"]["policy_role"] == "engineering"
+
+
+def test_gbase_evidence_binds_the_five_items_and_needs_a_passing_smoke():
+    from anatobind.v41.contracts_v5 import canonical_sha256
+    from anatobind.v41.gates_v5 import GATE_REQUIREMENTS, evaluate_gate_v5
+    from anatobind.v41.real_t10_v5 import gbase_evidence_v5
+
+    plan = _plan()
+    decision = make_gate_decisions(SCOPE, "smoke")["G-DATA"]
+    split_md = "# 冻结划分\n| development_val | 3 |\n"
+    smoke = {"status": "PASS", "sha256": "e" * 64, "scope_hash": SCOPE.scope_hash, "task": "U", **SYNTH_SOURCE}
+    evidence = gbase_evidence_v5(scope=SCOPE, source=dict(SYNTH_SOURCE), plan=plan, gdata_decision=decision,
+                                 split_markdown=split_md, development_groups=3, smoke_evidence=smoke)
+    assert set(evidence) == set(GATE_REQUIREMENTS["G-BASE-U"]["evidence"])
+    assert all(item["status"] == "PASS" and item["scope_hash"] == SCOPE.scope_hash for item in evidence.values())
+    assert evidence["supervision_policy"]["sha256"] == canonical_sha256(plan["supervision"])
+    assert evidence["g_data"]["sha256"] == canonical_sha256(decision)
+    approvals = {"resources": {"approved_by": "synthetic-fixture", "approved_at": "2026-11-09",
+                               "scope_hash": SCOPE.scope_hash}}
+    gate = evaluate_gate_v5("G-BASE-U", SCOPE, evidence, approvals, dict(SYNTH_SOURCE), fixture_mode=True)
+    assert gate["engineering_status"] == "PASS"
+    failed = gbase_evidence_v5(scope=SCOPE, source=dict(SYNTH_SOURCE), plan=plan, gdata_decision=decision,
+                               split_markdown=split_md, development_groups=0, smoke_evidence=dict(smoke, status="FAIL"))
+    assert failed["training_smoke"]["status"] == "FAIL" and failed["frozen_dev_split"]["status"] == "FAIL"
+    with pytest.raises(V5Error) as err:
+        gbase_evidence_v5(scope=SCOPE, source=dict(SYNTH_SOURCE), plan=plan, gdata_decision=decision,
+                          split_markdown=split_md, development_groups=3,
+                          smoke_evidence=dict(smoke, scope_hash="0" * 64))
+    assert err.value.code == "EVIDENCE_BINDING_MISMATCH"
+
+
+def test_gdata_gate_command_evaluates_the_signed_approval(tmp_path):
+    import yaml
+
+    from anatobind.v41.real_t10_v5 import main
+    from tests.v5.test_real_gdata import APPROVAL, POLICY, SCOPE as ISLES, _TEMPLATE, _evidence
+
+    evidence, _ = _evidence()
+    (tmp_path / "evidence.json").write_text(json.dumps(evidence))
+    policies = tmp_path / "sources.yaml"
+    policies.write_text(yaml.safe_dump({"isles_2022": {**_TEMPLATE["isles_2022"], "annotation_modalities": {"U": ["dwi"]},
+                                                       "index_evidence": POLICY.index_evidence}}))
+    approvals = tmp_path / "approvals.yaml"
+    approvals.write_text(yaml.safe_dump({"isles_u": {"G-DATA": dict(APPROVAL)}}))
+    args = ["gdata-gate", "--evidence", str(tmp_path / "evidence.json"), "--approvals", str(approvals), "--scope",
+            "configs/v5/scope_isles_u.yaml", "--policies", str(policies), "--source-id", "isles_2022"]
+    assert main(args + ["--out", str(tmp_path / "gate")]) == 0
+    decision = json.loads((tmp_path / "gate" / "gdata_decision.json").read_text())
+    assert decision["engineering_status"] == "PASS" and decision["scope_hash"] == ISLES.scope_hash
+    approvals.write_text(yaml.safe_dump({"isles_u": {}}))
+    assert main(args + ["--out", str(tmp_path / "gate2")]) == 0
+    blocked = json.loads((tmp_path / "gate2" / "gdata_decision.json").read_text())
+    assert blocked["engineering_status"] == "BLOCKED" and blocked["blockers"] == ["APPROVAL_MISSING:data_use"]
+
+
+def test_gbase_gate_command_binds_split_smoke_and_resources(tmp_path):
+    import yaml
+
+    from anatobind.v41.gates_v5 import GATE_REQUIREMENTS, evaluate_gate_v5
+    from anatobind.v41.real_t10_v5 import main
+    from anatobind.v41.source_policy_v5 import load_source_policies_v5, source_binding_v5
+    from tests.v5.factories import make_evidence
+
+    isles = validate_scope_v5(yaml.safe_load(Path("configs/v5/scope_isles_u.yaml").read_text()))
+    source = source_binding_v5(load_source_policies_v5(Path("configs/v5/sources_v5.yaml"))["isles_2022"])
+    signed = {"approved_by": "researcher", "approved_at": "2026-11-09", "scope_hash": isles.scope_hash}
+    decision = evaluate_gate_v5("G-DATA", isles, make_evidence(GATE_REQUIREMENTS["G-DATA"]["evidence"], isles, source),
+                                {"data_use": dict(signed, **source)}, source)
+    smoke = {"status": "PASS", "sha256": "e" * 64, "scope_hash": isles.scope_hash, "task": "U", **source}
+    summary = {"lineage_id": "v51_isles_u_b2", "kind": "stratified", "groups": 4, "samples": 4,
+               "counts": {"development_val": 1, "excluded": 0, "locked_test": 1, "train": 2, "unassigned": 0},
+               "exposed_groups": 0, "exposed_target": "excluded", "strata": None, "volume_thresholds_ml": None,
+               "split_sha256": "f" * 64, "rule": {"seed": 1}}
+    files = {"gdata": decision, "smoke": smoke, "split": summary}
+    for name, value in files.items():
+        (tmp_path / f"{name}.json").write_text(json.dumps(value))
+    approvals = tmp_path / "approvals.yaml"
+    approvals.write_text(yaml.safe_dump({"isles_u": {"resources": signed}}))
+    args = ["gbase-gate", "--plan", "configs/v5/proposals/smoke_isles_u.yaml", "--scope",
+            "configs/v5/scope_isles_u.yaml", "--policies", "configs/v5/sources_v5.yaml", "--source-id", "isles_2022",
+            "--gdata-decision", str(tmp_path / "gdata.json"), "--split-summary", str(tmp_path / "split.json"),
+            "--smoke-evidence", str(tmp_path / "smoke.json"), "--approvals", str(approvals)]
+    assert main(args + ["--out", str(tmp_path / "base")]) == 0
+    gate = json.loads((tmp_path / "base" / "gbase_decision.json").read_text())
+    assert gate["gate_id"] == "G-BASE-U" and gate["engineering_status"] == "PASS" and gate["fixture_mode"] is False
+    assert set(json.loads((tmp_path / "base" / "gbase_evidence.json").read_text())) == set(
+        GATE_REQUIREMENTS["G-BASE-U"]["evidence"])
+
+    (tmp_path / "smoke.json").write_text(json.dumps(dict(smoke, status="FAIL")))
+    approvals.write_text(yaml.safe_dump({"isles_u": {}}))
+    assert main(args + ["--out", str(tmp_path / "base2")]) == 0
+    blocked = json.loads((tmp_path / "base2" / "gbase_decision.json").read_text())
+    assert blocked["blockers"] == ["APPROVAL_MISSING:resources", "EVIDENCE_MISSING:training_smoke"]
+
+    (tmp_path / "split.json").write_text(json.dumps(dict(summary, lineage_id="other")))
+    with pytest.raises(V5Error) as err:
+        main(args + ["--out", str(tmp_path / "base3")])
+    assert err.value.code == "SPLIT_LINEAGE_MISMATCH"
