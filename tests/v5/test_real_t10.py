@@ -226,3 +226,20 @@ def test_batch_check_reads_only_the_subset_and_reports_counts(tmp_path):
     assert report["samples"] == 2 and report["channels_in_scope_order"] and report["model_grid_is_original"]
     assert report["batch"]["image_shape"] == [2, len(SCOPE.input_modalities), 8, 8, 8] and report["batch"]["finite"]
     assert not any(r.sample_uid in json.dumps(report) for r in records)
+
+
+@pytest.mark.parametrize("scope_id,source_id", [("isles_u", "isles_2022"), ("skm_a", "skm_tea")])
+def test_registered_smoke_proposals_validate_and_say_they_are_proposals(scope_id, source_id):
+    import yaml
+
+    from anatobind.v41.source_policy_v5 import load_source_policies_v5, source_binding_v5
+
+    path = Path(f"configs/v5/proposals/smoke_{scope_id}.yaml")
+    assert path.read_text().startswith("# PROPOSAL — NOT APPROVED")
+    scope = validate_scope_v5(yaml.safe_load(Path(f"configs/v5/scope_{scope_id}.yaml").read_text()))
+    source = source_binding_v5(load_source_policies_v5(Path("configs/v5/sources_v5.yaml"))[source_id])
+    plan = validate_smoke_plan_v5(yaml.safe_load(path.read_text()), scope, source)
+    assert plan["recipe"]["downsample_factor"] == [1, 1, 1] and plan["recipe"]["readable_roles"] == ["train"]
+    assert plan["supervision"]["track"] == "released_reference"
+    assert plan["supervision"]["allow_unknown_visibility"] is (scope_id == "isles_u")
+    assert plan["acceptance_policy"]["policy_role"] == "engineering"

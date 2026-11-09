@@ -1,0 +1,59 @@
+# PROPOSAL — NOT APPROVED (2026-11-09). Smoke plan for skm_a (SKM-TEA qDESS E1/E2, A-only), plan_v5 §2C T10 step 2.
+# Every value below is a proposal for the researcher. The smoke runs only after the researcher signs a
+# `resources` approval for skm_a that names this file's plan sha256 (python -m anatobind.v41.real_t10_v5 plan-hash).
+# Any edit changes the hash and needs a new approval. Comments are not part of the hash.
+# Physical geometry stays unknown (no units in the source): millimetre metrics are NA; the voxel grid is used as is.
+plan_id: smoke_skm_a_v1
+scope_id: skm_a
+scope_hash: c70f7dca4c94ea4454ce0a41794d931a2a81fb27db1e605b18ca24e98f85bfd7
+source: {source_id: skm_tea, source_version: skm_tea_annotations_v1.0.0}
+lineage_id: v51_skm_a_b2              # the frozen T08 split's lineage
+recipe:                               # patch_size, batch_size and precision come from the chosen candidate
+  recipe_id: skm_a_smoke_v1
+  model:
+    architecture: resunet3d
+    tasks: [A]
+    widths: [32, 64, 128, 256, 320]
+    strides: [[1, 1, 1], [2, 2, 1], [2, 2, 2], [2, 2, 2], [2, 2, 2]]   # in-plane first; x16, y16, z8 in total
+    blocks_per_stage: 2
+  seeds: {init: 20261109, sampler: 20261110}
+  optimizer: {name: adamw, lr: 0.001, weight_decay: 0.0001}
+  scheduler: {name: poly, exponent: 0.9}
+  downsample_factor: [1, 1, 1]        # T07 loss check: 2x2x1 loses 151 thin cartilage/meniscus components
+  grid_tolerance: {atol_affine: 0.001, atol_spacing: 0.001}
+  normalization: zscore_volume
+  sampling: {positive_fraction: 0.5}
+  readable_roles: [train]
+  selection_rule: last
+  inference: {window: [192, 192, 48], stride: [96, 96, 24]}
+  checkpoint_every: 100
+  budget: {max_steps: 500, max_wall_hours: 0.75}
+supervision:
+  policy_id: skm_a_supervision_v1
+  scope_id: skm_a
+  reference_policy_id: skm_a6_released_reference_v1
+  track: released_reference
+  allow_unknown_visibility: false     # every SKM A annotation is recorded visible
+  channel: expert
+  tasks:
+    A: {kind: softmax, ce_weight: 1.0, dice_weight: 1.0, task_weight: 1.0}
+acceptance_policy:
+  policy_id: skm_a_engineering_v1
+  policy_role: engineering            # never a formal threshold (Proposal §9)
+  anatomy: {min_confidence: 0.0}      # engineering: every argmax is accepted
+  abnormality: {thresholds: null, reject_band: null}
+  instances: {connectivity: null, min_voxels: null}
+candidates:                           # preference order; the first OK one within the memory cap is used
+  - {patch_size: [192, 192, 48], batch_size: 2, precision: fp32}
+  - {patch_size: [192, 192, 48], batch_size: 2, precision: amp_bf16}
+  - {patch_size: [256, 256, 32], batch_size: 2, precision: amp_bf16}
+  - {patch_size: [256, 256, 48], batch_size: 2, precision: amp_bf16}
+candidate_rule: {name: first_ok_within_memory, max_memory_fraction: 0.5}   # shared GPUs: at most half of one card
+subset: {salt: v51-smoke-skm_a-20261109, count: 2, strata: null}           # SKM official split has no strata
+overfit:
+  criteria: {min_loss_drop: 0.5, min_dice: 0.6, loss_window: 20}
+resume:
+  pause_at: 300
+  tolerances: {loss_atol: 0.0001, loss_rtol: 0.001, param_rtol: 0.001}
+  deterministic: true
+budget: {max_wall_hours: 2.0}
