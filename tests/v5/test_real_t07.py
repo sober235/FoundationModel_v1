@@ -118,6 +118,7 @@ def test_skm_record_reads_h5_datasets_and_keeps_scope_tasks():
 
 @pytest.mark.parametrize("channel,expected", [
     (None, "not_checked"),
+    (_channel(transform="transpose_xy_flip_z"), "pass"),          # 18/155 real scans: dicom track also z-flipped
     (_channel(transform="identity"), "fail"),
     (_channel(consistent=False), "fail"),
     (_channel(mapping=[2, 1, 3, 4, 5, 6]), "fail"),               # channel order differs from the map
@@ -164,6 +165,20 @@ def test_skm_h5_geometry_swaps_the_first_two_axes():
     for i, j, k in [(0, 0, 0), (5, 3, 4), (2, 1, 3)]:                     # h5[i, j, k] == nifti[j, i, k]
         assert np.allclose(h5_affine @ [i, j, k, 1], affine @ [j, i, k, 1])
     assert out["axis_codes"] == list(nib.aff2axcodes(h5_affine))
+
+
+def test_skm_h5_geometry_follows_a_z_flipped_track():
+    affine = np.array([[0.3, 0.01, 0, 10], [0, 0, 0.8, -5], [0.02, -0.31, 0, 3], [0, 0, 0, 1]])
+    nifti = {"shape": [4, 6, 5], "spacing_mm": [0.3, 0.31, 0.8], "affine": affine.tolist(),
+             "axis_codes": ["R", "I", "A"], "units": "unknown"}
+    out = skm_h5_geometry_v5(nifti, units="mm", transform="transpose_xy_flip_z")
+    assert (out["shape"], out["spacing_mm"]) == ([6, 4, 5], [0.31, 0.3, 0.8])
+    h5_affine = np.asarray(out["affine"])
+    for i, j, k in [(0, 0, 0), (5, 3, 4), (2, 1, 3)]:                     # h5[i, j, k] == nifti[j, i, 4 - k]
+        assert np.allclose(h5_affine @ [i, j, k, 1], affine @ [j, i, 4 - k, 1])
+    with pytest.raises(V5Error) as error:
+        skm_h5_geometry_v5(nifti, units="mm", transform="identity")
+    assert error.value.code == "SKM_TRANSFORM_UNSUPPORTED"
 
 
 def test_qc_csv_rows_round_trip(tmp_path):
@@ -230,6 +245,38 @@ def test_driver_prepares_isles_records_privately(tmp_path):
     assert report["summary"]["downsampling"]["classes"]["ischemic_infarct"]["components_vanished"] == 1
     with pytest.raises(Exception):                                        # outputs are never overwritten
         run_prepare_v5(raw, ISLES_ASSETS, ISLES_SCOPE, _policy("isles_2022"), out, factor=(2, 2, 2))
+
+
+def _skm_tree_flipped(root: Path) -> None:
+    _skm_tree(root)
+    labels = np.zeros((4, 6, 5), dtype=np.uint8)
+    for c in range(6):
+        labels[:, c, 4 - c % 5] = c + 1                                   # nifti = h5 with x/y swapped and z flipped
+    (root / "segmentation_masks/dicom-track/k1.nii.gz").unlink()
+    _nifti(root / "segmentation_masks/dicom-track/k1.nii.gz", labels, np.diag([0.3, 0.3, 0.8, 1.0]), "unknown")
+    raw_track = np.zeros((6, 4, 5), dtype=np.uint8)                       # unregistered track, never consistent
+    _nifti(root / "segmentation_masks/raw-data-track/k1.nii.gz", raw_track, np.diag([0.3, 0.3, 0.8, 1.0]), "unknown")
+
+
+def test_driver_counts_only_the_registered_track_and_can_reuse_qc(tmp_path):
+    raw, private = tmp_path / "raw", tmp_path / "private"
+    _skm_tree_flipped(raw)
+    private.mkdir(mode=0o700)
+    assets = SKM_ASSETS + [{"source": "SKM-TEA_ltr", "kind": "label", "case_id": "k1",
+                            "relpath": "segmentation_masks/raw-data-track/k1.nii.gz"}]
+    first = run_prepare_v5(raw, assets, SKM_SCOPE, _policy("skm_tea"), private / "a", factor=(2, 2, 1),
+                           skm_annotations=copy.deepcopy(SKM_META), skm_units="mm")
+    assert first["geometry_status"] == {"pass": 1}
+    assert first["summary"]["channel"] == {"cases_checked": 1, "consistent": 1, "unevaluated": 0}
+    (prepared,) = [json.loads(line) for line in (private / "a/records_prepared.jsonl").read_text().splitlines()]
+    affine = np.asarray(prepared["image_geometry"]["affine"])
+    assert np.allclose(affine @ [0, 0, 0, 1], np.diag([0.3, 0.3, 0.8, 1.0]) @ [0, 0, 4, 1])
+    again = run_prepare_v5(raw, assets, SKM_SCOPE, _policy("skm_tea"), private / "b", factor=(2, 2, 1),
+                           skm_annotations=copy.deepcopy(SKM_META), skm_units="mm", reuse_qc=private / "a/geometry_qc")
+    assert not (private / "b/geometry_qc").exists()
+    assert {k: again[k] for k in ("records", "failures", "geometry_status", "summary")} == \
+        {k: first[k] for k in ("records", "failures", "geometry_status", "summary")}
+    assert (private / "b/records_prepared.jsonl").read_text() == (private / "a/records_prepared.jsonl").read_text()
 
 
 def test_driver_prepares_skm_records_from_h5(tmp_path):
