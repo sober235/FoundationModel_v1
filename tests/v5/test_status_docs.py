@@ -165,3 +165,12 @@ def test_t10_preapproval_and_package_are_redacted_and_bound_to_the_plans():
                                       scope, source)
         assert f"smoke_plan_sha256: {smoke_plan_sha256_v5(plan)}" in package
         assert f"scope_hash: {scope.scope_hash}" in package and f"source_version: {source['source_version']}" in package
+
+
+def test_t11_admission_is_redacted_and_keeps_proposals_unapproved():
+    text = Path("reports/v5/t11_skm_joint_early_admission_20261109.md").read_text(encoding="utf-8")
+    assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
+    assert not re.search(r"MTR_\d|\b\d+_t[12]\b|\.h5\b", text)
+    assert "**提案，未批准**" in text and "NOT_EVALUATED" in text and "core_target_validated" in text
+    for name in ("scope_skm_joint_early", "source_skm_tea_joint_early"):
+        assert Path(f"configs/v5/proposals/{name}.yaml").read_text().startswith("# PROPOSAL — NOT APPROVED")
