@@ -141,3 +141,27 @@ def test_real_t07_t08_reports_are_redacted_and_recorded():
     for source_id, report in (("isles_2022", "source_check_isles_2022"), ("skm_tea", "source_check_skm_tea")):
         digest = hashlib.sha256(Path(f"reports/v5/{report}.md").read_bytes()).hexdigest()
         assert digest in sources[source_id]["index_evidence"]
+
+
+def test_t10_preapproval_and_package_are_redacted_and_bound_to_the_plans():
+    from anatobind.v41.contracts_v5 import validate_scope_v5
+    from anatobind.v41.real_t10_v5 import smoke_plan_sha256_v5, validate_smoke_plan_v5
+    from anatobind.v41.source_policy_v5 import load_source_policies_v5, source_binding_v5
+
+    texts = {name: Path(f"reports/v5/{name}.md").read_text(encoding="utf-8")
+             for name in ("t10_preapproval_20261109", "t10_approval_package_20261109")}
+    for text in texts.values():
+        assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
+        assert not re.search(r"sub-[a-z]+[0-9]|[A-Z]{3}_[0-9]{3}|\.nii|\.h5\b", text)
+        assert "NOT_EVALUATED" in text
+    assert "不是 smoke 证据" in texts["t10_preapproval_20261109"]
+    package = texts["t10_approval_package_20261109"]
+    assert "approved_by: <研究者本人填写>" in package and "synthetic-fixture" not in package
+    policies = load_source_policies_v5(Path("configs/v5/sources_v5.yaml"))
+    for scope_id, source_id in (("isles_u", "isles_2022"), ("skm_a", "skm_tea")):
+        scope = validate_scope_v5(yaml.safe_load(Path(f"configs/v5/scope_{scope_id}.yaml").read_text()))
+        source = source_binding_v5(policies[source_id])
+        plan = validate_smoke_plan_v5(yaml.safe_load(Path(f"configs/v5/proposals/smoke_{scope_id}.yaml").read_text()),
+                                      scope, source)
+        assert f"smoke_plan_sha256: {smoke_plan_sha256_v5(plan)}" in package
+        assert f"scope_hash: {scope.scope_hash}" in package and f"source_version: {source['source_version']}" in package
