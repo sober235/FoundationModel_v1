@@ -50,7 +50,7 @@
 ## 4. 准入还缺什么（按顺序）
 
 1. **研究者批准两份提案**，即 scope 实例与来源绑定。批准后，它们分别移入 `configs/v5/scope_skm_joint_early.yaml` 和 `sources_v5.yaml`。
-2. **决定导入读哪些划分**。推荐只导入 train 和 development_val，locked_test 的框保持封存，等 G-LOCKED 时再处理。
+2. **决定导入读哪些划分**。推荐只导入 train 和 development_val。官方 test 的 36 次扫描目前在 `excluded`，它们的框保持封存，等 G-LOCKED 时再处理。
    - 理由：导入时要读参照 A 来判断框内是否有宿主组织，等于读取标签。
    - SKM 官方 test 的曝光状态以 T08 账本为准（P6）。
 3. **补两段代码**：

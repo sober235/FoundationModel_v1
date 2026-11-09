@@ -118,7 +118,7 @@ tasks:
     scientific_conclusion: NOT_EVALUATED
   T09a:
     code_status: PASS
-    test_evidence: "tests/v5/test_run_registration.py: 67 passed; test_model_interface.py: 9 passed; test_exposure_v5.py: 8 passed; test_splits_v5.py: 12 passed (after the B2 final-review fixes)"
+    test_evidence: "tests/v5/test_run_registration.py: 76 passed (2026-11-09: smoke subset contract); test_model_interface.py: 9 passed; test_exposure_v5.py: 8 passed; test_splits_v5.py: 12 passed"
     data_run_status: NOT_STARTED
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
@@ -135,16 +135,16 @@ tasks:
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T10:
-    code_status: PASS
-    test_evidence: "tests/v5/test_resunet_v5.py: 7 passed; test_module_baseline.py: 13 passed; test_training_core.py: 14 passed (shared training step; after the B2 final-review fixes)"
-    data_run_status: NOT_STARTED
+    code_status: PASS   # 2026-11-09: real smoke driver, G-DATA chain guard, full-step measurement, G-BASE gate; the baseline driver is not written yet
+    test_evidence: "2026-11-09 local (Python 3.9, torch 2.8): tests/v5/test_real_t10.py: 14 passed; test_real_gdata.py: 21 passed; test_module_baseline.py: 17 passed; test_training_core.py: 21 passed; test_run_registration.py: 76 passed; test_resunet_v5.py: 7 passed. amax at 2c2b7ab: 664 passed"
+    data_run_status: NOT_STARTED   # pre-approval only (synthetic GPU pre-measurement, CPU batch check); the real smoke waits for G-DATA data_use and smoke resources approvals
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T11:
-    code_status: TODO
-    test_evidence: null
+    code_status: PARTIAL   # 2026-11-09: SKM-TEA boxes and tissue_id import (S1–S7) with synthetic tests; no real import CLI, no SPIDER
+    test_evidence: "2026-11-09 local: tests/v5/test_annotation_v5.py: 22 passed (synthetic)"
     data_run_status: NOT_STARTED
-    approval_status: PENDING
+    approval_status: PENDING   # scope_skm_joint_early and its source binding are proposals
     scientific_conclusion: NOT_EVALUATED
   T12:
     code_status: TODO
@@ -235,7 +235,10 @@ tasks:
     - SKM：主分析为软骨病变 2A/2B/3 加半月板撕裂（不含挤出），1 级单列；只排除置信度 0 分、类别与组织不符、零尺寸和不含宿主组织的框。
     - SPIDER：输入矢状 T2；主目标为 Pfirrmann ≥ III，终板改变作次要目标。
     - 评价准则的数值仍在开发集上选定，锁定评价前冻结。
-  - 实现状态 `TODO`：T11 原标签导入未做；scope 实例待 T11/T12 建立（模板字段仍为 `null`）；SKM-TEA、SPIDER 的 G-DATA 未批准。
+  - 实现状态 `TODO`：
+    - 2026-11-09 完成了 T11 的 SKM 框与 tissue_id 导入代码，只做了合成验证；真实导入未运行，SPIDER 未做。
+    - `skm_joint_early` 的 scope 实例与来源绑定是提案，未批准（`t11_skm_joint_early_admission_20261109.md`）。
+    - 联合 scope 的 G-DATA 证据和批准都还没有。skm_a 的 G-DATA 不能沿用。
 - **D3 原决定（2026-11-06，留作后期方案）：** 保留 SKM 联合场景；先准备 20–30 次非锁定开发扫描试点，明确主读、独立复读、仲裁责任，以及异常边界、不确定带与单层可判读规则。人员与预算未落实前 X0 不标完成，相关科学验证保持 `BLOCKED_EXPERT_REVIEW`。框、分级或伪标签不能替代原定联合验证；试点不能形成稳定体素参照时，再按实际资源提出替代场景。
 - **D4 执行主机：** 选定 amax 数据服务器。2026-11-06 完成只读预检（`reports/v5/host_precheck_amax.md`）。2026-11-08 经研究者同意写入服务器：代码以 git bundle 克隆到独立工作目录（不动旧 `main` 检出），私有产物放在私有根下的独立子目录；v5 全套测试在服务器解释器（Python 3.11 / PyTorch 2.5.1 / NumPy 2.4 / SciPy 1.17）上 585 passed，SimpleITK 对照测试实际运行。已登记为正式执行环境，blocker `EXECUTION_HOST_UNVERIFIED` 撤销。解释器与目录路径只在本地配置。
 - **D5 长期目标定位（2026-11-07 提出，待决定）：** v5.1 是否作为“可迁移 MRI 基础模型”长期目标中的一个能力验证阶段；若是，是否在 v5.1 之后另立复用/迁移/泛化里程碑（Proposal §1.4，plan §1.5）。不改变 v5.1 的任务与完成判定。
@@ -256,6 +259,24 @@ tasks:
 - 全部 v41 记录带遗留曝光 `legacy_foundation_model_unverified`（角色 unknown），按 Proposal §3.3 阻断所有 lineage 的 locked_test，规则原本分到 locked_test 的组移到 `excluded`（blocker `LEGACY_EXPOSURE_UNKNOWN:isles_u,skm_a`）。B2 只用开发集，不受影响；G-LOCKED 之前须由研究者核实旧模型的实际曝光，并按同一规则与种子重新冻结。
 - §1.6 关闭：L1–L3（`dfbef2d`），L8（规则登记于 `configs/v5/split_rule_*.yaml`，划分随真实 T08 冻结）。
 - 本轮上下文、裁定与待办汇总：`reports/v5/real_run_t07_t08_report_20261108.md`。
+
+## T10 真实运行准备与 T11 前期导入（2026-11-09）
+
+本轮与历史分开记录。本轮在 amax 上的运行都用提交 `2c2b7ab`，没有重跑 T07/T08。
+
+| 项 | 本轮结果 | 依据 |
+| --- | --- | --- |
+| 修复 3a：G-DATA 数据链守卫 | 来源策略、来源核验、冻结划分和迁移记录必须同属一条链。正确输入下证据逐字节不变；用 ISLES 输入评估 skm_a 被 `SCOPE_POLICY_MISMATCH` 拒绝 | `623f90b`；`t10_preapproval_20261109.md` §2 |
+| 修复 3b：完整训练步测量 | 测量覆盖 optimizer.step、优化器状态、scaler 和调度器；OOM 按规则记录，不重试；只测前向加反向不能使候选可用 | `6fcb8fe`；`t10_preapproval_20261109.md` §3 |
+| smoke 支撑 | 子集契约（`hash_rank_v1`，固定列表加哈希）；检查点写完后受控暂停；过拟合按窗口均值判定；续训对比 | `7fc47de`、`ed52709` |
+| 驱动 `real_t10_v5.py` | 子命令：plan-hash、premeasure、batch-check、smoke、gdata-gate、gbase-gate（G-BASE 只读取按关卡分键的 resources 批准） | `3fabf80`、`e5742e1`、`2165233` |
+| smoke 计划 | isles_u 和 skm_a 各一份，**提案，未批准**（sha256 为 `02b5c260…`、`93ce6daa…`） | `configs/v5/proposals/smoke_*.yaml` |
+| 批准前运行 | 合成张量预测量（每个 scope 用 1 张 A800，候选全部 OK，都含优化器状态）；CPU 真实 batch 检查（每个 scope 读 2 个 train 样本，不注册运行） | `t10_preapproval_20261109.md` |
+| 待批准材料 | 一次性提交 A：G-DATA data_use；B：smoke resources；C：smoke PASS 后的 G-BASE resources 与基线预算 | `t10_approval_package_20261109.md` |
+| T11 前期（SKM） | 框和 tissue_id 导入代码，22 项合成测试；联合 scope 与来源绑定为**提案，未批准** | `0883395`；`t11_skm_joint_early_admission_20261109.md` |
+
+- T10 的 `data_run_status` 仍为 NOT_STARTED：真实 smoke、training_smoke 证据、G-BASE 评估和基线都没有运行。
+- 基线驱动尚未编写，会与基线计划提案一起提交（批准材料 C 项）。
 
 ## 阶段 A 补修（plan_v5.md §2A，外部审查后）
 
