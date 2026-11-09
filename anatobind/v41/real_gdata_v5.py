@@ -17,17 +17,57 @@ rule over counts the real runs produced (no IDs):
 All six items carry the sha256 of one redacted markdown that states these
 counts and the hashes of the source-check and split summaries. The data-use
 approval is not produced here: the researcher signs it.
+
+Before any item is judged, the inputs must be one data chain (2026-11-09):
+the policy is the scope's own (scope, reference policy, input modalities,
+task); the prepare run's source-check summary is the one the policy
+registered; the frozen registry is the split summary's and covers exactly the
+migrated records; and every migrated record carries this scope and this
+source release. A mismatch raises instead of judging, so counts from one
+source can never become another scope's evidence.
 """
 from __future__ import annotations
 
 import hashlib
 
 from .adapters import skm
-from .contracts_v5 import ActiveScope
+from .contracts_v5 import ActiveScope, SampleV5, V5Error
 from .gates_v5 import GATE_REQUIREMENTS, gate_task_v5
 from .source_policy_v5 import SourcePolicy, source_binding_v5
+from .splits_v5 import verify_split_registry_v5
 
 _ITEMS = GATE_REQUIREMENTS["G-DATA"]["evidence"]
+
+
+def _check_chain(scope: ActiveScope, policy: SourcePolicy, prepare: dict, migrate: dict, split: dict,
+                 records: list, registry: dict) -> None:
+    for field, expected, actual in (("scope_id", scope.scope_id, policy.scope_id),
+                                    ("reference_policy_id", scope.reference_policy_id, policy.reference_policy_id),
+                                    ("model_modalities", list(scope.input_modalities), list(policy.model_modalities))):
+        if actual != expected:
+            raise V5Error("SCOPE_POLICY_MISMATCH", f"$.policy.{field}")
+    if gate_task_v5(scope) not in policy.annotation_modalities:
+        raise V5Error("SCOPE_POLICY_MISMATCH", "$.policy.annotation_modalities")
+    if not policy.index_evidence or str(prepare.get("source_check_sha256")) not in policy.index_evidence:
+        raise V5Error("SOURCE_CHECK_NOT_REGISTERED", "$.prepare.source_check_sha256")
+    verify_split_registry_v5(registry)
+    if registry["split_sha256"] != split.get("split_sha256"):
+        raise V5Error("SPLIT_HASH_MISMATCH", "$.split.split_sha256")
+    if not isinstance(records, list) or len(records) != migrate.get("records"):
+        raise V5Error("RECORDS_MISMATCH", "$.records")
+    for index, record in enumerate(records):
+        if not isinstance(record, SampleV5):
+            raise V5Error("INVALID_TYPE", f"$.records[{index}]")
+        for field, expected in (("active_scope_id", scope.scope_id),
+                                ("reference_policy_id", scope.reference_policy_id),
+                                ("model_modalities", list(scope.input_modalities))):
+            if getattr(record, field) != expected:
+                raise V5Error("RECORD_SCOPE_MISMATCH", f"$.records[{index}].{field}")
+        for field, expected in (("source_dataset", policy.source_dataset), ("source_release", policy.source_release)):
+            if getattr(record, field) != expected:
+                raise V5Error("RECORD_SOURCE_MISMATCH", f"$.records[{index}].{field}")
+    if set(registry["assignment"]) != {record.sample_uid for record in records}:
+        raise V5Error("SPLIT_RECORDS_MISMATCH", "$.registry.assignment")
 
 
 def _label_qc(label_qc: dict, source: str, records: int) -> tuple[bool, dict]:
@@ -38,7 +78,10 @@ def _label_qc(label_qc: dict, source: str, records: int) -> tuple[bool, dict]:
 
 
 def gdata_evidence_v5(*, scope: ActiveScope, policy: SourcePolicy, prepare: dict, label_qc: dict, migrate: dict,
-                      split: dict) -> tuple[dict, str]:
+                      split: dict, records: list, registry: dict) -> tuple[dict, str]:
+    """`records` are the migrated SampleV5 records and `registry` the frozen split registry (both private); they
+    only bind the chain and never enter the markdown, which keeps its counts-only form."""
+    _check_chain(scope, policy, prepare, migrate, split, records, registry)
     records = prepare["records"]
     summary = prepare["summary"]
     pairing, channel = summary["pairing"], summary["channel"]
@@ -93,21 +136,23 @@ def main(argv: list | None = None) -> int:
 
     import yaml
 
-    from .contracts_v5 import validate_scope_v5
+    from .contracts_v5 import validate_sample_v5, validate_scope_v5
     from .paths import write_private_json
     from .source_policy_v5 import load_source_policies_v5
 
     parser = argparse.ArgumentParser(prog="anatobind.v41.real_gdata_v5")
-    for name in ("--prepare-report", "--qc-summary", "--migrate-report", "--split-summary", "--scope", "--policies",
-                 "--source-id", "--out"):
+    for name in ("--prepare-report", "--qc-summary", "--migrate-report", "--split-summary", "--records",
+                 "--split-registry", "--scope", "--policies", "--source-id", "--out"):
         parser.add_argument(name, required=True)
     args = parser.parse_args(argv)
     load = lambda path: json.loads(Path(path).read_text())                 # noqa: E731
+    records = [validate_sample_v5(json.loads(line)) for line in Path(args.records).read_text().splitlines() if line]
     evidence, markdown = gdata_evidence_v5(
         scope=validate_scope_v5(yaml.safe_load(Path(args.scope).read_text())),
         policy=load_source_policies_v5(Path(args.policies))[args.source_id],
         prepare=load(args.prepare_report), label_qc=load(args.qc_summary)["label_value_qc_by_source"],
-        migrate=load(args.migrate_report), split=load(args.split_summary))
+        migrate=load(args.migrate_report), split=load(args.split_summary), records=records,
+        registry=load(args.split_registry))
     out = Path(args.out)
     out.mkdir(mode=0o700)                                                # FileExistsError: never overwritten
     os.chmod(out, 0o700)
