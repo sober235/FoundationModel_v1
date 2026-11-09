@@ -320,11 +320,15 @@ def test_gbase_gate_command_binds_split_smoke_and_resources(tmp_path):
     for name, value in files.items():
         (tmp_path / f"{name}.json").write_text(json.dumps(value))
     approvals = tmp_path / "approvals.yaml"
-    approvals.write_text(yaml.safe_dump({"isles_u": {"resources": signed}}))
+    approvals.write_text(yaml.safe_dump({"isles_u": {"resources": dict(signed, smoke_plan_sha256="0" * 64)}}))
     args = ["gbase-gate", "--plan", "configs/v5/proposals/smoke_isles_u.yaml", "--scope",
             "configs/v5/scope_isles_u.yaml", "--policies", "configs/v5/sources_v5.yaml", "--source-id", "isles_2022",
             "--gdata-decision", str(tmp_path / "gdata.json"), "--split-summary", str(tmp_path / "split.json"),
             "--smoke-evidence", str(tmp_path / "smoke.json"), "--approvals", str(approvals)]
+    assert main(args + ["--out", str(tmp_path / "smoke_only")]) == 0     # a smoke approval never opens G-BASE
+    assert json.loads((tmp_path / "smoke_only" / "gbase_decision.json").read_text())["blockers"] == [
+        "APPROVAL_MISSING:resources"]
+    approvals.write_text(yaml.safe_dump({"isles_u": {"G-BASE-U": {"resources": signed}}}))
     assert main(args + ["--out", str(tmp_path / "base")]) == 0
     gate = json.loads((tmp_path / "base" / "gbase_decision.json").read_text())
     assert gate["gate_id"] == "G-BASE-U" and gate["engineering_status"] == "PASS" and gate["fixture_mode"] is False

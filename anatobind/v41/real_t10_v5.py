@@ -642,9 +642,10 @@ def main(argv: list | None = None) -> int:
                                      split_markdown=render_split_md_v5(split),
                                      development_groups=split["counts"]["development_val"],
                                      smoke_evidence=json.loads(Path(args.smoke_evidence).read_text()))
-        approvals = (_load_yaml(args.approvals) or {}).get(scope.scope_id, {})
-        decision = evaluate_gate_v5(f"G-BASE-{gate_task_v5(scope)}", scope, evidence,
-                                    {"resources": approvals.get("resources")}, source)
+        gate_id = f"G-BASE-{gate_task_v5(scope)}"
+        # keyed by gate, like the approvals template: the smoke's own `resources` approval never opens G-BASE
+        approvals = (_load_yaml(args.approvals) or {}).get(scope.scope_id, {}).get(gate_id, {})
+        decision = evaluate_gate_v5(gate_id, scope, evidence, approvals, source)
         out = Path(args.out)
         out.mkdir(mode=0o700)                                            # FileExistsError: never overwritten
         write_private_json(out / "gbase_evidence.json", evidence)
