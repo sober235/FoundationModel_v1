@@ -32,11 +32,11 @@ decisions:
   D4:
     choice: server_amax
     decided_at: "2026-11-06"
-    implementation_status: PARTIAL   # read-only precheck done (reports/v5/host_precheck_amax.md); v5 tests not yet run on the host
-    run_status: NOT_RUN
+    implementation_status: DONE      # 2026-11-08: independent working directory; v5 suite 585 passed on the server interpreter
+    run_status: PASS
     scientific_conclusion: NOT_EVALUATED
 blockers: ["PRIVATE_PATHS_IN_HISTORY:memory.md", "PRIVATE_PATHS_TRACKED:v41_docs", "BLOCKED_EXPERT_REVIEW",
-           "EXECUTION_HOST_UNVERIFIED"]
+           "LEGACY_EXPOSURE_UNKNOWN:isles_u,skm_a"]
 tasks:
   T00:
     code_status: PASS
@@ -106,15 +106,15 @@ tasks:
     scientific_conclusion: NOT_EVALUATED
   T07:
     code_status: PASS
-    test_evidence: "tests/v5/test_source_policy.py: 9 passed; test_migrate_v41.py: 20 passed; test_geometry_v5.py: 11 passed; test_source_check.py: 9 passed"
-    data_run_status: NOT_STARTED
-    approval_status: PENDING
+    test_evidence: "tests/v5/test_source_policy.py: 11 passed; test_migrate_v41.py: 23 passed; test_geometry_v5.py: 11 passed; test_source_check.py: 9 passed; test_real_t07.py: 21 passed (L1-L3 closed; real driver)"
+    data_run_status: PASS            # 2026-11-08 on amax: ISLES 250/250 and SKM-TEA 155/155 prepared and migrated; reports/v5/source_check_*.md
+    approval_status: PENDING         # G-DATA data_use not yet signed
     scientific_conclusion: NOT_EVALUATED
   T08:
     code_status: PASS
-    test_evidence: "tests/v5/test_exposure_v5.py: 7 passed; test_splits_v5.py: 11 passed"
-    data_run_status: NOT_STARTED
-    approval_status: PENDING
+    test_evidence: "tests/v5/test_exposure_v5.py: 8 passed; test_splits_v5.py: 12 passed; test_real_t08.py: 5 passed; test_real_gdata.py: 10 passed"
+    data_run_status: PASS            # 2026-11-08: splits frozen under the rules registered before the run (L8); reports/v5/split_*.md
+    approval_status: PENDING         # written split sign-off pending; locked_test empty (LEGACY_EXPOSURE_UNKNOWN)
     scientific_conclusion: NOT_EVALUATED
   T09a:
     code_status: PASS
@@ -237,8 +237,24 @@ tasks:
     - 评价准则的数值仍在开发集上选定，锁定评价前冻结。
   - 实现状态 `TODO`：T11 原标签导入未做；scope 实例待 T11/T12 建立（模板字段仍为 `null`）；SKM-TEA、SPIDER 的 G-DATA 未批准。
 - **D3 原决定（2026-11-06，留作后期方案）：** 保留 SKM 联合场景；先准备 20–30 次非锁定开发扫描试点，明确主读、独立复读、仲裁责任，以及异常边界、不确定带与单层可判读规则。人员与预算未落实前 X0 不标完成，相关科学验证保持 `BLOCKED_EXPERT_REVIEW`。框、分级或伪标签不能替代原定联合验证；试点不能形成稳定体素参照时，再按实际资源提出替代场景。
-- **D4 执行主机：** 选定 amax 数据服务器。2026-11-06 已完成只读预检（`reports/v5/host_precheck_amax.md`）：硬件与 ISLES/SKM 数据就位；服务器检出仍是旧 `main`，v5 测试尚未在其 Python 3.11 / NumPy 2.4 / SciPy 1.17 上运行，故仍未登记为正式执行环境（blocker `EXECUTION_HOST_UNVERIFIED`）。在服务器解释器上跑通 v5 测试后才登记为正式执行环境；解释器路径以实测为准，真实路径只进本地配置。
+- **D4 执行主机：** 选定 amax 数据服务器。2026-11-06 完成只读预检（`reports/v5/host_precheck_amax.md`）。2026-11-08 经研究者同意写入服务器：代码以 git bundle 克隆到独立工作目录（不动旧 `main` 检出），私有产物放在私有根下的独立子目录；v5 全套测试在服务器解释器（Python 3.11 / PyTorch 2.5.1 / NumPy 2.4 / SciPy 1.17）上 585 passed，SimpleITK 对照测试实际运行。已登记为正式执行环境，blocker `EXECUTION_HOST_UNVERIFIED` 撤销。解释器与目录路径只在本地配置。
 - **D5 长期目标定位（2026-11-07 提出，待决定）：** v5.1 是否作为“可迁移 MRI 基础模型”长期目标中的一个能力验证阶段；若是，是否在 v5.1 之后另立复用/迁移/泛化里程碑（Proposal §1.4，plan §1.5）。不改变 v5.1 的任务与完成判定。
+
+## 真实 T07/T08 运行（2026-11-08，amax）
+
+研究者 2026-11-08 同意：写 amax（新工作目录与私有子目录）、最多 2 张空闲 GPU、ISLES-2022 与 SKM-TEA 的数据使用（批准文件由研究者本人写入，尚未写入）、L8 划分规则（SKM 官方划分；ISLES 按病灶体积三分位分层 70/15/15，种子 20261108）。
+
+| 项 | ISLES-2022 → `isles_u` | SKM-TEA → `skm_a` |
+| --- | --- | --- |
+| 来源核验 | 配对 250/250；图像–mask 几何 500/500 一致（`source_check_isles_2022.md`） | 配对 155/155；通道核验 155/155（137 例 x/y 互换，18 例另有 z 反转）（`source_check_skm_tea.md`） |
+| 标签取值 | 247 通过，3 例全零 mask（保留为完整阴性） | 155 通过 |
+| 迁移 | 250/250；索引与物理几何 verified | 155/155；索引 verified，物理几何 unknown（头文件无单位，毫米指标为 NA） |
+| 降采样损失（候选因子） | 2×2×2：147 例共 846 个病灶连通域消失 → 建议不降采样 | 2×2×1：薄软骨与半月板共 151 个连通域消失 → 建议不降采样 |
+| 冻结划分 | train 175 / development_val 38 / excluded 37 / locked_test 0（`split_isles_u.md`） | train 86 / development_val 33 / excluded 36 / locked_test 0（`split_skm_a.md`） |
+| G-DATA 证据 | 6 项 PASS（`gdata_evidence_isles_2022.md`） | 6 项 PASS（`gdata_evidence_skm_tea.md`） |
+
+- 全部 v41 记录带遗留曝光 `legacy_foundation_model_unverified`（角色 unknown），按 Proposal §3.3 阻断所有 lineage 的 locked_test，规则原本分到 locked_test 的组移到 `excluded`（blocker `LEGACY_EXPOSURE_UNKNOWN:isles_u,skm_a`）。B2 只用开发集，不受影响；G-LOCKED 之前须由研究者核实旧模型的实际曝光，并按同一规则与种子重新冻结。
+- §1.6 关闭：L1–L3（`dfbef2d`），L8（规则登记于 `configs/v5/split_rule_*.yaml`，划分随真实 T08 冻结）。
 
 ## 阶段 A 补修（plan_v5.md §2A，外部审查后）
 

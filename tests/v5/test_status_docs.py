@@ -48,9 +48,9 @@ def test_decisions_recorded_with_separate_statuses():
     for row in meta["decisions"].values():
         assert set(row) == {"choice", "decided_at", "implementation_status", "run_status", "scientific_conclusion"}
     assert meta["decisions"]["D1"]["choice"] == "reference_comparison_with_h3_noninferiority"
-    assert meta["decisions"]["D4"]["run_status"] == "NOT_RUN"
+    assert meta["decisions"]["D4"]["run_status"] == "PASS"
     assert {"PRIVATE_PATHS_IN_HISTORY:memory.md", "PRIVATE_PATHS_TRACKED:v41_docs", "BLOCKED_EXPERT_REVIEW",
-            "EXECUTION_HOST_UNVERIFIED"} == set(meta["blockers"])
+            "LEGACY_EXPOSURE_UNKNOWN:isles_u,skm_a"} == set(meta["blockers"])
 
 
 def test_d3_early_phase_uses_original_fm_data_labels():
@@ -121,5 +121,23 @@ def test_host_precheck_report_is_redacted_and_not_overclaimed():
     report = Path("reports/v5/host_precheck_amax.md").read_text(encoding="utf-8")
     assert not re.search(PRIVATE_PATH_PATTERN, report) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", report)
     d4 = _front_matter()["decisions"]["D4"]
-    assert d4["implementation_status"] == "PARTIAL" and d4["run_status"] == "NOT_RUN"
-    assert "EXECUTION_HOST_UNVERIFIED" in _front_matter()["blockers"]
+    # 2026-11-08: the v5 suite passed on the server interpreter in an independent working directory
+    assert d4["implementation_status"] == "DONE" and d4["run_status"] == "PASS"
+    assert "EXECUTION_HOST_UNVERIFIED" not in _front_matter()["blockers"]
+    assert "2026-11-08" in report and "585 passed" in report
+
+
+def test_real_t07_t08_reports_are_redacted_and_recorded():
+    names = ["source_check_isles_2022", "source_check_skm_tea", "split_isles_u", "split_skm_a",
+             "gdata_evidence_isles_2022", "gdata_evidence_skm_tea"]
+    for name in names:
+        text = Path(f"reports/v5/{name}.md").read_text(encoding="utf-8")
+        assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
+        assert not re.search(r"sub-[a-z]+[0-9]|[A-Z]{3}_[0-9]{3}|\.nii|\.h5", text)    # no case IDs or file names
+    tasks = _front_matter()["tasks"]
+    for task in ("T07", "T08"):
+        assert tasks[task]["data_run_status"] == "PASS" and tasks[task]["approval_status"] == "PENDING"
+    sources = yaml.safe_load(Path("configs/v5/sources_v5.yaml").read_text(encoding="utf-8"))
+    for source_id, report in (("isles_2022", "source_check_isles_2022"), ("skm_tea", "source_check_skm_tea")):
+        digest = hashlib.sha256(Path(f"reports/v5/{report}.md").read_bytes()).hexdigest()
+        assert digest in sources[source_id]["index_evidence"]

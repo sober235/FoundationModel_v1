@@ -234,14 +234,14 @@ flowchart TD
 
 | ID | 遗留项（B1 报告出处） | 不关闭的后果 | 关闭点 |
 | --- | --- | --- | --- |
-| L1 | 记录的 `source_release` 未与政策的 `source_version` 绑定（裁定 21） | 其他版本的记录按这个政策迁移 | 真实 T07 运行前 |
-| L2 | 政策的 `model_modalities` 未与 scope 的 `input_modalities` 核对（M2） | 训练与评价不在同一观察条件 | 真实 T07 运行前核对；T09 数据加载只按 scope 的 `input_modalities` 取通道 |
-| L3 | 几何为 pass 但 `image_geometry` 为 None 时抛 `AttributeError`，整批中断（M1） | 不污染，但会中断真实批次 | 与 L1 一起修 |
+| L1 | 记录的 `source_release` 未与政策的 `source_version` 绑定（裁定 21） | 其他版本的记录按这个政策迁移 | 真实 T07 运行前（2026-11-08 已关闭：政策登记 `source_release`，`dfbef2d`） |
+| L2 | 政策的 `model_modalities` 未与 scope 的 `input_modalities` 核对（M2） | 训练与评价不在同一观察条件 | 真实 T07 运行前核对；T09 数据加载只按 scope 的 `input_modalities` 取通道（2026-11-08 迁移时核对，`dfbef2d`） |
+| L3 | 几何为 pass 但 `image_geometry` 为 None 时抛 `AttributeError`，整批中断（M1） | 不污染，但会中断真实批次 | 与 L1 一起修（2026-11-08 已关闭：`GEOMETRY_MISSING`，`dfbef2d`） |
 | L4 | 迁移后保留的 v41 `split` 不是权威值（M4） | `locked_test` 或 `unassigned` 样本进入训练 | T09a/b 数据加载：只读 `freeze_splits_v5` 的 `assignment`，并核对 `split_sha256`；不读 `SampleV5.split` |
 | L5 | `lost_positive_mask` 未接入阴性资格（裁定 19） | 小病灶、薄软骨被当作正常背景学习 | T09b 的 patch 采样与损失 |
 | L6 | lineage 只精确匹配，不随权重继承传播（裁定 20） | 从已曝光 checkpoint 继续训练的模型换个新 ID，就获得“干净”的 locked_test | T09a 登记记录初始化 checkpoint 的父 lineage；曝光检查覆盖全部祖先 lineage；T10 首次真实训练前接入 |
 | L7 | 冻结划分未与测试独立性证据、人工确认连接（裁定 17） | 固定划分文件被当作合格独立测试 | G-LOCKED(scope) / T18a 正式测试准入前 |
-| L8 | 种子、比例、分层与小层规则未登记（裁定 18；B1 完成判定） | 反复换种子挑选有利划分 | 真实 T08 运行前，由研究者批准登记 |
+| L8 | 种子、比例、分层与小层规则未登记（裁定 18；B1 完成判定） | 反复换种子挑选有利划分 | 真实 T08 运行前，由研究者批准登记（2026-11-08 已登记：`configs/v5/split_rule_*.yaml`） |
 
 按实际影响继续延后的有 M5、M6、M7、M8。其中 M5（合并小层不报告）要在真实 T08 登记时人工核对各层大小。
 

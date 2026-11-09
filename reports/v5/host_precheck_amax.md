@@ -52,3 +52,9 @@
 1. 把 `restart-dev` 放到服务器上的独立工作目录（不动现有 `main` 检出与其 `memory.md`），在服务器解释器上 CPU 运行 `tests/v41 tests/v5`。这一步要写服务器，需研究者同意。
 2. 真实数据的 T07 只读核验需要 G-DATA 的数据使用批准（按来源与版本）。
 3. GPU 单 batch、小样本过拟合、显存与吞吐实测属于 T10，在明确的资源范围内执行。
+
+## 2026-11-08 执行环境核验
+
+- 经研究者同意写入服务器：代码以 git bundle 克隆到独立工作目录，固定在当时的分支提交；旧 `main` 检出与其 `memory.md` 未动。私有产物写在私有根下新建的独立子目录（目录 700、文件 600）。
+- 在服务器解释器（Python 3.11 / PyTorch 2.5.1 / NumPy 2.4 / SciPy 1.17）上 CPU 运行 `tests`：585 passed，`test_mha_matches_simpleitk` 实际运行（本机跳过）；运行后检出无改动。
+- 结论：登记为正式执行环境，`EXECUTION_HOST_UNVERIFIED` 撤销（D4 `DONE` / `PASS`）。真实路径只在本地配置。
