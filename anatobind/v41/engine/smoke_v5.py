@@ -15,6 +15,7 @@ throughput, configuration and pass/fail only: never paths, case IDs or file name
 from __future__ import annotations
 
 import copy
+import math
 import re
 import time
 
@@ -31,7 +32,10 @@ from .train_v5 import (PRECISIONS, STOP_CODES, _to_device, autocast_v5, build_op
                        build_scheduler_v5, training_loss_v5, training_step_v5)
 
 CANDIDATE_KEYS = ("patch_size", "batch_size", "precision")
-CRITERIA_KEYS = ("min_loss_drop", "min_dice")
+CRITERIA_KEYS = ("min_loss_drop", "min_dice", "loss_window")
+RESUME_TOLERANCE_KEYS = ("loss_atol", "loss_rtol", "param_rtol")
+RESUME_EXACT_KEYS = ("step", "sampler", "scheduler", "scaler", "rng", "data_sha256", "optimizer_counters",
+                     "steps_after_pause")
 MEASUREMENT_STATUS = ("OK", "OOM", "NON_FINITE")
 MEASUREMENT_PHASES = ("forward_backward", "training_step")
 OVERFIT_FAILURES = (*STOP_CODES, "OUT_OF_MEMORY")
@@ -188,7 +192,9 @@ def _check_criteria(criteria: object) -> None:
         value = criteria.get(key)
         if value is None:
             raise V5Error("CRITERIA_VALUE_MISSING", f"$.criteria.{key}")
-        if not (_is_number(value) and (0 <= value < 1 if key == "min_loss_drop" else 0 <= value <= 1)):
+        valid = _positive_int(value) if key == "loss_window" else \
+            _is_number(value) and (0 <= value < 1 if key == "min_loss_drop" else 0 <= value <= 1)
+        if not valid:
             raise V5Error("INVALID_CRITERIA_VALUE", f"$.criteria.{key}")
 
 
@@ -222,15 +228,40 @@ def _sample_dice(model: PerceptionModelV5, samples: dict, recipe: dict) -> dict:
     return means
 
 
+def judge_overfit_v5(model: PerceptionModelV5, samples: dict, recipe: dict, loss_curve: list, criteria: dict, *,
+                     failure_code: str | None) -> dict:
+    """Judge a model trained on a few train samples (by overfit_check_v5 or by train_v5) against explicit criteria.
+
+    With w = criteria.loss_window: initial = mean of the first w step losses, final = mean of the last w, drop =
+    1 - final/initial (None when the curve is shorter than 2w or initial is not positive). passed: no failure
+    code, drop >= min_loss_drop, and for every task the mean Dice >= min_dice. Dice is over whole samples on the
+    model grid within e_pos & e_neg, A by argmax and U by p >= 0.5. The result holds no identifiers.
+    """
+    _check_criteria(criteria)
+    if failure_code is not None and failure_code not in OVERFIT_FAILURES:
+        raise V5Error("INVALID_FAILURE_CODE", "$.failure_code")
+    losses = [float(value) for value in loss_curve]
+    window = criteria["loss_window"]
+    initial = final = drop = None
+    if len(losses) >= 2 * window:
+        initial, final = sum(losses[:window]) / window, sum(losses[-window:]) / window
+        drop = 1.0 - final / initial if initial > 0 else None
+    dice = {task: None for task in model.tasks} if failure_code else _sample_dice(model, samples, recipe)
+    passed = (failure_code is None and drop is not None and drop >= criteria["min_loss_drop"]
+              and all(dice[task] is not None and dice[task] >= criteria["min_dice"] for task in model.tasks))
+    return {"steps_completed": len(losses), "loss_curve": losses, "initial_loss": initial, "final_loss": final,
+            "loss_drop": drop, "dice": dice, "criteria": dict(criteria), "passed": bool(passed),
+            "failure_code": failure_code}
+
+
 def overfit_check_v5(model: PerceptionModelV5, samples: dict, recipe: dict, supervision: dict, steps: int,
                      criteria: dict) -> dict:
-    """Train a fresh `model` for `steps` steps on a few train samples, then judge it by explicit criteria.
+    """Train a fresh `model` for `steps` steps on a few train samples, then judge it with judge_overfit_v5.
 
     Samples come from load_training_set_v5 within a registered smoke run (train assignment only, L4/L6). Each step
     is training_step_v5 with the recipe's sampler, optimizer, schedule, scaler and precision; no checkpoint is
-    written. steps may not exceed budget.max_steps, where the poly schedule reaches zero. passed: no stop code,
-    loss drop 1 - final/initial >= min_loss_drop, and for every task the mean Dice >= min_dice. Dice is over whole
-    samples on the model grid within e_pos & e_neg, A by argmax and U by p >= 0.5. The result holds no identifiers.
+    written. steps may not exceed budget.max_steps, where the poly schedule reaches zero, and must cover two loss
+    windows.
     """
     if not isinstance(model, PerceptionModelV5):
         raise V5Error("INVALID_TYPE", "$.model")
@@ -241,9 +272,9 @@ def overfit_check_v5(model: PerceptionModelV5, samples: dict, recipe: dict, supe
     if not isinstance(samples, dict) or not samples \
             or not all(isinstance(sample, TrainingSampleV5) for sample in samples.values()):
         raise V5Error("INVALID_TYPE", "$.samples")
-    if not _positive_int(steps) or steps > recipe["budget"]["max_steps"]:
-        raise V5Error("INVALID_STEPS", "$.steps")
     _check_criteria(criteria)
+    if not _positive_int(steps) or steps > recipe["budget"]["max_steps"] or steps < 2 * criteria["loss_window"]:
+        raise V5Error("INVALID_STEPS", "$.steps")
 
     device = next(model.parameters()).device
     sampler = PatchSamplerV5(sorted(samples), {uid: positive_centers_v5(s) for uid, s in samples.items()},
@@ -267,14 +298,74 @@ def overfit_check_v5(model: PerceptionModelV5, samples: dict, recipe: dict, supe
             failure = err.code
             break
         losses.append(float(loss.detach()))
-    dice = {task: None for task in model.tasks} if failure else _sample_dice(model, samples, recipe)
-    drop = 1.0 - losses[-1] / losses[0] if losses and losses[0] > 0 else None
-    passed = (failure is None and drop is not None and drop >= criteria["min_loss_drop"]
-              and all(dice[task] is not None and dice[task] >= criteria["min_dice"] for task in model.tasks))
-    return {"steps": steps, "steps_completed": len(losses), "loss_curve": losses,
-            "initial_loss": losses[0] if losses else None, "final_loss": losses[-1] if losses else None,
-            "loss_drop": drop, "dice": dice, "criteria": dict(criteria), "passed": bool(passed),
-            "failure_code": failure}
+    return {"steps": steps, **judge_overfit_v5(model, samples, recipe, losses, criteria, failure_code=failure)}
+
+
+# ---------------------------------------------------------------------------
+# Resume check: continuous execution against pause + resume of the same registered run
+
+
+def _same(a, b) -> bool:
+    if isinstance(a, torch.Tensor) or isinstance(b, torch.Tensor):
+        return isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor) and a.dtype == b.dtype \
+            and a.shape == b.shape and torch.equal(a.cpu(), b.cpu())
+    if isinstance(a, dict) or isinstance(b, dict):
+        return isinstance(a, dict) and isinstance(b, dict) and set(a) == set(b) and all(_same(a[k], b[k]) for k in a)
+    if isinstance(a, (list, tuple)) or isinstance(b, (list, tuple)):
+        return isinstance(b, type(a)) and len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    return a == b
+
+
+def _relative(a: torch.Tensor, b: torch.Tensor) -> float:
+    a, b = a.detach().double().cpu(), b.detach().double().cpu()
+    return float(torch.linalg.vector_norm(a - b) / max(float(torch.linalg.vector_norm(a)), 1e-12))
+
+
+def _step_losses(lines: list, pause_at: int) -> dict:
+    return {line["step"]: float(line["loss"]) for line in lines
+            if isinstance(line, dict) and line.get("event") == "step" and line["step"] > pause_at}
+
+
+def compare_resume_v5(continuous: dict, resumed: dict, continuous_steps: list, resumed_steps: list, *,
+                      pause_at: int, tolerances: dict) -> dict:
+    """Compare the final checkpoint states and the per-step losses after `pause_at` of two executions.
+
+    Exact: final step, sampler, scheduler, scaler and RNG states, data digest, the optimizer's param groups and
+    per-parameter step counts, and the set of steps logged after the pause. Within the registered tolerances
+    {loss_atol, loss_rtol, param_rtol}: every logged loss (|a - b| <= atol + rtol·|a|), and the relative L2
+    difference of every parameter and AdamW moment. Bitwise equality is reported but only required on CPU tests.
+    """
+    if not isinstance(tolerances, dict) or set(tolerances) != set(RESUME_TOLERANCE_KEYS) \
+            or not all(_is_number(v) and v >= 0 for v in tolerances.values()):
+        raise V5Error("INVALID_TOLERANCE", "$.tolerances")
+    if not _positive_int(pause_at):
+        raise V5Error("INVALID_PAUSE", "$.pause_at")
+    losses_a, losses_b = _step_losses(continuous_steps, pause_at), _step_losses(resumed_steps, pause_at)
+    opt_a, opt_b = continuous["optimizer"], resumed["optimizer"]
+    counters = _same(opt_a["param_groups"], opt_b["param_groups"]) and set(opt_a["state"]) == set(opt_b["state"]) \
+        and all(_same(opt_a["state"][k].get("step"), opt_b["state"][k].get("step")) for k in opt_a["state"])
+    exact = {"step": continuous["step"] == resumed["step"],
+             **{key: _same(continuous[key], resumed[key]) for key in ("sampler", "scheduler", "scaler", "rng")},
+             "data_sha256": continuous["data_sha256"] == resumed["data_sha256"],
+             "optimizer_counters": bool(counters),
+             "steps_after_pause": sorted(losses_a) == sorted(losses_b)
+             == list(range(pause_at + 1, continuous["step"] + 1))}
+    model_a, model_b = continuous["model"], resumed["model"]
+    same_keys = set(model_a) == set(model_b)
+    param_diff = max((_relative(model_a[k], model_b[k]) for k in model_a), default=0.0) if same_keys else math.inf
+    moments = [(opt_a["state"][k][m], opt_b["state"][k][m]) for k in opt_a["state"] if k in opt_b["state"]
+               for m in ("exp_avg", "exp_avg_sq") if m in opt_a["state"][k] and m in opt_b["state"][k]]
+    moment_diff = max((_relative(a, b) for a, b in moments), default=0.0)
+    shared = sorted(set(losses_a) & set(losses_b))
+    loss_diff = max((abs(losses_a[s] - losses_b[s]) for s in shared), default=0.0)
+    loss_ok = all(abs(losses_a[s] - losses_b[s]) <= tolerances["loss_atol"] + tolerances["loss_rtol"] * abs(losses_a[s])
+                  for s in shared)
+    bitwise = same_keys and all(_same(model_a[k], model_b[k]) for k in model_a)
+    passed = all(exact.values()) and loss_ok and param_diff <= tolerances["param_rtol"] \
+        and moment_diff <= tolerances["param_rtol"]
+    return {"exact": exact, "steps_compared": len(shared), "max_loss_abs_diff": loss_diff,
+            "max_param_rel_diff": param_diff, "max_optimizer_rel_diff": moment_diff, "bitwise_parameters": bool(bitwise),
+            "tolerances": dict(tolerances), "pause_at": pause_at, "passed": bool(passed)}
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +446,8 @@ def _overfit_lines(overfit: object) -> list:
             f"- 损失：初始 {_number(overfit.get('initial_loss'), '$.overfit.initial_loss', 4)} → "
             f"末 {_number(overfit.get('final_loss'), '$.overfit.final_loss', 4)}；"
             f"下降比例 {_number(overfit.get('loss_drop'), '$.overfit.loss_drop', 3)}"
-            f"（判据 ≥ {_number(criteria.get('min_loss_drop'), '$.overfit.criteria.min_loss_drop', 3)}）",
+            f"（判据 ≥ {_number(criteria.get('min_loss_drop'), '$.overfit.criteria.min_loss_drop', 3)}；"
+            f"首末各 {_count(criteria.get('loss_window'), '$.overfit.criteria.loss_window')} 步平均）",
             f"- Dice（样本与类别均值）：{scores}"
             f"（判据 ≥ {_number(criteria.get('min_dice'), '$.overfit.criteria.min_dice', 3)}）",
             f"- 结果：{'PASS' if overfit['passed'] else 'FAIL'}" + (f"（{failure}）" if failure else "")]

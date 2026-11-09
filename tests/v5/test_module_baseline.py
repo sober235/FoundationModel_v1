@@ -12,7 +12,8 @@ from anatobind.v41.contracts_v5 import UNKNOWN_KEY, V5Error, validate_scope_v5
 from anatobind.v41.engine.module_eval_v5 import (
     freeze_module_reference_v5, module_metrics_v5, render_module_baseline_md_v5, summarize_module_metrics_v5)
 from anatobind.v41.engine.registration_v5 import run_sha256_v5
-from anatobind.v41.engine.smoke_v5 import measure_candidates_v5, overfit_check_v5, render_measurement_md_v5
+from anatobind.v41.engine.smoke_v5 import (
+    compare_resume_v5, judge_overfit_v5, measure_candidates_v5, overfit_check_v5, render_measurement_md_v5)
 from anatobind.v41.models.interface_v5 import PerceptionModelV5, collate_model_inputs_v5
 from anatobind.v41.models.resunet_v5 import build_model_v5
 from tests.v5.factories import (
@@ -170,7 +171,8 @@ def _measurement_summary() -> dict:
                  scaler_enabled=False, scheduler="poly")]
     overfit = {"steps": 3, "steps_completed": 3, "loss_curve": [1.0, 0.7, 0.4], "initial_loss": 1.0,
                "final_loss": 0.4, "loss_drop": 0.6, "dice": {"A": 0.8},
-               "criteria": {"min_loss_drop": 0.5, "min_dice": 0.5}, "passed": True, "failure_code": None}
+               "criteria": {"min_loss_drop": 0.5, "min_dice": 0.5, "loss_window": 1}, "passed": True,
+               "failure_code": None}
     return {"scope_id": "synthetic_a", "device": {"name": "Synthetic GPU", "count": 8}, "candidates": rows,
             "overfit": overfit, "case_id": "synthetic-case-0042", "run_dir": "/private/root/runs/smoke",
             "samples": ["synthetic-case-0042"], "image": "synthetic-case-0042_0000.nii.gz"}
@@ -207,7 +209,7 @@ def test_overfit_check_uses_explicit_criteria():
                          budget={"max_steps": 30, "max_wall_hours": 0.1})
     samples, supervision = _learnable_samples(scope), make_supervision(scope)
     model = build_model_v5(recipe, scope)
-    lenient = {"min_loss_drop": 0.0, "min_dice": 0.0}
+    lenient = {"min_loss_drop": 0.0, "min_dice": 0.0, "loss_window": 1}
     for criteria, path in (({}, "$.criteria.min_loss_drop"), ({"min_loss_drop": 0.1}, "$.criteria.min_dice")):
         _raises("CRITERIA_VALUE_MISSING", path, overfit_check_v5, model, samples, recipe, supervision, 5, criteria)
     _raises("INVALID_CRITERIA_VALUE", "$.criteria.min_dice", overfit_check_v5, model, samples, recipe, supervision,
@@ -223,8 +225,80 @@ def test_overfit_check_uses_explicit_criteria():
     assert set(result["dice"]) == {"A"} and 0 < result["dice"]["A"] <= 1
     assert "synthetic-sample" not in repr(result)  # nothing identifying enters what a report may show
     strict = overfit_check_v5(build_model_v5(recipe, scope), samples, recipe, supervision, 2,
-                              {"min_loss_drop": 0.99, "min_dice": 1.0})
+                              {"min_loss_drop": 0.99, "min_dice": 1.0, "loss_window": 1})
     assert strict["passed"] is False and strict["failure_code"] is None
+
+
+def test_loss_drop_uses_the_registered_window():
+    """drop = 1 - mean(last w) / mean(first w); a curve shorter than 2w has no drop and cannot pass."""
+    scope = _a_scope()
+    recipe = make_recipe(budget={"max_steps": 30, "max_wall_hours": 0.1})
+    samples = _learnable_samples(scope)
+    model = build_model_v5(recipe, scope)
+    curve = [2.0, 4.0, 1.0, 3.0, 0.5, 0.5]
+    criteria = {"min_loss_drop": 0.7, "min_dice": 0.0, "loss_window": 2}
+    result = judge_overfit_v5(model, samples, recipe, curve, criteria, failure_code=None)
+    assert result["loss_drop"] == pytest.approx(1 - 0.5 / 3.0) and result["passed"] is True
+    assert result["initial_loss"] == pytest.approx(3.0) and result["final_loss"] == pytest.approx(0.5)
+    short = judge_overfit_v5(model, samples, recipe, curve[:3], criteria, failure_code=None)
+    assert short["loss_drop"] is None and short["passed"] is False
+    failed = judge_overfit_v5(model, samples, recipe, curve, criteria, failure_code="OUT_OF_MEMORY")
+    assert failed["passed"] is False and failed["dice"] == {"A": None}
+    _raises("CRITERIA_VALUE_MISSING", "$.criteria.loss_window", judge_overfit_v5, model, samples, recipe, curve,
+            {"min_loss_drop": 0.1, "min_dice": 0.1}, failure_code=None)
+    _raises("INVALID_CRITERIA_VALUE", "$.criteria.loss_window", judge_overfit_v5, model, samples, recipe, curve,
+            dict(criteria, loss_window=0), failure_code=None)
+    _raises("INVALID_STEPS", "$.steps", overfit_check_v5, model, samples, recipe, make_supervision(scope), 3,
+            dict(criteria, loss_window=2))
+
+
+def _final_state(seed=0):
+    generator = torch.Generator().manual_seed(seed)
+    weight = torch.randn((4, 4), generator=generator)
+    return {"step": 6, "model": {"w": weight.clone()},
+            "optimizer": {"state": {0: {"step": torch.tensor(6.0), "exp_avg": weight * 0.1, "exp_avg_sq": weight ** 2}},
+                          "param_groups": [{"lr": 0.001, "params": [0]}]},
+            "scheduler": {"last_epoch": 6, "_last_lr": [0.0]}, "scaler": {}, "sampler": {"epoch": 3, "cursor": 1},
+            "rng": {"python": (3, (1, 2), None), "torch": torch.tensor([1, 2], dtype=torch.uint8), "cuda": []},
+            "wall_seconds": 1.0, "data_sha256": "d" * 64}
+
+
+def _steps(losses, start=4):
+    return [{"event": "step", "step": start + i, "loss": loss, "lr": 0.001, "tasks": {}} for i, loss in enumerate(losses)]
+
+
+TOLERANCE = {"loss_atol": 1e-4, "loss_rtol": 1e-3, "param_rtol": 1e-3}
+
+
+def test_resume_comparison_needs_exact_counters_and_registered_tolerances():
+    same = compare_resume_v5(_final_state(), _final_state(), _steps([1.0, 0.9, 0.8]), _steps([1.0, 0.9, 0.8]),
+                             pause_at=3, tolerances=TOLERANCE)
+    assert same["passed"] is True and same["bitwise_parameters"] is True and same["steps_compared"] == 3
+    assert all(same["exact"].values()) and same["max_loss_abs_diff"] == 0.0
+    near = _final_state()
+    near["model"]["w"] = near["model"]["w"] * (1 + 1e-5)
+    close = compare_resume_v5(_final_state(), near, _steps([1.0, 0.9, 0.8]), _steps([1.0, 0.90005, 0.8]),
+                              pause_at=3, tolerances=TOLERANCE)
+    assert close["passed"] is True and close["bitwise_parameters"] is False and close["max_param_rel_diff"] > 0
+    far = compare_resume_v5(_final_state(), _final_state(seed=1), _steps([1.0], 6), _steps([1.0], 6), pause_at=5,
+                            tolerances=TOLERANCE)
+    assert far["passed"] is False and far["max_param_rel_diff"] > 1e-3
+    for key, value in (("step", 5), ("sampler", {"epoch": 3, "cursor": 2}), ("scheduler", {"last_epoch": 5, "_last_lr": [0.0]}),
+                       ("data_sha256", "e" * 64)):
+        moved = dict(_final_state(), **{key: value})
+        result = compare_resume_v5(_final_state(), moved, _steps([1.0], 6), _steps([1.0], 6), pause_at=5,
+                                   tolerances=TOLERANCE)
+        assert result["passed"] is False and result["exact"][key] is False
+    drift = compare_resume_v5(_final_state(), _final_state(), _steps([1.0, 0.9], 5), _steps([1.0, 0.95], 5),
+                              pause_at=4, tolerances=TOLERANCE)
+    assert drift["passed"] is False and drift["max_loss_abs_diff"] == pytest.approx(0.05)
+    missing = compare_resume_v5(_final_state(), _final_state(), _steps([1.0, 0.9], 5), _steps([1.0], 5), pause_at=4,
+                                tolerances=TOLERANCE)
+    assert missing["passed"] is False and missing["exact"]["steps_after_pause"] is False
+    for bad in ({}, dict(TOLERANCE, loss_atol=-1.0), dict(TOLERANCE, extra=1)):
+        with pytest.raises(V5Error):
+            compare_resume_v5(_final_state(), _final_state(), _steps([1.0], 6), _steps([1.0], 6), pause_at=5,
+                              tolerances=bad)
 
 
 # ---------------------------------------------------------------------------
