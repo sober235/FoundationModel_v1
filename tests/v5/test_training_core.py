@@ -456,3 +456,21 @@ def test_pause_only_after_a_checkpoint_before_the_end(tmp_path, pause_at):
     ctx = _setup(tmp_path)
     _raises("INVALID_PAUSE", "$.pause_at", _train, ctx, _model(ctx), pause_at=pause_at)
     assert not (ctx["run_dir"] / "data.json").exists()        # refused before the run starts
+
+
+def _accelerators() -> list:
+    found = ["cuda"] if torch.cuda.is_available() else []
+    return found + (["mps"] if torch.backends.mps.is_available() else [])
+
+
+@pytest.mark.parametrize("device", _accelerators() or [pytest.param("cuda", marks=pytest.mark.skip("no accelerator"))])
+def test_rng_state_restores_from_a_checkpoint_mapped_to_an_accelerator(device):
+    """load_checkpoint_v5 maps every tensor to the run device; the saved RNG states are CPU byte tensors and
+    must restore from there (real isles_u smoke on amax, 2026-11-09: TypeError at resume on CUDA)."""
+    from anatobind.v41.engine.train_v5 import _rng_state, _set_rng_state
+
+    state = _rng_state()
+    expected = torch.rand(4)
+    mapped = {**state, "torch": state["torch"].to(device), "cuda": [s.to(device) for s in state["cuda"]]}
+    _set_rng_state(mapped)
+    assert torch.equal(torch.rand(4), expected)

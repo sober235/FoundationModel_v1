@@ -144,10 +144,11 @@ def _rng_state() -> dict:
 
 
 def _set_rng_state(state: dict) -> None:
+    # RNG states are CPU byte tensors; load_checkpoint_v5 maps every tensor to the run device, so move them back
     random.setstate(state["python"])
-    torch.set_rng_state(state["torch"])
+    torch.set_rng_state(state["torch"].cpu())
     if state["cuda"] and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(state["cuda"])
+        torch.cuda.set_rng_state_all([s.cpu() for s in state["cuda"]])
 
 
 def save_checkpoint_v5(path: Path, state: dict, run: dict, private_root: Path, repo: Path) -> str:

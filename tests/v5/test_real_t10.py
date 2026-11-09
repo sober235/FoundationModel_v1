@@ -170,6 +170,16 @@ def test_end_to_end_smoke_on_synthetic_volumes(tmp_path):
     assert evidence["status"] == "PASS" and evidence["scope_hash"] == SCOPE.scope_hash and evidence["task"] == "U"
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA (runs on amax)")
+def test_end_to_end_smoke_runs_on_cuda(tmp_path):
+    """The whole chain on the GPU: checkpoints load mapped to CUDA, the paused run resumes, inference restores
+    the original grid (the real isles_u smoke on amax stopped at resume on 2026-11-09)."""
+    summary, _, _ = _smoke(tmp_path, _plan(), device="cuda")
+    assert summary["stop_code"] is None, summary
+    assert summary["resumed"]["pause_status"] == "PAUSED" and summary["resume_check"]["passed"]
+    assert summary["inference"]["validated"] and summary["inference"]["reloaded_by_hash"]
+
+
 def test_smoke_stops_and_records_when_no_candidate_fits(tmp_path, monkeypatch):
     import anatobind.v41.real_t10_v5 as driver
 
