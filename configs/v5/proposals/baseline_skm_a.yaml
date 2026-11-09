@@ -1,0 +1,65 @@
+# PROPOSAL — NOT APPROVED (2026-11-09). Module baseline plan for skm_a (SKM-TEA qDESS E1/E2, A-only), plan_v5 §2C T10 step 4.
+# Every value below is a proposal for the researcher. The baseline runs only after the researcher signs the
+# G-BASE-A `resources` approval for skm_a (approval C) naming this file's plan sha256
+# (python -m anatobind.v41.real_baseline_v5 plan-hash) and G-BASE-A is PASS.
+# Any edit changes the hash and needs a new approval. Comments are not part of the hash.
+# The recipe is the passed smoke's (smoke_skm_a_v1) with the candidate its rule chose; only recipe_id,
+# readable_roles, checkpoint_every and budget differ. Random initialisation; every train sample; selection rule
+# `last`; development evaluation on every development_val scan, patients weighted equally. Development values are
+# engineering values for describing the baseline, never formal thresholds (Proposal §9).
+# Physical geometry stays unknown (no units in the source): millimetre metrics are NA, so only Dice is requested.
+plan_id: baseline_skm_a_v1
+scope_id: skm_a
+scope_hash: c70f7dca4c94ea4454ce0a41794d931a2a81fb27db1e605b18ca24e98f85bfd7
+source: {source_id: skm_tea, source_version: skm_tea_annotations_v1.0.0}
+lineage_id: v51_skm_a_b2              # the frozen T08 split's lineage
+smoke:
+  plan_sha256: 93ce6daaa21654e7e729b2e6796095ccccb075a5e246bc77bbc34062a1d725c0        # smoke_skm_a_v1
+  training_smoke_sha256: 0fc50ac8ae0b2af99bba498c340214c5ad2518487c944577a617f5f5d0e64038
+  chosen: {patch_size: [192, 192, 48], batch_size: 2, precision: fp32}               # first_ok_within_memory
+recipe:
+  recipe_id: skm_a_baseline_v1
+  model:
+    architecture: resunet3d
+    tasks: [A]
+    widths: [32, 64, 128, 256, 320]
+    strides: [[1, 1, 1], [2, 2, 1], [2, 2, 2], [2, 2, 2], [2, 2, 2]]   # in-plane first; x16, y16, z8 in total
+    blocks_per_stage: 2
+  seeds: {init: 20261109, sampler: 20261110}
+  optimizer: {name: adamw, lr: 0.001, weight_decay: 0.0001}
+  scheduler: {name: poly, exponent: 0.9}
+  patch_size: [192, 192, 48]
+  batch_size: 2
+  precision: fp32
+  downsample_factor: [1, 1, 1]        # T07 loss check: 2x2x1 loses 151 thin cartilage/meniscus components
+  grid_tolerance: {atol_affine: 0.001, atol_spacing: 0.001}
+  normalization: zscore_volume
+  sampling: {positive_fraction: 0.5}
+  readable_roles: [train, development_val]   # train for training; development_val for evaluation only
+  selection_rule: last
+  inference: {window: [192, 192, 48], stride: [96, 96, 24]}
+  checkpoint_every: 2000              # 10 checkpoints of about 0.33 GB
+  budget: {max_steps: 20000, max_wall_hours: 5.0}   # smoke step 0.45 s on one shared A800: about 2.5 h of steps
+supervision:
+  policy_id: skm_a_supervision_v1
+  scope_id: skm_a
+  reference_policy_id: skm_a6_released_reference_v1
+  track: released_reference
+  allow_unknown_visibility: false     # every SKM A annotation is recorded visible
+  channel: expert
+  tasks:
+    A: {kind: softmax, ce_weight: 1.0, dice_weight: 1.0, task_weight: 1.0}
+acceptance_policy:
+  policy_id: skm_a_engineering_v1
+  policy_role: engineering            # never a formal threshold (Proposal §9)
+  anatomy: {min_confidence: 0.0}      # engineering: every argmax is accepted
+  abnormality: {thresholds: null, reject_band: null}
+  instances: {connectivity: null, min_voxels: null}
+metric_policy:                        # development description only
+  metrics: [dice]                     # hd95 and nsd need verified physical geometry: NA for SKM
+  surface_tolerance_mm: null
+  iou_match_threshold: null
+  fp_budget_per_scan: null
+  class_aware: null
+  size_strata_voxels: null
+budget: {max_wall_hours: 8.0}         # whole baseline: loading about 120 large volumes, training, inference, metrics
