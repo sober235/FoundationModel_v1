@@ -135,9 +135,9 @@ tasks:
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T10:
-    code_status: PASS   # 2026-11-09: real smoke driver, G-DATA chain guard, full-step measurement, G-BASE gate; the baseline driver is not written yet
-    test_evidence: "2026-11-09 local (Python 3.9, torch 2.8): tests/v5/test_real_t10.py: 14 passed; test_real_gdata.py: 21 passed; test_module_baseline.py: 17 passed; test_training_core.py: 21 passed; test_run_registration.py: 76 passed; test_resunet_v5.py: 7 passed. amax (Python 3.11, torch 2.5.1, CPU): 664 passed at 2c2b7ab, 691 passed at 3a478cb"
-    data_run_status: PARTIAL   # 2026-11-09: real smokes PASS for isles_u and skm_a; G-BASE evidence 5/5 PASS, gate blocked on approval C; baselines not run
+    code_status: PASS   # 2026-11-09: real smoke driver, G-DATA chain guard, full-step measurement, G-BASE gate, baseline driver (real_baseline_v5)
+    test_evidence: "2026-11-09 local (Python 3.9, torch 2.8): tests/v5/test_real_baseline.py: 12 passed; test_real_t10.py: 14 passed; test_real_gdata.py: 21 passed; test_module_baseline.py: 17 passed; test_training_core.py: 21 passed; test_run_registration.py: 76 passed; test_resunet_v5.py: 7 passed. amax (Python 3.11, torch 2.5.1, CPU): 664 passed at 2c2b7ab, 691 passed at 3a478cb"
+    data_run_status: PARTIAL   # 2026-11-09: real smokes PASS for isles_u and skm_a; G-BASE evidence 5/5 PASS, gate blocked on approval C (baseline plans proposed); baselines not run
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T11:
@@ -279,7 +279,7 @@ tasks:
 | 待批准材料 | 一次性提交 A：G-DATA data_use；B：smoke resources；C：smoke PASS 后的 G-BASE resources 与基线预算 | `t10_approval_package_20261109.md` |
 | T11 前期（SKM） | 框和 tissue_id 导入代码，22 项合成测试；联合 scope 与来源绑定为**提案，未批准** | `0883395`；`t11_skm_joint_early_admission_20261109.md` |
 
-- 基线驱动尚未编写，会与基线计划提案一起提交（批准材料 C 项）。
+- 基线驱动 `real_baseline_v5.py` 已与两份基线计划提案一起提交，见下文“基线驱动与批准 C 材料”。
 
 ### 真实 smoke（2026-11-09，amax，批准 A、B 由研究者签署后）
 
@@ -305,6 +305,23 @@ tasks:
 - 冻结的 patch、batch 和精度：按 `first_ok_within_memory` 规则选中的候选（见上表），将作为基线计划提案的取值。
 - G-BASE 预评估：两个 scope 的五项证据（g_data、supervision_policy、input_policy、frozen_dev_split、training_smoke）全部 PASS。门控为 BLOCKED，唯一阻断是 `APPROVAL_MISSING:resources`，即批准 C。smoke 批准不能打开这个门控。
 - T10 的 `data_run_status` 记为 PARTIAL：smoke 已完成，真实基线没有运行，所以 T10 不标完成。
+
+### 基线驱动与批准 C 材料（2026-11-09，未运行）
+
+- 驱动 `anatobind/v41/real_baseline_v5.py`：
+  - 子命令 `plan-hash`、`baseline`；
+  - 随机初始化，用全部 train 训练，选择规则 `last`；
+  - 在全部 development_val 上整卷推理，按患者等权汇总；locked_test 不读。
+- 拒绝条件：
+  - 计划必须是已通过 smoke 的配方加上规则选中的候选，其他改动一律拒绝；
+  - 批准 C 必须按关卡分键并写明计划 sha256，否则在读取数据之前拒绝；
+  - 训练失败或超出整体预算时，停在当前阶段并记录，不重试，不出部分结果。
+- 测试：`tests/v5/test_real_baseline.py`，12 项，全部基于合成数据。
+- 基线计划（**提案，未批准**）：
+  - isles_u：`baseline_isles_u.yaml`，sha256 `96040004…`；
+  - skm_a：`baseline_skm_a.yaml`，sha256 `3809a1ce…`。
+- 待签材料：`t10_approval_c_20261109.md`，含批准文件格式、预算、资源和执行命令。
+- 状态：两个基线都没有运行，T10 的 `data_run_status` 仍为 PARTIAL。
 
 ## 阶段 A 补修（plan_v5.md §2A，外部审查后）
 

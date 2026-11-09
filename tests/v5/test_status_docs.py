@@ -187,3 +187,26 @@ def test_real_smoke_reports_are_redacted_and_bound_to_their_evidence():
         assert f"`gpu_measurement_{scope_id}.md`（training_smoke sha256 `{digest}`）" in status
     tasks = _front_matter()["tasks"]
     assert tasks["T10"]["data_run_status"] == "PARTIAL"            # smoke only: the real baselines are not done
+
+
+def test_t10_approval_c_package_is_redacted_and_names_the_baseline_plans():
+    from anatobind.v41.contracts_v5 import validate_scope_v5
+    from anatobind.v41.real_baseline_v5 import baseline_plan_sha256_v5, validate_baseline_plan_v5
+    from anatobind.v41.source_policy_v5 import load_source_policies_v5, source_binding_v5
+
+    package = Path("reports/v5/t10_approval_c_20261109.md").read_text(encoding="utf-8")
+    assert not re.search(PRIVATE_PATH_PATTERN, package) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", package)
+    assert not re.search(r"sub-[a-z]+[0-9]|[A-Z]{3}_[0-9]{3}|\.nii|\.h5\b|skmtea:|isles2022:", package)
+    assert "approved_by: <研究者本人填写>" in package and "synthetic-fixture" not in package
+    assert "NOT_EVALUATED" in package and "locked_test" in package
+    policies = load_source_policies_v5(Path("configs/v5/sources_v5.yaml"))
+    for scope_id, source_id in (("isles_u", "isles_2022"), ("skm_a", "skm_tea")):
+        scope = validate_scope_v5(yaml.safe_load(Path(f"configs/v5/scope_{scope_id}.yaml").read_text()))
+        smoke = yaml.safe_load(Path(f"configs/v5/proposals/smoke_{scope_id}.yaml").read_text())
+        plan = validate_baseline_plan_v5(
+            yaml.safe_load(Path(f"configs/v5/proposals/baseline_{scope_id}.yaml").read_text()), scope,
+            source_binding_v5(policies[source_id]), smoke)
+        report = hashlib.sha256(Path(f"reports/v5/gpu_measurement_{scope_id}.md").read_bytes()).hexdigest()
+        assert plan["smoke"]["training_smoke_sha256"] == report        # the smoke the researcher saw
+        assert f"baseline_plan_sha256: {baseline_plan_sha256_v5(plan)}" in package
+        assert f"scope_hash: {scope.scope_hash}" in package
