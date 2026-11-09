@@ -21,7 +21,11 @@ skm_tea:
   scope_id: skm_a
   reference_policy_id: skm_a6_released_reference_v1
   model_modalities: [qdess_e1, qdess_e2]
-  annotation_modalities: {A: null}
-  index_evidence: null
+  # SKM-TEA DATASET.md: the qDESS DICOM images were manually segmented; which echo (or combination) the
+  # annotators viewed is not stated, so both echoes of that one acquisition are registered.
+  annotation_modalities: {A: [qdess_e1, qdess_e2]}
+  index_evidence: "reports/v5/source_check_skm_tea.md (sha256 0eee14e3916531c332c4cbbece2af5c86358f7cad6b44307a80d0533446e1e8a): echo1, echo2 and seg share one H5 file and grid; the dicom-track reference equals the H5 seg after the registered transform (x/y swap in 137, x/y swap plus z reversal in 18) with channel order c -> c + 1 in 155/155"
+  # Physical units stay unverified: the NIfTI headers declare no unit (the v41 note records a researcher
+  # confirmation of mm, but no header supports it), so mm metrics are NA for skm_a.
   physical_units_policy: null
   physical_units_evidence: null
