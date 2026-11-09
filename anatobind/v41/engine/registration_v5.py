@@ -6,11 +6,18 @@ Exposure follows the weights: a run initialised from checkpoints lists every anc
 it reads must have been frozen for that lineage and those ancestors. Samples are read only through the frozen
 registry's assignment, never through a record's own split field (L4). Errors are V5Error(code, path) and never
 echo input values.
+
+A smoke run may read a fixed subset of its train samples (2026-11-09) for the small-sample checks: the subset is
+not chosen by hand but is exactly what select_subset_v5 yields from the frozen registry, a salt, a count and
+optional registered strata, and the run records that rule and the resulting sample list. The data manifest,
+the exposure written at registration and the samples a run may read are then that subset; the frozen split and
+the other samples' exposure stay as they were. Baseline runs read their whole readable roles.
 """
 from __future__ import annotations
 
 import copy
 import dataclasses
+import hashlib
 import math
 import platform
 import re
@@ -33,6 +40,8 @@ TASK_KINDS = {"A": "softmax", "U": "sigmoid"}
 _RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 _HEX = set("0123456789abcdef")
 _SEED_LIMIT = 2 ** 63
+SUBSET_RULE = "hash_rank_v1"
+SUBSET_KEYS = ("rule", "salt", "strata", "count", "sample_uids")
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +232,52 @@ def select_samples_v5(records: list[SampleV5], registry: dict, roles: list[str])
     return selected
 
 
+def select_subset_v5(records: list[SampleV5], registry: dict, *, count: int, salt: str,
+                     strata: list[str] | None) -> list[str]:
+    """Sorted uids of the first `count` train samples ranked by sha256("<salt>:<sample_uid>") (rule hash_rank_v1).
+
+    With `strata`, only samples whose leakage group has one of these strata in the frozen registry's policy are
+    ranked. The result is fixed by (registry, salt, count, strata): nobody picks samples by hand.
+    """
+    if not _positive_int(count):
+        raise V5Error("INVALID_SUBSET", "$.count")
+    if not _non_empty_str(salt):
+        raise V5Error("INVALID_SUBSET", "$.salt")
+    if strata is not None and not (isinstance(strata, list) and strata and all(_non_empty_str(s) for s in strata)
+                                   and len(set(strata)) == len(strata)):
+        raise V5Error("INVALID_SUBSET", "$.strata")
+    train = select_samples_v5(records, registry, ["train"])
+    if strata is not None:
+        registered = registry.get("policy", {}).get("strata")
+        if not isinstance(registered, dict):
+            raise V5Error("SUBSET_STRATA_UNKNOWN", "$.strata")
+        train = [record for record in train if registered.get(record.leakage_group_uid) in strata]
+    ranked = sorted(train, key=lambda record: (hashlib.sha256(f"{salt}:{record.sample_uid}".encode()).hexdigest(),
+                                               record.sample_uid))
+    if len(ranked) < count:
+        raise V5Error("SUBSET_TOO_SMALL", "$.count")
+    return sorted(record.sample_uid for record in ranked[:count])
+
+
+def _check_subset(subset: object, records: list[SampleV5], registry: dict) -> dict:
+    path = "$.sample_subset"
+    if not isinstance(subset, dict) or set(subset) != set(SUBSET_KEYS):
+        raise V5Error("INVALID_SUBSET", path)
+    if subset["rule"] != SUBSET_RULE:
+        raise V5Error("INVALID_SUBSET", f"{path}.rule")
+    uids = subset["sample_uids"]
+    if not (isinstance(uids, list) and uids and all(_non_empty_str(uid) for uid in uids) and uids == sorted(set(uids))):
+        raise V5Error("INVALID_SUBSET", f"{path}.sample_uids")
+    try:
+        expected = select_subset_v5(records, registry, count=subset["count"], salt=subset["salt"],
+                                    strata=subset["strata"])
+    except V5Error as err:
+        raise V5Error(err.code, f"{path}{err.path[1:]}") from None
+    if uids != expected:
+        raise V5Error("SUBSET_MISMATCH", f"{path}.sample_uids")
+    return copy.deepcopy(subset)
+
+
 def readable_role_v5(sample_uid: str, registry: dict, run: dict) -> str:
     """Frozen role of one sample when `run` may read it (L4): the registry must be the run's split; locked_test and
     roles the run did not register are refused. A 3D observation's uid is its sample uid. `record.split` is never
@@ -237,6 +292,9 @@ def readable_role_v5(sample_uid: str, registry: dict, run: dict) -> str:
     if role == "locked_test":
         raise V5Error("LOCKED_TEST_NOT_READABLE", "$.sample_uid")
     if role not in run["split"]["readable_roles"]:
+        raise V5Error("ROLE_NOT_READABLE", "$.sample_uid")
+    subset = run["sample_subset"]
+    if subset is not None and sample_uid not in subset["sample_uids"]:
         raise V5Error("ROLE_NOT_READABLE", "$.sample_uid")
     return role
 
@@ -381,8 +439,11 @@ def _check_approvals(approvals: dict, scope: ActiveScope, required: tuple, fixtu
 def register_run_v5(*, run_id: str, lineage_id: str, run_kind: str, recipe: dict, supervision: dict,
                     scope: ActiveScope, source: dict, split_registry: dict, records: list[SampleV5],
                     gate_decisions: dict, approvals: dict, parents: list[dict], environment: dict, code: dict,
-                    created_at: str, fixture_mode: bool) -> dict:
-    """Pure: build and validate the run record; nothing is written (write_run_v5 does that)."""
+                    created_at: str, fixture_mode: bool, sample_subset: dict | None = None) -> dict:
+    """Pure: build and validate the run record; nothing is written (write_run_v5 does that).
+
+    `sample_subset` (smoke only) is {rule, salt, strata, count, sample_uids} and must equal select_subset_v5's
+    result; the run then reads and is exposed to that subset alone."""
     if not isinstance(fixture_mode, bool):
         raise V5Error("INVALID_TYPE", "$.fixture_mode")
     if not isinstance(run_id, str) or not _RUN_ID.fullmatch(run_id):
@@ -416,6 +477,12 @@ def register_run_v5(*, run_id: str, lineage_id: str, run_kind: str, recipe: dict
     if not set(ancestors) <= set(split_registry["ancestor_lineages"]):
         raise V5Error("SPLIT_LINEAGE_MISMATCH", "$.split_registry.ancestor_lineages")
     selected = select_samples_v5(records, split_registry, roles)
+    subset = None
+    if sample_subset is not None:
+        if run_kind != "smoke":
+            raise V5Error("SUBSET_NOT_ALLOWED", "$.sample_subset")
+        subset = _check_subset(sample_subset, records, split_registry)
+        selected = [record for record in selected if record.sample_uid in subset["sample_uids"]]
     _check_parent_exposure(parents, records, split_registry, lineage_id)
     required = ["G-DATA"] if run_kind == "smoke" else [f"G-BASE-{task}" for task in sorted(tasks)]
     gates = _gate_records(gate_decisions, scope, source, required, fixture_mode)
@@ -432,6 +499,7 @@ def register_run_v5(*, run_id: str, lineage_id: str, run_kind: str, recipe: dict
         "scope": {"scope_id": scope.scope_id, "scope_hash": scope.scope_hash},
         "source": {"source_id": source["source_id"], "source_version": source["source_version"]},
         "split": {"split_sha256": split_registry["split_sha256"], "readable_roles": roles},
+        "sample_subset": subset,
         "data_manifest_sha256": data_manifest_sha256_v5(selected),
         "supervision_sha256": canonical_sha256(supervision),
         "recipe_sha256": canonical_sha256(recipe),
@@ -461,10 +529,12 @@ def run_exposure_entries_v5(run: dict, registry: dict) -> dict[str, list[dict]]:
     if registry["split_sha256"] != run["split"]["split_sha256"]:
         raise V5Error("SPLIT_HASH_MISMATCH", "$.split.split_sha256")
     readable = set(run["split"]["readable_roles"])
+    subset = run["sample_subset"]
     evidence = f"run_sha256:{run_sha256_v5(run)}"
     return {uid: [{"experiment_id": run["run_id"], "role": EXPOSURE_ROLE_BY_SPLIT[split],
                    "recorded_at": run["created_at"], "lineage_id": run["lineage_id"], "evidence": evidence}]
-            for uid, split in sorted(registry["assignment"].items()) if split in readable}
+            for uid, split in sorted(registry["assignment"].items())
+            if split in readable and (subset is None or uid in subset["sample_uids"])}
 
 
 def run_exposure_file_v5(run: dict, registry: dict) -> dict:

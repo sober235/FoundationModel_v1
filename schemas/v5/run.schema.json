@@ -6,7 +6,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "run_id", "run_kind", "lineage_id", "ancestor_lineages", "parents", "scope", "source",
-               "split", "data_manifest_sha256", "supervision_sha256", "recipe_sha256", "code", "environment",
+               "split", "sample_subset", "data_manifest_sha256", "supervision_sha256", "recipe_sha256", "code", "environment",
                "gate_decisions", "approvals", "fixture_mode", "created_at"],
   "properties": {
     "schema_version": {"type": "string", "const": "v5.1"},
@@ -35,6 +35,19 @@
         "split_sha256": {"type": "string"},
         "readable_roles": {"type": "array", "minItems": 1,
                            "items": {"type": "string", "enum": ["train", "development_val"]}}
+      }
+    },
+    "sample_subset": {
+      "description": "Smoke only: the fixed train subset select_subset_v5 yields (rule hash_rank_v1); null reads every sample of the readable roles.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["rule", "salt", "strata", "count", "sample_uids"],
+      "properties": {
+        "rule": {"type": "string", "enum": ["hash_rank_v1"]},
+        "salt": {"type": "string"},
+        "strata": {"type": ["array", "null"], "items": {"type": "string"}},
+        "count": {"type": "integer"},
+        "sample_uids": {"type": "array", "minItems": 1, "items": {"type": "string"}}
       }
     },
     "data_manifest_sha256": {"type": "string"},

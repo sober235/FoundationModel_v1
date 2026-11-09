@@ -10,6 +10,10 @@ the run as started) and every checkpoint carries it: a resume on other content i
 holds every state a bitwise CPU resume needs; it is written once and never overwritten,
 and it is loaded only after its file hash matches, with weights_only=True. A non-finite logit or loss, an OOM or
 an exhausted wall budget writes failure.json (code, step, time; no values) and stops without retrying.
+
+`pause_at` (2026-11-09) is a controlled interruption for the resume check: it must be a checkpoint step before
+budget.max_steps, and the call returns PAUSED right after that checkpoint is completely written. Nothing about
+the run changes (recipe, schedule over max_steps, no failure.json), so a later call with `resume` continues it.
 """
 from __future__ import annotations
 
@@ -259,12 +263,17 @@ def _to_device(batch, targets: dict, eligibility: dict, device: torch.device):
 
 
 def train_v5(run: dict, model: PerceptionModelV5, samples: dict, recipe: dict, supervision: dict, run_dir: Path,
-             private_root: Path, repo: Path, resume: tuple | None) -> dict:
+             private_root: Path, repo: Path, resume: tuple | None, *, pause_at: int | None = None) -> dict:
     """Train a registered run to budget.max_steps; returns {status, step, last_checkpoint, last_checkpoint_sha256,
-    failure_code}. `resume` is (checkpoint path, expected sha256) or None for a fresh start."""
+    failure_code}. `resume` is (checkpoint path, expected sha256) or None for a fresh start. With `pause_at`, the
+    call stops with status PAUSED once the checkpoint of that step is written."""
     if not isinstance(model, PerceptionModelV5):
         raise V5Error("INVALID_TYPE", "$.model")
     validate_recipe_v5(recipe)
+    if pause_at is not None and not (isinstance(pause_at, int) and not isinstance(pause_at, bool)
+                                     and 0 < pause_at < recipe["budget"]["max_steps"]
+                                     and pause_at % recipe["checkpoint_every"] == 0):
+        raise V5Error("INVALID_PAUSE", "$.pause_at")
     exposure = _registered_exposure(run, run_dir, private_root, repo)
     _check_binding(run, model, samples, recipe, supervision, exposure)
     validate_supervision_v5(supervision, model.scope)
@@ -343,5 +352,9 @@ def train_v5(run: dict, model: PerceptionModelV5, samples: dict, recipe: dict, s
                      "sampler": sampler.state_dict(), "rng": _rng_state(),
                      "wall_seconds": prior_wall + (_monotonic() - start), "data_sha256": data_sha256}
             last = (path, save_checkpoint_v5(path, state, run, private_root, repo))
+            if step == pause_at:
+                _append_jsonl(metrics_path, {"event": "pause", "step": step, "checkpoint_sha256": last[1]})
+                return {"status": "PAUSED", "step": step, "last_checkpoint": last[0],
+                        "last_checkpoint_sha256": last[1], "failure_code": None}
     return {"status": "COMPLETED", "step": step, "last_checkpoint": last[0], "last_checkpoint_sha256": last[1],
             "failure_code": None}

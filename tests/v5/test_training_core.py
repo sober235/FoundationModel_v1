@@ -428,3 +428,31 @@ def test_training_requires_registered_run_and_exposure(tmp_path):
     _raises("SAMPLE_NOT_REGISTERED", "$.samples", _train, ctx, model, samples=swapped)
     assert model.calls == 0 and not (ctx["run_dir"] / "metrics.jsonl").exists()
     assert copy.deepcopy(run) == ctx["run"]
+
+
+def test_controlled_pause_then_resume_matches_continuous_training(tmp_path):
+    """A run paused right after a complete checkpoint (no failure.json, recipe and schedule unchanged) and resumed
+    from it ends bit for bit where the continuous execution of the same registered run ends (CPU)."""
+    first = _setup(tmp_path, "first")
+    model = _model(first)
+    result = _train(first, model)
+    second = _setup(tmp_path, "second")
+    paused = _train(second, _model(second), pause_at=3)
+    assert paused["status"] == "PAUSED" and paused["step"] == 3 and paused["failure_code"] is None
+    assert not (second["run_dir"] / "failure.json").exists()
+    assert sorted(p.name for p in (second["run_dir"] / "checkpoints").glob("*.pt")) == ["step_00000003.pt"]
+    resumed = _model(second, perturb_seed=5)
+    again = _train(second, resumed, resume=(paused["last_checkpoint"], paused["last_checkpoint_sha256"]))
+    assert again["status"] == "COMPLETED" and again["step"] == 6 and resumed.calls == 3
+    _assert_same(dict(model.state_dict()), dict(resumed.state_dict()))
+    final_a = load_checkpoint_v5(result["last_checkpoint"], first["run"], result["last_checkpoint_sha256"], "cpu")
+    final_b = load_checkpoint_v5(again["last_checkpoint"], second["run"], again["last_checkpoint_sha256"], "cpu")
+    for key in STATE_KEYS - {"wall_seconds"}:
+        _assert_same(final_a[key], final_b[key])
+
+
+@pytest.mark.parametrize("pause_at", [0, 2, 6, 9, True, 3.0])
+def test_pause_only_after_a_checkpoint_before_the_end(tmp_path, pause_at):
+    ctx = _setup(tmp_path)
+    _raises("INVALID_PAUSE", "$.pause_at", _train, ctx, _model(ctx), pause_at=pause_at)
+    assert not (ctx["run_dir"] / "data.json").exists()        # refused before the run starts

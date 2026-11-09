@@ -14,8 +14,8 @@ import yaml
 from anatobind.v41.contracts_v5 import V5Error, canonical_sha256, validate_scope_v5
 from anatobind.v41.engine.registration_v5 import (
     capture_code_v5, capture_environment_v5, data_manifest_sha256_v5, inherit_lineage_v5, merge_run_exposure_v5,
-    run_exposure_entries_v5, run_exposure_file_v5, run_sha256_v5, select_samples_v5, validate_recipe_v5,
-    validate_supervision_v5, write_run_v5)
+    readable_role_v5, run_exposure_entries_v5, run_exposure_file_v5, run_sha256_v5, select_samples_v5,
+    select_subset_v5, validate_recipe_v5, validate_supervision_v5, write_run_v5)
 from anatobind.v41.gates_v5 import evaluate_gate_v5
 from anatobind.v41.paths import PrivatePathError
 from anatobind.v41.splits_v5 import split_registry_sha256_v5, verify_split_registry_v5
@@ -421,3 +421,86 @@ def test_environment_and_code_capture(tmp_path):
     (repo / "a.txt").write_text("b\n")
     assert capture_code_v5(repo) == {"git_commit": head, "dirty": True}
     _raises("CODE_STATE_UNKNOWN", "$.code", capture_code_v5, tmp_path / "missing")
+
+
+# ---------------------------------------------------------------------------
+# Smoke subsets (2026-11-09): a fixed, rule-derived list of train samples for the small-sample checks
+
+
+def _ranked(uids, salt):
+    import hashlib
+    return sorted(uids, key=lambda uid: (hashlib.sha256(f"{salt}:{uid}".encode()).hexdigest(), uid))
+
+
+def test_subset_is_the_hash_ranked_head_of_the_train_assignment():
+    records = make_split_records(["train"] * 6 + ["development_val", "locked_test"])
+    registry = make_split_registry(records)
+    uids = select_subset_v5(records, registry, count=2, salt="salt-a", strata=None)
+    assert uids == sorted(_ranked([f"s-{i}" for i in range(6)], "salt-a")[:2])
+    assert select_subset_v5(records, registry, count=2, salt="salt-b", strata=None) == \
+        sorted(_ranked([f"s-{i}" for i in range(6)], "salt-b")[:2])
+    _raises("SUBSET_TOO_SMALL", "$.count", select_subset_v5, records, registry, count=7, salt="salt-a", strata=None)
+    for bad, path in (({"count": 0}, "$.count"), ({"salt": " "}, "$.salt"), ({"strata": []}, "$.strata")):
+        args = dict({"count": 2, "salt": "salt-a", "strata": None}, **bad)
+        _raises("INVALID_SUBSET", path, select_subset_v5, records, registry, **args)
+    _raises("SUBSET_STRATA_UNKNOWN", "$.strata", select_subset_v5, records, registry, count=1, salt="salt-a",
+            strata=["volume_t2"])          # an official registry has no strata
+
+
+def test_subset_strata_come_from_the_frozen_registry():
+    from anatobind.v41.splits_v5 import freeze_splits_v5
+
+    records = make_split_records(["train"] * 30)
+    groups = {r.sample_uid: r.leakage_group_uid for r in records}
+    strata = {r.leakage_group_uid: ("low" if i < 15 else "high") for i, r in enumerate(records)}
+    policy = {"kind": "stratified", "seed": 1, "fractions": {"train": 0.7, "development_val": 0.3, "locked_test": 0.0},
+              "min_stratum_groups": 5, "small_stratum_rule": "merge", "strata": strata, "exposed_groups": "excluded"}
+    registry = freeze_splits_v5(records, groups, policy, "lin-a", ancestor_lineages=[])
+    high_train = [r.sample_uid for r in records if strata[r.leakage_group_uid] == "high"
+                  and registry["assignment"][r.sample_uid] == "train"]
+    assert select_subset_v5(records, registry, count=2, salt="s", strata=["high"]) == \
+        sorted(_ranked(high_train, "s")[:2])
+
+
+def _subset(records, registry, count=2, salt="salt-a"):
+    return {"rule": "hash_rank_v1", "salt": salt, "strata": None, "count": count,
+            "sample_uids": select_subset_v5(records, registry, count=count, salt=salt, strata=None)}
+
+
+def test_smoke_run_registers_reads_and_exposes_only_its_subset():
+    records = make_split_records(["train", "train", "train", "development_val", "locked_test"])
+    registry = make_split_registry(records)
+    subset = _subset(records, registry)
+    run = make_run(run_kind="smoke", records=records, split_registry=registry, sample_subset=subset)
+    assert run["sample_subset"] == subset
+    chosen = [r for r in records if r.sample_uid in subset["sample_uids"]]
+    assert run["data_manifest_sha256"] == data_manifest_sha256_v5(chosen)
+    assert sorted(run_exposure_entries_v5(run, registry)) == subset["sample_uids"]
+    other = next(r.sample_uid for r in records[:3] if r.sample_uid not in subset["sample_uids"])
+    assert readable_role_v5(subset["sample_uids"][0], registry, run) == "train"
+    _raises("ROLE_NOT_READABLE", "$.sample_uid", readable_role_v5, other, registry, run)
+    full = make_run(run_kind="smoke", records=records, split_registry=registry)
+    assert full["sample_subset"] is None and readable_role_v5(other, registry, full) == "train"
+
+
+@pytest.mark.parametrize("change,code,path", [
+    ({"sample_uids": ["s-0", "s-1", "s-2"][:2][::-1]}, "INVALID_SUBSET", "$.sample_subset.sample_uids"),
+    ({"count": 1}, "SUBSET_MISMATCH", "$.sample_subset.sample_uids"),
+    ({"salt": "salt-b"}, "SUBSET_MISMATCH", "$.sample_subset.sample_uids"),
+    ({"rule": "hand_picked"}, "INVALID_SUBSET", "$.sample_subset.rule"),
+    ({"extra": 1}, "INVALID_SUBSET", "$.sample_subset"),
+])
+def test_subset_must_be_exactly_what_its_rule_selects(change, code, path):
+    records = make_split_records(["train"] * 6)
+    registry = make_split_registry(records)
+    subset = dict(_subset(records, registry), **change)
+    if change.get("sample_uids") is not None:
+        subset["sample_uids"] = sorted(_subset(records, registry)["sample_uids"])[::-1]
+    _raises(code, path, make_run, run_kind="smoke", records=records, split_registry=registry, sample_subset=subset)
+
+
+def test_baseline_runs_never_take_a_subset():
+    records = make_split_records(["train", "train", "development_val"])
+    registry = make_split_registry(records)
+    _raises("SUBSET_NOT_ALLOWED", "$.sample_subset", make_run, records=records, split_registry=registry,
+            sample_subset=_subset(records, registry))
