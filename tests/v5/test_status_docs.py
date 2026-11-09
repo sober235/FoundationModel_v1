@@ -174,3 +174,16 @@ def test_t11_admission_is_redacted_and_keeps_proposals_unapproved():
     assert "**提案，未批准**" in text and "NOT_EVALUATED" in text and "core_target_validated" in text
     for name in ("scope_skm_joint_early", "source_skm_tea_joint_early"):
         assert Path(f"configs/v5/proposals/{name}.yaml").read_text().startswith("# PROPOSAL — NOT APPROVED")
+
+
+def test_real_smoke_reports_are_redacted_and_bound_to_their_evidence():
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    for scope_id in ("isles_u", "skm_a"):
+        text = Path(f"reports/v5/gpu_measurement_{scope_id}.md").read_text(encoding="utf-8")
+        assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
+        assert not re.search(r"sub-[a-z]+[0-9]|[A-Z]{3}_[0-9]{3}|\.nii|\.h5\b|skmtea:|isles2022:", text)
+        assert "结果：PASS" in text and "optimizer.step" in text and "NOT_EVALUATED" in text
+        digest = hashlib.sha256(Path(f"reports/v5/gpu_measurement_{scope_id}.md").read_bytes()).hexdigest()
+        assert f"`gpu_measurement_{scope_id}.md`（training_smoke sha256 `{digest}`）" in status
+    tasks = _front_matter()["tasks"]
+    assert tasks["T10"]["data_run_status"] == "PARTIAL"            # smoke only: the real baselines are not done

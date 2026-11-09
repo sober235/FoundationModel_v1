@@ -137,7 +137,7 @@ tasks:
   T10:
     code_status: PASS   # 2026-11-09: real smoke driver, G-DATA chain guard, full-step measurement, G-BASE gate; the baseline driver is not written yet
     test_evidence: "2026-11-09 local (Python 3.9, torch 2.8): tests/v5/test_real_t10.py: 14 passed; test_real_gdata.py: 21 passed; test_module_baseline.py: 17 passed; test_training_core.py: 21 passed; test_run_registration.py: 76 passed; test_resunet_v5.py: 7 passed. amax (Python 3.11, torch 2.5.1, CPU): 664 passed at 2c2b7ab, 691 passed at 3a478cb"
-    data_run_status: NOT_STARTED   # pre-approval only (synthetic GPU pre-measurement, CPU batch check); the real smoke waits for G-DATA data_use and smoke resources approvals
+    data_run_status: PARTIAL   # 2026-11-09: real smokes PASS for isles_u and skm_a; G-BASE evidence 5/5 PASS, gate blocked on approval C; baselines not run
     approval_status: PENDING
     scientific_conclusion: NOT_EVALUATED
   T11:
@@ -279,8 +279,32 @@ tasks:
 | 待批准材料 | 一次性提交 A：G-DATA data_use；B：smoke resources；C：smoke PASS 后的 G-BASE resources 与基线预算 | `t10_approval_package_20261109.md` |
 | T11 前期（SKM） | 框和 tissue_id 导入代码，22 项合成测试；联合 scope 与来源绑定为**提案，未批准** | `0883395`；`t11_skm_joint_early_admission_20261109.md` |
 
-- T10 的 `data_run_status` 仍为 NOT_STARTED：真实 smoke、training_smoke 证据、G-BASE 评估和基线都没有运行。
 - 基线驱动尚未编写，会与基线计划提案一起提交（批准材料 C 项）。
+
+### 真实 smoke（2026-11-09，amax，批准 A、B 由研究者签署后）
+
+- 研究者签署：批准 A（G-DATA data_use）和批准 B（smoke resources）的文件由研究者写入，签名 CONGCONG，日期 2026-11-09。研究者同时授权把 ISLES-2022、SKM-TEA 用于本研究。
+- G-DATA 关卡：isles_u 和 skm_a 均为 PASS（代码 `d99c981`）。
+- 环境：1 张空闲 A800；Python 3.11、torch 2.5.1；启动时设置 `CUBLAS_WORKSPACE_CONFIG=:4096:8`，与代码中确定性模式的设置相同。
+- **第一次 isles_u（代码 `d99c981`）：失败，记录保留在私有目录。**
+  - 失败位置：续训加载检查点时报 `TypeError: RNG state must be a torch.ByteTensor`。
+  - 原因：检查点按运行设备加载，CPU 上的 RNG 状态被搬到了 GPU。合成测试只在 CPU 上跑，没有覆盖到。
+  - 修复：`b4d9630`，加回归测试。另加 CUDA 端到端 smoke 测试（`5fea585`），在 amax GPU 上通过。
+  - 计划、判定标准和哈希都没变。
+
+| 项 | isles_u（代码 `5fea585`，重跑） | skm_a（代码 `5fea585`） |
+| --- | --- | --- |
+| 结果 | PASS，用时 0.057 h（预算 2 h） | PASS，用时 0.332 h（预算 2 h） |
+| 按规则选中的候选 | 112×112×64，b2，fp32 | 192×192×48，b2，fp32 |
+| 过拟合 | 损失下降 0.943（≥ 0.5），Dice 0.929（≥ 0.5） | 损失下降 0.584（≥ 0.5），Dice 0.607（≥ 0.6，余量小） |
+| 续训对比（第 300 步暂停） | 计数器全部一致，参数逐位一致 | 计数器全部一致，参数逐位一致 |
+| 全体积推理 | 通过校验，按哈希重新加载，形状同原网格 | 同左 |
+| 报告 | `gpu_measurement_isles_u.md`（training_smoke sha256 `bf4ebff6cad2d0991327ca9252a2a9af53dc05de76208d27634b93b4cc507f73`） | `gpu_measurement_skm_a.md`（training_smoke sha256 `0fc50ac8ae0b2af99bba498c340214c5ad2518487c944577a617f5f5d0e64038`） |
+
+- 读取的数据：每个 scope 只读子集规则选出的 2 个 train 样本，并登记为 run_kind `smoke` 的曝光。development_val 和 locked_test 都没有读。
+- 冻结的 patch、batch 和精度：按 `first_ok_within_memory` 规则选中的候选（见上表），将作为基线计划提案的取值。
+- G-BASE 预评估：两个 scope 的五项证据（g_data、supervision_policy、input_policy、frozen_dev_split、training_smoke）全部 PASS。门控为 BLOCKED，唯一阻断是 `APPROVAL_MISSING:resources`，即批准 C。smoke 批准不能打开这个门控。
+- T10 的 `data_run_status` 记为 PARTIAL：smoke 已完成，真实基线没有运行，所以 T10 不标完成。
 
 ## 阶段 A 补修（plan_v5.md §2A，外部审查后）
 
