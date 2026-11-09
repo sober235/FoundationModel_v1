@@ -39,10 +39,20 @@ def _au_scope():
 
 
 def _make_batch(scope):
+    """make_batch(candidate, device) -> (batch, targets, eligibility), as the real driver builds them."""
     def make(candidate, device):
-        items = [make_model_input_v5(scope, candidate["patch_size"]) for _ in range(candidate["batch_size"])]
-        return collate_model_inputs_v5(items), lambda output: output.anatomy_logits.float().mean()
+        size, patch = candidate["batch_size"], tuple(candidate["patch_size"])
+        items = [make_model_input_v5(scope, candidate["patch_size"]) for _ in range(size)]
+        targets = {"A": torch.randint(0, 1 + len(scope.anatomy_classes), (size, *patch), generator=torch.Generator().manual_seed(0))}
+        full = torch.ones((size, len(scope.anatomy_classes), *patch), dtype=torch.bool)
+        return collate_model_inputs_v5(items), targets, {"A": {"e_pos": full, "e_neg": full.clone()}}
     return make
+
+
+def _measure(build, make, candidates, scope=None, **kwargs):
+    scope = scope or _a_scope()
+    return measure_candidates_v5(build, make, candidates, "cpu", recipe=kwargs.get("recipe", make_recipe()),
+                                 supervision=kwargs.get("supervision", make_supervision(scope)))
 
 
 # ---------------------------------------------------------------------------
@@ -59,23 +69,43 @@ def test_measurement_needs_explicit_candidates():
 
     make = _make_batch(scope)
     for empty in ([], None, {}):
-        _raises("CANDIDATES_REQUIRED", "$.candidates", measure_candidates_v5, build, make, empty, "cpu")
+        _raises("CANDIDATES_REQUIRED", "$.candidates", _measure, build, make, empty)
     for key in CANDIDATE:
         partial = {k: v for k, v in CANDIDATE.items() if k != key}
-        _raises("CANDIDATE_VALUE_MISSING", f"$.candidates[1].{key}", measure_candidates_v5, build, make,
-                [CANDIDATE, partial], "cpu")
-    _raises("UNKNOWN_FIELD", "$.candidates[0].<unknown>", measure_candidates_v5, build, make,
-            [dict(CANDIDATE, lr=0.1)], "cpu")
+        _raises("CANDIDATE_VALUE_MISSING", f"$.candidates[1].{key}", _measure, build, make, [CANDIDATE, partial])
+    _raises("UNKNOWN_FIELD", "$.candidates[0].<unknown>", _measure, build, make, [dict(CANDIDATE, lr=0.1)])
     for key, bad in (("patch_size", [4, 8]), ("batch_size", 0), ("precision", "fp8")):
-        _raises("INVALID_CANDIDATE_VALUE", f"$.candidates[0].{key}", measure_candidates_v5, build, make,
-                [dict(CANDIDATE, **{key: bad})], "cpu")
+        _raises("INVALID_CANDIDATE_VALUE", f"$.candidates[0].{key}", _measure, build, make,
+                [dict(CANDIDATE, **{key: bad})])
+    _raises("CANDIDATE_DUPLICATE", "$.candidates[1]", _measure, build, make, [CANDIDATE, dict(CANDIDATE)])
     assert built == []  # nothing runs until every candidate is valid
-    rows = measure_candidates_v5(build, make, [CANDIDATE], "cpu")
-    assert len(built) == 1 and len(rows) == 1
+    rows = _measure(build, make, [CANDIDATE])
+    assert len(built) == 2 and len(rows) == 1      # one fresh model per phase
     row = rows[0]
-    assert {key: row[key] for key in CANDIDATE} == CANDIDATE and row["status"] == "OK"
-    assert row["peak_memory_bytes"] is None  # no CUDA allocator on CPU
+    assert {key: row[key] for key in CANDIDATE} == CANDIDATE and row["status"] == "OK" and row["failure_phase"] is None
+    assert row["peak_memory_bytes"] is None and row["fb_peak_memory_bytes"] is None  # no CUDA allocator on CPU
     assert row["seconds_per_step"] > 0 and row["samples_per_second"] == pytest.approx(2 / row["seconds_per_step"])
+    assert row["fb_seconds_per_step"] > 0
+    assert row["optimizer_state_included"] is True and row["scaler_enabled"] is False and row["scheduler"] == "poly"
+
+
+def test_training_step_measurement_runs_the_optimizer_scaler_and_scheduler():
+    """The full step is train_v5's own step: optimizer state is built and the weights move; the forward+backward
+    phase leaves its model's weights alone."""
+    scope = _a_scope()
+    models = []
+
+    def build(candidate):
+        models.append(build_model_v5(make_recipe(), scope))
+        return models[-1]
+
+    initial = {k: v.clone() for k, v in build_model_v5(make_recipe(), scope).state_dict().items()}
+    fp16 = dict(CANDIDATE, precision="amp_fp16")
+    rows = _measure(build, _make_batch(scope), [CANDIDATE, fp16])
+    forward_backward, training_step = models[0], models[1]
+    assert all(torch.equal(initial[k], v) for k, v in forward_backward.state_dict().items())
+    assert any(not torch.equal(initial[k], v) for k, v in training_step.state_dict().items())
+    assert rows[1]["scaler_enabled"] is True and rows[0]["scaler_enabled"] is False
 
 
 class _ExhaustedModel(PerceptionModelV5):
@@ -100,22 +130,44 @@ def test_oom_candidate_recorded_not_retried():
         built.append(candidate["patch_size"])
         return exhausted if candidate["patch_size"] == big["patch_size"] else build_model_v5(make_recipe(), scope)
 
-    rows = measure_candidates_v5(build, _make_batch(scope), [CANDIDATE, big, dict(CANDIDATE, batch_size=1)], "cpu")
+    rows = _measure(build, _make_batch(scope), [CANDIDATE, big, dict(CANDIDATE, batch_size=1)])
     assert [row["status"] for row in rows] == ["OK", "OOM", "OK"]
-    assert exhausted.calls == 1 and built == [[4, 8, 8], [8, 16, 16], [4, 8, 8]]
-    assert rows[1] == dict(big, status="OOM", peak_memory_bytes=None, seconds_per_step=None, samples_per_second=None)
+    assert exhausted.calls == 1 and built == [[4, 8, 8], [4, 8, 8], [8, 16, 16], [4, 8, 8], [4, 8, 8]]
+    assert rows[1] == dict(big, status="OOM", failure_phase="forward_backward", fb_peak_memory_bytes=None,
+                           fb_seconds_per_step=None, peak_memory_bytes=None, seconds_per_step=None,
+                           samples_per_second=None, optimizer_state_included=False, scaler_enabled=False,
+                           scheduler="poly")
 
     def broken(candidate):
         raise RuntimeError("synthetic fault")
 
     with pytest.raises(RuntimeError):  # any other failure is a fault, not a measurement
-        measure_candidates_v5(broken, _make_batch(scope), [CANDIDATE], "cpu")
+        _measure(broken, _make_batch(scope), [CANDIDATE])
+
+
+def test_forward_backward_alone_never_makes_a_candidate_usable():
+    """A candidate whose forward+backward fits but whose full training step runs out of memory is OOM."""
+    scope = _a_scope()
+    phase = []
+
+    def build(candidate):
+        phase.append(len(phase))
+        return build_model_v5(make_recipe(), scope) if len(phase) == 1 else _ExhaustedModel(scope)
+
+    rows = _measure(build, _make_batch(scope), [CANDIDATE])
+    assert rows[0]["status"] == "OOM" and rows[0]["failure_phase"] == "training_step"
+    assert rows[0]["fb_seconds_per_step"] > 0 and rows[0]["seconds_per_step"] is None
+    assert rows[0]["optimizer_state_included"] is True
 
 
 def _measurement_summary() -> dict:
-    rows = [dict(CANDIDATE, status="OK", peak_memory_bytes=3 * 2 ** 30, seconds_per_step=0.5, samples_per_second=4.0),
-            dict(CANDIDATE, patch_size=[8, 16, 16], status="OOM", peak_memory_bytes=None, seconds_per_step=None,
-                 samples_per_second=None)]
+    rows = [dict(CANDIDATE, status="OK", failure_phase=None, fb_peak_memory_bytes=2 * 2 ** 30, fb_seconds_per_step=0.4,
+                 peak_memory_bytes=3 * 2 ** 30, seconds_per_step=0.5, samples_per_second=4.0,
+                 optimizer_state_included=True, scaler_enabled=False, scheduler="poly"),
+            dict(CANDIDATE, patch_size=[8, 16, 16], status="OOM", failure_phase="training_step",
+                 fb_peak_memory_bytes=5 * 2 ** 30, fb_seconds_per_step=0.9, peak_memory_bytes=None,
+                 seconds_per_step=None, samples_per_second=None, optimizer_state_included=True,
+                 scaler_enabled=False, scheduler="poly")]
     overfit = {"steps": 3, "steps_completed": 3, "loss_curve": [1.0, 0.7, 0.4], "initial_loss": 1.0,
                "final_loss": 0.4, "loss_drop": 0.6, "dice": {"A": 0.8},
                "criteria": {"min_loss_drop": 0.5, "min_dice": 0.5}, "passed": True, "failure_code": None}
@@ -128,12 +180,15 @@ def test_measurement_report_is_redacted():
     summary = _measurement_summary()
     text = render_measurement_md_v5(summary)
     assert not any(secret in text for secret in SECRETS)
-    for shown in ("synthetic_a", "Synthetic GPU × 8", "4×8×8", "8×16×16", "OOM", "3.00", "0.500", "PASS"):
+    for shown in ("synthetic_a", "Synthetic GPU × 8", "4×8×8", "8×16×16", "OOM（training_step）", "3.00", "2.00",
+                  "5.00", "0.500", "PASS", "optimizer.step"):
         assert shown in text
     _raises("UNSAFE_REPORT_VALUE", "$.device.name", render_measurement_md_v5,
             dict(summary, device={"name": "/private/gpu", "count": 1}))
     _raises("UNSAFE_REPORT_VALUE", "$.scope_id", render_measurement_md_v5,
             dict(summary, scope_id="synthetic-case-0042/x"))
+    _raises("INVALID_SUMMARY", "$.candidates[0].optimizer_state_included", render_measurement_md_v5,
+            dict(summary, candidates=[dict(summary["candidates"][0], optimizer_state_included=None)]))
 
 
 def _learnable_samples(scope) -> dict:
