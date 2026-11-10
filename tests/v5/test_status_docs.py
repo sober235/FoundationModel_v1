@@ -318,3 +318,14 @@ def test_joint_split_and_gdata_evidence_are_redacted_and_bound():
     assert hashlib.sha256(evidence).hexdigest() in status and "由执行方按研究者给出的署名代为写入" in status
     assert "统一冒烟第一次运行" in status and "**FAIL**" in status and "没有产生冒烟证据" in status
 
+
+def test_unified_smoke_report_is_redacted_and_recorded():
+    text = Path("reports/v5/unified_smoke_20261110.md").read_text(encoding="utf-8")
+    assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
+    assert not re.search(r"sub-[a-z]+[0-9]|[A-Z]{3}_[0-9]{3}|\.nii|\.h5", text)
+    plan_hash = "50ab3e77ebc243f15583f5a6032d133ed5ca8d535383761bec65c2c2f9d1e4c1"
+    assert plan_hash in text and "结果：PASS" in text and "NOT_EVALUATED" in text
+    assert "参数逐位相同：是" in text and "development_val 与 locked_test 未读" in text
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    assert "统一冒烟第二次运行" in status and plan_hash in status and "训练未开始" in status
+
