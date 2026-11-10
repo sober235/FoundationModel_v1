@@ -282,6 +282,9 @@ tasks:
 - 统一冒烟第二次运行（2026-11-10，1 张 GPU，约 7 分钟）：**PASS**（`unified_smoke_20261110.md`）。连续与续训两次执行都完成 40 步，续训比较通过，参数逐位相同；显存峰值 23.42 GiB；单步 1.599 秒。整卷推理：脑 60 处所见，膝 294 处所见（模型只训练了 40 步，这些数字只说明流程走通）。`scientific_conclusion` 仍为 NOT_EVALUATED。
 - 按冒烟的单步耗时，30000 步约需 13.3 小时，超过原定 10 小时的训练预算。研究者 2026-11-10 决定加预算：训练 16 小时、整体 20 小时，步数不变。计划哈希变为 `2f43a97185292644b2ab2f1c91a8a9eeb7dba4dbec274200758bac910d3aa71c`；冒烟不重跑（与通过冒烟的计划只差这两个预算值）。G-BASE 资源批准尚未签署，训练未开始。
 - 统一模型的 G-BASE 预评估（2026-11-10，不占 GPU，服务器代码 `fd3bc53`）：两个成员的五项证据（g_data、supervision_policy、input_policy、frozen_dev_split、training_smoke）全部 PASS。三个关卡（`skm_joint_early` 的 G-BASE-A 与 G-BASE-U、`isles_u` 的 G-BASE-U）目前都是 BLOCKED，唯一的阻断项是 `APPROVAL_MISSING:resources`。
+- 长期授权（2026-11-10）：研究者在会话中给出长期授权，本项目的批准文件由执行方以署名 "Congcong" 代签；授权原话没有写明范围，执行方按此前向研究者提出的有限范围执行（2 张 GPU 以内且不超过计划文件预算的资源批准、已批准数据范围内的数据使用批准、因已同意的改动导致计划哈希变化后的重签），范围以外仍逐项询问。每份代签文件内都注明这一点。
+- G-BASE 资源批准已按长期授权写入（三条：`skm_joint_early` 的 G-BASE-A 与 G-BASE-U、`isles_u` 的 G-BASE-U，都写明计划哈希 `2f43a971…3aa71c`）。三个 G-BASE 关卡随后评估：engineering_status 全部 PASS，阻断项 0。
+- 统一训练尚未启动。
 
 ## 真实 T07/T08 运行（2026-11-08，amax）
 
