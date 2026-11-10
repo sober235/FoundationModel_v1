@@ -141,9 +141,9 @@ tasks:
     approval_status: PASS      # approvals A (G-DATA data_use), B (smoke resources), C (G-BASE resources) signed by the researcher 2026-11-09
     scientific_conclusion: NOT_EVALUATED
   T11:
-    code_status: PARTIAL   # 2026-11-10: SKM-TEA box import, real import driver (real_t11_v5) and joint G-DATA rule, synthetic tests only; no SPIDER
+    code_status: PARTIAL   # 2026-11-10: SKM-TEA box import, real import driver (real_t11_v5) and joint G-DATA rule; no SPIDER
     test_evidence: "2026-11-10 local: tests/v5/test_annotation_v5.py: 22 passed; test_real_t11.py: 35 passed; test_registration_report.py: 16 passed (synthetic)"
-    data_run_status: NOT_STARTED
+    data_run_status: PARTIAL   # 2026-11-10 on amax: skm_joint_early registered, prepared, migrated and box-imported (155/155, 0 failures, cascade as expected); reports/v5/real_run_t11_skm_joint_early_20261110.md. Joint split freeze and G-DATA evidence not run; no SPIDER
     approval_status: PENDING   # 2026-11-10: scope_skm_joint_early and its source binding approved; joint G-DATA data_use not signed
     scientific_conclusion: NOT_EVALUATED
   T12:
@@ -236,7 +236,7 @@ tasks:
     - SPIDER：输入矢状 T2；主目标为 Pfirrmann ≥ III，终板改变作次要目标。
     - 评价准则的数值仍在开发集上选定，锁定评价前冻结。
   - 实现状态 `TODO`：
-    - 2026-11-09 完成了 T11 的 SKM 框与 tissue_id 导入代码；2026-11-10 补了真实导入驱动 `real_t11_v5.py` 和联合 scope 的 G-DATA 规则。导入范围按研究者同日的最终决定：读取全部三个官方划分并保留来源划分，正式划分另行冻结；登记检查与补齐见 `import_registration_report_20261110.md`。代码只做了合成验证；真实数据只做了只读的发布文件与配对计数（SKM-TEA 155 扫描 / 155 患者，86/33/36；ISLES 250/250 齐全）；真实导入未运行，SPIDER 未做。
+    - 2026-11-09 完成了 T11 的 SKM 框与 tissue_id 导入代码；2026-11-10 补了真实导入驱动 `real_t11_v5.py` 和联合 scope 的 G-DATA 规则。导入范围按研究者同日的最终决定：读取全部三个官方划分并保留来源划分，正式划分另行冻结；登记检查与补齐见 `import_registration_report_20261110.md`。真实数据先做了只读的发布文件与配对计数（SKM-TEA 155 扫描 / 155 患者，86/33/36；ISLES 250/250 齐全）。研究者同日同意后，联合数据链在 amax 上完成了登记汇总、prepare、迁移和框导入：155 条全部导入，失败 0，级联计数与预期一致（主分析框 222），见 `real_run_t11_skm_joint_early_20261110.md`。联合 scope 的正式划分冻结和 G-DATA 证据未做，SPIDER 未做。
     - `skm_joint_early` 的 scope 实例与来源绑定由研究者 2026-11-10 批准，已移入 `configs/v5/scope_skm_joint_early.yaml` 与 `sources_v5.yaml`（`t11_skm_joint_early_admission_20261109.md` §6）。G-JOINT 仍被 `CORE_RELATION_REQUIRED` 阻断。
     - 联合 scope 的 G-DATA 证据和批准都还没有。skm_a 的 G-DATA 不能沿用。
 - **D3 原决定（2026-11-06，留作后期方案）：** 保留 SKM 联合场景；先准备 20–30 次非锁定开发扫描试点，明确主读、独立复读、仲裁责任，以及异常边界、不确定带与单层可判读规则。人员与预算未落实前 X0 不标完成，相关科学验证保持 `BLOCKED_EXPERT_REVIEW`。框、分级或伪标签不能替代原定联合验证；试点不能形成稳定体素参照时，再按实际资源提出替代场景。

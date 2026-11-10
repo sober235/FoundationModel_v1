@@ -174,7 +174,8 @@ def test_t11_admission_is_redacted_and_records_the_scope_approval_without_gdata(
     assert "NOT_EVALUATED" in text and "core_target_validated" in text
     assert "研究者 2026-11-10 批准" in text and "**提案，未批准**" not in text
     assert "G-DATA 的 data_use 尚未签署" in text                     # approving the scope opens no data gate
-    assert "读取全部三个官方划分" in text and "administrative_qc" in text and "只做了合成验证" in text
+    assert "读取全部三个官方划分" in text and "administrative_qc" in text
+    assert "real_run_t11_skm_joint_early_20261110.md" in text and "第 7 步（冻结、G-DATA 证据、data_use 签署）还没有做" in text
     assert "SPLIT_SEALED" not in text                                 # the train/dev-only rule was replaced
     assert "CORE_RELATION_REQUIRED" in text
     assert Path("configs/v5/scope_skm_joint_early.yaml").exists()
@@ -183,7 +184,29 @@ def test_t11_admission_is_redacted_and_records_the_scope_approval_without_gdata(
     assert hashlib.sha256(check.read_bytes()).hexdigest() in sources["skm_tea_joint_early"]["index_evidence"]
     assert not re.search(r"/(Users|home|data|mnt|srv|opt)/|MTR_\d|\.nii|\.h5", check.read_text(encoding="utf-8"))
     task = _front_matter()["tasks"]["T11"]
-    assert task["approval_status"] == "PENDING" and task["data_run_status"] == "NOT_STARTED"
+    assert task["approval_status"] == "PENDING" and task["data_run_status"] == "PARTIAL"   # import ran; no G-DATA, no SPIDER
+
+
+def test_real_joint_chain_reports_are_redacted_and_bound_to_the_scope_and_policy():
+    from anatobind.v41.contracts_v5 import validate_scope_v5
+
+    names = ["real_run_t11_skm_joint_early_20261110", "box_import_skm_joint_early", "registration_skm_joint_early",
+             "source_check_skm_tea_joint_early"]
+    texts = {name: Path(f"reports/v5/{name}.md").read_text(encoding="utf-8") for name in names}
+    for text in texts.values():
+        assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
+        assert not re.search(r"MTR_\d|\b\d+_t[12]\b|\.nii|\.h5\b|skmtea:", text)       # no case IDs or file names
+    report = texts["real_run_t11_skm_joint_early_20261110"]
+    for name in names[1:]:                                             # the report cites each summary by its hash
+        assert hashlib.sha256(Path(f"reports/v5/{name}.md").read_bytes()).hexdigest() in report
+    scope = validate_scope_v5(yaml.safe_load(Path("configs/v5/scope_skm_joint_early.yaml").read_text()))
+    box = texts["box_import_skm_joint_early"]
+    assert scope.scope_hash in box and scope.scope_hash in report
+    assert "登记扫描 155，导入 155，失败 0；框总数 476" in box and "| primary | 222 |" in box
+    assert "NOT_EVALUATED" in box and "NOT_EVALUATED" in report
+    assert "正式 split：unassigned 155" in texts["registration_skm_joint_early"]
+    assert "没有冻结正式划分，没有产生联合 G-DATA 证据，没有签署 data_use" in report
+    assert "administrative_qc" in report and "CORE_RELATION_REQUIRED" in report
 
 
 def test_real_smoke_reports_are_redacted_and_bound_to_their_evidence():
