@@ -22,7 +22,9 @@ shared:
   precision: fp32
   selection_rule: last
   checkpoint_every: 2000
-  budget: {max_steps: 30000, max_wall_hours: 10.0}
+  # 16 h (2026-11-10): the passed smoke measured 1.599 s per step, so 30000 steps need about 13.3 h; 10 h would
+  # have stopped the run near step 22000.
+  budget: {max_steps: 30000, max_wall_hours: 16.0}
 members:
   knee_qdess:
     scope_id: skm_joint_early
@@ -109,4 +111,4 @@ smoke:
   subset_salt: v51-smoke-unified-20261110
   tolerances: {loss_atol: 0.0001, loss_rtol: 0.001, param_rtol: 0.001}
   max_wall_hours: 2.0
-budget: {max_wall_hours: 14.0}
+budget: {max_wall_hours: 20.0}
