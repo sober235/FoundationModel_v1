@@ -139,7 +139,8 @@ def test_policy_must_match_the_scope_inputs_reference_and_task(field, value):
              field: value}
     with pytest.raises(V5Error) as error:
         _evidence(policy=validate_source_policy_v5("isles_2022", entry))
-    assert (error.value.code, error.value.path) == ("SCOPE_POLICY_MISMATCH", f"$.policy.{field}")
+    path = "$.policy.annotation_modalities.U" if field == "annotation_modalities" else f"$.policy.{field}"
+    assert (error.value.code, error.value.path) == ("SCOPE_POLICY_MISMATCH", path)   # the missing task is named
 
 
 def test_source_check_must_be_the_one_the_policy_registered():

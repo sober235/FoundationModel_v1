@@ -14,7 +14,8 @@ v5 migration accepts:
 - label map names move to their v5 names;
 - ISLES lesion masks keep input visibility ``unknown``: the released-reference
   track does not pseudo-fill "visible" without an audit (Proposal_v5 §2.3);
-- annotations of tasks the scope does not train are dropped (an skm_a record
+- annotations of tasks the scope does not train are dropped, and released
+  boxes are dropped for every scope (an skm_a or skm_joint_early record
   carries no boxes; T11 imports them from the release for the joint scope).
 
 ``run_prepare_v5`` is the driver: it runs the v41 geometry QC, prepares the
@@ -49,7 +50,13 @@ from .source_check_v5 import render_source_check_md_v5, summarize_source_check_v
 from .source_policy_v5 import SourcePolicy
 
 ISLES_DATASET, SKM_DATASET = isles.SOURCE, skm.SOURCE
-SCOPE_SOURCE = {"isles_u": ISLES_DATASET, "skm_a": SKM_DATASET}
+SCOPE_SOURCE = {"isles_u": ISLES_DATASET, "skm_a": SKM_DATASET, "skm_joint_early": SKM_DATASET}
+# v41 registration builds records per v41 scope name; the early joint scope reads the same SKM-TEA records
+REGISTRATION_SCOPE = {"isles_u": "isles_u", "skm_a": "skm_a", "skm_joint_early": "skm_a"}
+# v41 box annotation records are never carried into a v5 record, also when the scope has U classes: a released
+# box is box-level and must not become a voxel annotation (Proposal_v5 §5.0). T11 imports the boxes from the
+# release itself under the frozen box policy (real_t11_v5).
+RELEASE_BOX_LABEL_MAPS = ("skmtea_boxes_v1",)
 SKM_ECHOES = (("qdess_e1", "echo1"), ("qdess_e2", "echo2"))
 SKM_SEG_DATASET = "seg"
 # H5 seg channel c holds the dicom-track label value c + 1 (SKM-TEA DATASET.md order; label_maps_v5.yaml)
@@ -140,7 +147,7 @@ def prepare_record_v5(record: dict, scope: ActiveScope, geometry_rows: list, ima
     tasks = _scope_tasks(scope)
     annotations = []
     for index, annotation in enumerate(body["annotation_records"]):
-        if annotation["task"] not in tasks:
+        if annotation["task"] not in tasks or annotation["label_map_version"] in RELEASE_BOX_LABEL_MAPS:
             continue
         name = LABEL_MAP_V5.get(annotation["label_map_version"])
         if name is None:
@@ -188,8 +195,8 @@ def _image_geometry(raw: Path, record: dict, pair: dict | None, skm_units: str |
 
 
 def _loss_report(raw: Path, prepared: SampleRecord, scope: ActiveScope, label_maps: dict, factor: tuple) -> dict:
-    classes = list(scope.anatomy_classes or scope.abnormality_classes)
     (annotation,) = prepared.annotation_records
+    classes = list(scope.anatomy_classes if annotation.task == "A" else scope.abnormality_classes)
     volume = read_volume_v5(raw, annotation.path, "label")
     targets = decode_targets_v5(volume, annotation, classes, label_maps)
     report = downsample_loss_report_v5(targets, tuple(factor), classes)
@@ -206,7 +213,7 @@ def run_prepare_v5(raw: Path, assets: list, scope: ActiveScope, policy: SourcePo
     out.mkdir(mode=0o700)                                                # FileExistsError: never overwritten
     os.chmod(out, 0o700)
     assets = [a for a in assets if a.get("source") == policy.source_dataset]
-    records = build_registration_records(scope.scope_id, assets, skm_annotations)
+    records = build_registration_records(REGISTRATION_SCOPE[scope.scope_id], assets, skm_annotations)
     pairs = skm.pair_assets(assets) if policy.source_dataset == SKM_DATASET else []
     pair_by_h5 = {p["h5_relpath"]: p for p in pairs if p["h5_relpath"]}
     qc_dir = Path(reuse_qc) if reuse_qc is not None else out / "geometry_qc"

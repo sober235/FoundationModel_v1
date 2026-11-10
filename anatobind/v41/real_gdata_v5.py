@@ -25,6 +25,14 @@ registered; the frozen registry is the split summary's and covers exactly the
 migrated records; and every migrated record carries this scope and this
 source release. A mismatch raises instead of judging, so counts from one
 source can never become another scope's evidence.
+
+The policy must register the annotation modalities of every task the scope has
+(A, U, or both for a joint scope). A joint scope's U comes from released boxes
+(Proposal_v5 §5.0), which no migrated record carries, so its evidence also
+needs the real box import (real_t11_v5): the import must be of this scope,
+source, box policy and frozen split, cover every scan of the splits it read,
+and have no failure. The scans of splits it did not read are counted in the
+markdown; their boxes are not part of this evidence.
 """
 from __future__ import annotations
 
@@ -46,8 +54,9 @@ def _check_chain(scope: ActiveScope, policy: SourcePolicy, prepare: dict, migrat
                                     ("model_modalities", list(scope.input_modalities), list(policy.model_modalities))):
         if actual != expected:
             raise V5Error("SCOPE_POLICY_MISMATCH", f"$.policy.{field}")
-    if gate_task_v5(scope) not in policy.annotation_modalities:
-        raise V5Error("SCOPE_POLICY_MISMATCH", "$.policy.annotation_modalities")
+    for task in _scope_tasks(scope):
+        if not policy.annotation_modalities.get(task):
+            raise V5Error("SCOPE_POLICY_MISMATCH", f"$.policy.annotation_modalities.{task}")
     if not policy.index_evidence or str(prepare.get("source_check_sha256")) not in policy.index_evidence:
         raise V5Error("SOURCE_CHECK_NOT_REGISTERED", "$.prepare.source_check_sha256")
     verify_split_registry_v5(registry)
@@ -70,6 +79,36 @@ def _check_chain(scope: ActiveScope, policy: SourcePolicy, prepare: dict, migrat
         raise V5Error("SPLIT_RECORDS_MISMATCH", "$.registry.assignment")
 
 
+def _scope_tasks(scope: ActiveScope) -> list:
+    return [task for task, classes in (("A", scope.anatomy_classes), ("U", scope.abnormality_classes)) if classes]
+
+
+def _check_box_import(scope: ActiveScope, policy: SourcePolicy, registry: dict, box_import: dict | None) -> None:
+    """A joint scope's box import must belong to this chain; a module scope must not bring one."""
+    if scope.scope_kind != "joint":
+        if box_import is not None:
+            raise V5Error("BOX_IMPORT_NOT_EXPECTED", "$.box_import")
+        return
+    if not isinstance(box_import, dict):
+        raise V5Error("BOX_IMPORT_MISSING", "$.box_import")
+    for field, expected in (("scope_hash", scope.scope_hash), ("source", source_binding_v5(policy)),
+                            ("policy_id", scope.reference_policy_id), ("split_sha256", registry["split_sha256"])):
+        if box_import.get(field) != expected:
+            raise V5Error("BOX_IMPORT_MISMATCH", f"$.box_import.{field}")
+    for field in ("policy_sha256", "box_import_sha256"):
+        value = box_import.get(field)
+        if not (isinstance(value, str) and len(value) == 64):
+            raise V5Error("BOX_IMPORT_MISMATCH", f"$.box_import.{field}")
+    splits = box_import.get("splits")
+    if not isinstance(splits, list) or not splits:
+        raise V5Error("BOX_IMPORT_MISMATCH", "$.box_import.splits")
+    counts: dict = {}
+    for split in registry["assignment"].values():
+        counts[split] = counts.get(split, 0) + 1
+    if box_import.get("selected") != {split: counts.get(split, 0) for split in splits}:
+        raise V5Error("BOX_IMPORT_MISMATCH", "$.box_import.selected")
+
+
 def _label_qc(label_qc: dict, source: str, records: int) -> tuple[bool, dict]:
     own = {k: v for k, v in label_qc.items() if k.split("|")[0] == source}
     allowed = all(k.endswith("|unexpected=False") and k.split("|")[1] in ("pass", "needs_review")
@@ -78,10 +117,12 @@ def _label_qc(label_qc: dict, source: str, records: int) -> tuple[bool, dict]:
 
 
 def gdata_evidence_v5(*, scope: ActiveScope, policy: SourcePolicy, prepare: dict, label_qc: dict, migrate: dict,
-                      split: dict, records: list, registry: dict) -> tuple[dict, str]:
+                      split: dict, records: list, registry: dict, box_import: dict | None = None) -> tuple[dict, str]:
     """`records` are the migrated SampleV5 records and `registry` the frozen split registry (both private); they
-    only bind the chain and never enter the markdown, which keeps its counts-only form."""
+    only bind the chain and never enter the markdown, which keeps its counts-only form. `box_import` is the
+    real_t11_v5 import report, required for a joint scope and refused for a module scope."""
     _check_chain(scope, policy, prepare, migrate, split, records, registry)
+    _check_box_import(scope, policy, registry, box_import)
     records = prepare["records"]
     summary = prepare["summary"]
     pairing, channel = summary["pairing"], summary["channel"]
@@ -99,6 +140,11 @@ def gdata_evidence_v5(*, scope: ActiveScope, policy: SourcePolicy, prepare: dict
         and migrate["index_alignment"] == {"verified": migrate["records"]},
         "provenance": not migrate["failures"] and migrate["records"] == records,
     }
+    if box_import is not None:
+        selected = sum(box_import["selected"].values())
+        imported = box_import["summary"]["scans"]
+        passed["semantics"] = passed["semantics"] and not box_import["failures"] and selected > 0
+        passed["pairing"] = passed["pairing"] and imported == selected
     binding = source_binding_v5(policy)
     lines = [f"# G-DATA 证据：{binding['source_id']}（{binding['source_version']}）→ {scope.scope_id}", "",
              "只含计数与哈希；不含病例 ID、路径或文件名。数据使用批准由研究者签署，不在本文件中。", "",
@@ -121,6 +167,15 @@ def gdata_evidence_v5(*, scope: ActiveScope, policy: SourcePolicy, prepare: dict
              + "；物理几何 " + "；".join(f"{k} {v}" for k, v in sorted(migrate["physical_geometry"].items())) + " |",
              f"| provenance | {'PASS' if passed['provenance'] else 'FAIL'} | 迁移 {migrate['records']}/{records}，"
              f"失败 {len(migrate['failures'])}；release 绑定 `{policy.source_release}` |"]
+    if box_import is not None:
+        read = "、".join(f"{k} {v}" for k, v in box_import["selected"].items())
+        unread = "、".join(f"{k} {v}" for k, v in box_import["not_read"].items()) or "无"
+        lines += ["", "## 框导入（U 为框级，R 为组织级；并入 semantics 与 pairing 的判定）", "",
+                  f"- 框导入摘要 sha256：`{box_import['box_import_sha256']}`",
+                  f"- 框策略 `{box_import['policy_id']}`，policy_sha256：`{box_import['policy_sha256']}`",
+                  f"- 读取的划分：{read}；导入扫描 {box_import['summary']['scans']}，失败 "
+                  f"{len(box_import['failures'])}",
+                  f"- 未读取的划分：{unread}。这些扫描的框不在本证据内。"]
     markdown = "\n".join(lines) + "\n"
     digest = hashlib.sha256(markdown.encode()).hexdigest()
     evidence = {key: {"status": "PASS" if passed[key] else "FAIL", "sha256": digest, "scope_hash": scope.scope_hash,
@@ -144,6 +199,7 @@ def main(argv: list | None = None) -> int:
     for name in ("--prepare-report", "--qc-summary", "--migrate-report", "--split-summary", "--records",
                  "--split-registry", "--scope", "--policies", "--source-id", "--out"):
         parser.add_argument(name, required=True)
+    parser.add_argument("--box-import", help="real_t11_v5 import_report.json; required for a joint scope")
     args = parser.parse_args(argv)
     load = lambda path: json.loads(Path(path).read_text())                 # noqa: E731
     records = [validate_sample_v5(json.loads(line)) for line in Path(args.records).read_text().splitlines() if line]
@@ -152,7 +208,7 @@ def main(argv: list | None = None) -> int:
         policy=load_source_policies_v5(Path(args.policies))[args.source_id],
         prepare=load(args.prepare_report), label_qc=load(args.qc_summary)["label_value_qc_by_source"],
         migrate=load(args.migrate_report), split=load(args.split_summary), records=records,
-        registry=load(args.split_registry))
+        registry=load(args.split_registry), box_import=load(args.box_import) if args.box_import else None)
     out = Path(args.out)
     out.mkdir(mode=0o700)                                                # FileExistsError: never overwritten
     os.chmod(out, 0o700)
