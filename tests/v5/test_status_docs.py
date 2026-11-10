@@ -186,7 +186,27 @@ def test_real_smoke_reports_are_redacted_and_bound_to_their_evidence():
         digest = hashlib.sha256(Path(f"reports/v5/gpu_measurement_{scope_id}.md").read_bytes()).hexdigest()
         assert f"`gpu_measurement_{scope_id}.md`（training_smoke sha256 `{digest}`）" in status
     tasks = _front_matter()["tasks"]
-    assert tasks["T10"]["data_run_status"] == "PARTIAL"            # smoke only: the real baselines are not done
+    assert tasks["T10"]["data_run_status"] == "PASS"               # 2026-11-10: smokes and both real baselines done
+
+
+def test_real_baseline_reports_are_redacted_and_bound_to_status():
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    report = Path("reports/v5/t10_baseline_report_20261110.md").read_text(encoding="utf-8")
+    for text in (report, *(Path(f"reports/v5/module_baseline_{s}.md").read_text(encoding="utf-8")
+                           for s in ("isles_u", "skm_a"))):
+        assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
+        assert not re.search(r"sub-[a-z]+[0-9]|[A-Z]{3}_[0-9]{3}|\.nii|\.h5\b|skmtea:|isles2022:", text)
+        assert "NOT_EVALUATED" in text and "locked_test" in text
+    for scope_id in ("isles_u", "skm_a"):
+        module = Path(f"reports/v5/module_baseline_{scope_id}.md").read_text(encoding="utf-8")
+        assert "结果：COMPLETED" in module and "development_val" in module and "不相加" in module
+        digest = hashlib.sha256(Path(f"reports/v5/module_baseline_{scope_id}.md").read_bytes()).hexdigest()
+        assert f"`module_baseline_{scope_id}.md`（sha256 `{digest}`）" in status
+        assert f"`module_baseline_{scope_id}.md`（sha256 `{digest}`）" in report
+    assert "A100" in report and "不需要重签" in report               # the recorded device deviation for skm_a
+    tasks = _front_matter()["tasks"]
+    assert tasks["T10"]["data_run_status"] == "PASS" and tasks["T10"]["approval_status"] == "PASS"
+    assert _front_matter()["core_target_validated"] is None
 
 
 def test_t10_approval_c_package_is_redacted_and_names_the_baseline_plans():
