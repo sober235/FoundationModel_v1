@@ -179,7 +179,9 @@ def test_t11_admission_is_redacted_and_records_the_scope_approval_without_gdata(
     assert "CORE_RELATION_REQUIRED" in text
     assert Path("configs/v5/scope_skm_joint_early.yaml").exists()
     sources = yaml.safe_load(Path("configs/v5/sources_v5.yaml").read_text(encoding="utf-8"))
-    assert sources["skm_tea_joint_early"]["index_evidence"] is None   # no real import has run
+    check = Path("reports/v5/source_check_skm_tea_joint_early.md")      # the joint scope's own prepare run
+    assert hashlib.sha256(check.read_bytes()).hexdigest() in sources["skm_tea_joint_early"]["index_evidence"]
+    assert not re.search(r"/(Users|home|data|mnt|srv|opt)/|MTR_\d|\.nii|\.h5", check.read_text(encoding="utf-8"))
     task = _front_matter()["tasks"]["T11"]
     assert task["approval_status"] == "PENDING" and task["data_run_status"] == "NOT_STARTED"
 

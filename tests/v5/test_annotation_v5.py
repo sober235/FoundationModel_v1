@@ -239,7 +239,8 @@ def test_joint_early_scope_has_its_own_binding_and_cannot_complete_the_core():
         "skm_tea_joint_early"]
     assert (policy.scope_id, policy.reference_policy_id, list(policy.model_modalities)) == (
         scope.scope_id, scope.reference_policy_id, list(scope.input_modalities))
-    assert set(policy.annotation_modalities) == {"A", "U"} and policy.index_evidence is None
+    assert set(policy.annotation_modalities) == {"A", "U"}
+    assert "source_check_skm_tea_joint_early.md" in policy.index_evidence     # its own prepare run, not skm_a's
     source = source_binding_v5(policy)
     assert source == {"source_id": "skm_tea_joint_early", "source_version": POLICY["source"]["source_version"]}
     gate = evaluate_gate_v5("G-JOINT", scope, {}, {}, source)

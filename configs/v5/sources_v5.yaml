@@ -30,9 +30,9 @@ skm_tea:
   physical_units_policy: null
   physical_units_evidence: null
 # Binding of SKM-TEA to the early-phase joint scope (a source policy serves one scope, so the joint scope has its
-# own source_id). Proposed 2026-11-09, approved by the researcher 2026-11-10. index_evidence stays null until a
-# real import run produces the redacted joint source check; the G-DATA evidence of this (source, task joint) is
-# produced then, never copied from skm_a.
+# own source_id). Proposed 2026-11-09, approved by the researcher 2026-11-10. index_evidence cites the redacted
+# source check of the joint scope's own prepare run (2026-11-10, geometry QC reused from the skm_a run); the G-DATA
+# evidence of this (source, task joint) is produced from the joint chain, never copied from skm_a.
 skm_tea_joint_early:
   source_version: skm_tea_annotations_v1.0.0
   source_release: SKM-TEA v1.0.0
@@ -44,6 +44,6 @@ skm_tea_joint_early:
   # appendix A.4); which echo is not stated. The G-DATA chain guard checks gate task "joint" against these keys
   # and needs a joint rule (A and U both registered) before the real import's evidence can be judged.
   annotation_modalities: {A: [qdess_e1, qdess_e2], U: [qdess_e1, qdess_e2]}
-  index_evidence: null
+  index_evidence: "reports/v5/source_check_skm_tea_joint_early.md (sha256 a9b787bf285ba68e05f0d7f9a3beafcde02faf97369f51e8632a0c0dcfd13703): 155/155 scans paired, geometry pass in 155/155, and the dicom-track reference equals the H5 seg after the registered transform in 155/155"
   physical_units_policy: null
   physical_units_evidence: null
