@@ -257,6 +257,13 @@ tasks:
 - `scientific_conclusion` 仍为 `NOT_EVALUATED`，`core_target_validated` 仍为 `null`。G-JOINT 规则不变，继续阻断。
 - 设计：`docs/superpowers/specs/2026-11-10-unified-lesion-finding-design.md`。实施计划：`docs/superpowers/plans/2026-11-10-unified-lesion-finding.md`（本地实现，合成数据验证）。amax 真实运行和 DICOM 入口另立计划。
 
+实现情况（2026-11-10，`unified_local_report_20261110.md`）：
+
+- 本地实现的 10 个任务完成：框监督目标与损失、统一模型、统一计划与运行登记、统一训练循环、协议表与所见输出、所见评价、统一驱动 `real_unified_v5.py`。
+- 只做了合成数据验证，全套测试 812 通过、2 跳过；没有在 amax 上运行，没有读真实数据。
+- 计划文件 `configs/v5/proposals/unified_knee_brain.yaml` 是提案，未批准。
+- 此前登记为"尚未实现"的"框参照按角色读取"已实现：框参照经冻结划分按角色读取，`locked_test` 被拒绝。
+
 ## 真实 T07/T08 运行（2026-11-08，amax）
 
 研究者 2026-11-08 同意：写 amax（新工作目录与私有子目录）、最多 2 张空闲 GPU、ISLES-2022 与 SKM-TEA 的数据使用（批准文件由研究者本人写入，尚未写入）、L8 划分规则（SKM 官方划分；ISLES 按病灶体积三分位分层 70/15/15，种子 20261108）。

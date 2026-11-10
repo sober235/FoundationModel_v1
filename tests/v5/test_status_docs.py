@@ -289,3 +289,14 @@ def test_goal_revision_of_20261110_is_recorded_without_claiming_validation():
     assert meta["core_target_validated"] is None and meta["scientific_conclusion"] == "NOT_EVALUATED"
     design = Path("docs/superpowers/specs/2026-11-10-unified-lesion-finding-design.md").read_text(encoding="utf-8")
     assert not re.search(PRIVATE_PATH_PATTERN, design)
+
+
+def test_unified_local_report_separates_code_checks_from_real_runs():
+    text = Path("reports/v5/unified_local_report_20261110.md").read_text(encoding="utf-8")
+    assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
+    for phrase in ("只做了合成数据验证", "没有在 amax 上运行", "NOT_EVALUATED", "提案，未批准",
+                   "unified_knee_brain.yaml", "定位点用质心体素"):
+        assert phrase in text
+    for name in ("test_box_data.py", "test_box_loss.py", "test_unified_model.py", "test_unified_registration.py",
+                 "test_unified_training.py", "test_findings.py", "test_findings_eval.py", "test_real_unified.py"):
+        assert Path(f"tests/v5/{name}").exists() and name in text
