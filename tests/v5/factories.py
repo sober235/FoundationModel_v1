@@ -718,3 +718,62 @@ def make_scored_output(scope, uid: str, shape, anatomy_map=None, abnormality_map
               "reason": reason, "geometry": geometry,
               "provenance": {"input_sha256": "a" * 64, "model_sha256": "b" * 64, "output_policy_version": policy_id}}
     return validate_module_output_v5(output, scope)
+
+
+# ---------------------------------------------------------------------------
+# Unified model (Proposal_v5 §0.6): a synthetic plan and its registered member runs
+
+_UNIFIED_MODEL = {"architecture": "resunet3d", "widths": [4, 8], "strides": [[1, 1, 1], [1, 2, 2]],
+                  "blocks_per_stage": 1, "stem_channels": 3}
+SYNTH_BOX_SPEC = {"kind": "box_mil", "topk_fraction": 0.5, "positive_weight": 1.0, "negative_weight": 1.0,
+                  "box_policy_sha256": "p" * 64}
+
+
+def make_unified_plan(scopes: dict, **overrides) -> dict:
+    """A synthetic unified plan with one member per scope; a joint scope's member is box-supervised and reports
+    hosts. Dict overrides merge into nested keys."""
+    members = {}
+    for pid, scope in scopes.items():
+        joint = scope.scope_kind == "joint"
+        members[pid] = {
+            "scope_id": scope.scope_id, "scope_hash": scope.scope_hash, "source": dict(SYNTH_SOURCE),
+            "lineage_id": f"lin-{pid}", "tasks": _trainable(scope), "patch_size": [4, 8, 8], "batch_size": 1,
+            "downsample_factor": [1, 1, 1], "grid_tolerance": {"atol_affine": 1e-4, "atol_spacing": 1e-4},
+            "normalization": "zscore_volume", "sampling": {"positive_fraction": 0.5},
+            "inference": {"window": [4, 8, 8], "stride": [4, 8, 8]}, "loss_weight": 1.0,
+            "supervision": make_supervision(scope), "box_supervision": dict(SYNTH_BOX_SPEC) if joint else None,
+            "acceptance_policy": make_acceptance_policy(scope), "metric_policy": make_metric_policy(),
+            "finding_policy": {"host": "majority_accepted_anatomy" if joint else "none",
+                               "iobb_thresholds": [0.1, 0.25, 0.5] if joint else None}}
+    plan = {"plan_id": "synthetic_unified_v1",
+            "shared": {"model": copy.deepcopy(_UNIFIED_MODEL), "seeds": {"init": 0, "sampler": 1},
+                       "optimizer": {"name": "adamw", "lr": 0.001, "weight_decay": 0.0},
+                       "scheduler": {"name": "poly", "exponent": 0.9}, "precision": "fp32", "selection_rule": "last",
+                       "checkpoint_every": 2, "budget": {"max_steps": 4, "max_wall_hours": 1.0}},
+            "members": members,
+            "smoke": {"steps": 4, "pause_at": 2, "checkpoint_every": 2, "subset_count": {pid: 1 for pid in scopes},
+                      "subset_salt": "synthetic-unified",
+                      "tolerances": {"loss_atol": 1e-4, "loss_rtol": 1e-3, "param_rtol": 1e-3}, "max_wall_hours": 1.0},
+            "budget": {"max_wall_hours": 2.0}}
+    return _merge(plan, overrides)
+
+
+def make_unified_members(plan: dict, scopes: dict, run_id: str, run_kind: str = "baseline"):
+    """(member_runs, registries, records), each keyed by protocol: every member gets its own records
+    (two train, one development_val), frozen registry and registered fixture run `<run_id>.<protocol>`."""
+    from anatobind.v41.engine.registration_v5 import register_run_v5
+    from anatobind.v41.engine.unified_registration_v5 import member_recipe_v5
+
+    member_runs, registries, records = {}, {}, {}
+    for pid, scope in scopes.items():
+        member = plan["members"][pid]
+        records[pid] = make_split_records(["train", "train", "development_val"])
+        registries[pid] = make_split_registry(records[pid], lineage_id=member["lineage_id"])
+        member_runs[pid] = register_run_v5(
+            run_id=f"{run_id}.{pid}", lineage_id=member["lineage_id"], run_kind=run_kind,
+            recipe=member_recipe_v5(plan, pid, run_kind), supervision=member["supervision"], scope=scope,
+            source=dict(SYNTH_SOURCE), split_registry=registries[pid], records=records[pid],
+            gate_decisions=make_gate_decisions(scope, run_kind),
+            approvals=make_approvals(scope, ["resources"]) if run_kind == "smoke" else {}, parents=[],
+            environment=dict(SYNTH_ENVIRONMENT), code=dict(SYNTH_CODE), created_at=SYNTH_CREATED_AT, fixture_mode=True)
+    return member_runs, registries, records
