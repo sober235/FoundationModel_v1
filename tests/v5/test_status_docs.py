@@ -316,5 +316,5 @@ def test_joint_split_and_gdata_evidence_are_redacted_and_bound():
     assert evidence.decode("utf-8").count("| PASS |") == 6 and "FAIL" not in evidence.decode("utf-8")
     status = Path("reports/v5/status.md").read_text(encoding="utf-8")
     assert hashlib.sha256(evidence).hexdigest() in status and "由执行方按研究者给出的署名代为写入" in status
-    assert "统一冒烟的资源批准尚未签署" in status
+    assert "统一冒烟第一次运行" in status and "**FAIL**" in status and "没有产生冒烟证据" in status
 
