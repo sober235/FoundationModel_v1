@@ -274,3 +274,18 @@ def test_import_registration_report_is_redacted_and_separates_code_from_real_dat
     assert "| test | 是 | 是 | 36 | 36 | 0 | 130 |" in text
     for name in ("test_registration_report.py", "test_real_t11.py"):
         assert Path(f"tests/v5/{name}").exists() and name in text
+
+
+def test_goal_revision_of_20261110_is_recorded_without_claiming_validation():
+    proposal = Path("Proposal_v5.md").read_text(encoding="utf-8")
+    assert "### 0.6 2026-11-10 研究者决定：按原标注粒度验收" in proposal
+    for phrase in ("同一个 checkpoint 处理膝关节 qDESS 与脑 DWI+ADC", "只做三维", "不再要求体素级的病变边界验证",
+                   "医生没有标注不等于正常", "`core_target_validated` 保持 `null`"):
+        assert phrase in proposal
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    assert "## 2026-11-10 目标修订" in status
+    assert "docs/superpowers/plans/2026-11-10-unified-lesion-finding.md" in status
+    meta = _front_matter()
+    assert meta["core_target_validated"] is None and meta["scientific_conclusion"] == "NOT_EVALUATED"
+    design = Path("docs/superpowers/specs/2026-11-10-unified-lesion-finding-design.md").read_text(encoding="utf-8")
+    assert not re.search(PRIVATE_PATH_PATTERN, design)

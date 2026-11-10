@@ -1,7 +1,7 @@
 ---
 plan_revision: "2026-11-07"
 execution_base: "GitHub sober235/FoundationModel_v1 current content (branch restart-dev); code identical to d7cbd5b"
-spec_sha256: "4224791f52d20aba893636921a9b497032c9a9c2fd340d5055481bb25db1a430"
+spec_sha256: "532ff42129510d7d11082d351dd7df78a0d8d0466a3a417e861cd1dc62509953"
 scientific_conclusion: NOT_EVALUATED
 core_target_validated: null
 study_package_complete: false
@@ -242,6 +242,20 @@ tasks:
 - **D3 原决定（2026-11-06，留作后期方案）：** 保留 SKM 联合场景；先准备 20–30 次非锁定开发扫描试点，明确主读、独立复读、仲裁责任，以及异常边界、不确定带与单层可判读规则。人员与预算未落实前 X0 不标完成，相关科学验证保持 `BLOCKED_EXPERT_REVIEW`。框、分级或伪标签不能替代原定联合验证；试点不能形成稳定体素参照时，再按实际资源提出替代场景。
 - **D4 执行主机：** 选定 amax 数据服务器。2026-11-06 完成只读预检（`reports/v5/host_precheck_amax.md`）。2026-11-08 经研究者同意写入服务器：代码以 git bundle 克隆到独立工作目录（不动旧 `main` 检出），私有产物放在私有根下的独立子目录；v5 全套测试在服务器解释器（Python 3.11 / PyTorch 2.5.1 / NumPy 2.4 / SciPy 1.17）上 585 passed，SimpleITK 对照测试实际运行。已登记为正式执行环境，blocker `EXECUTION_HOST_UNVERIFIED` 撤销。解释器与目录路径只在本地配置。
 - **D5 长期目标定位（2026-11-07 提出，待决定）：** v5.1 是否作为“可迁移 MRI 基础模型”长期目标中的一个能力验证阶段；若是，是否在 v5.1 之后另立复用/迁移/泛化里程碑（Proposal §1.4，plan §1.5）。不改变 v5.1 的任务与完成判定。
+
+## 2026-11-10 目标修订
+
+研究者 2026-11-10 决定（Proposal §0.6）：
+
+- 按医生的原标注粒度验收：膝关节报组织轮廓和带类别、所在组织组的病变框；脑报梗死轮廓。不再要求体素级的病变边界验证。
+- 同一个 checkpoint 处理膝关节 qDESS 与脑 DWI+ADC 两种协议；只做三维。
+- 成功标准沿用模块基线的指标，与两个基线并列对照。
+
+对现有登记的影响：
+
+- 八项能力与 H1–H3 暂停；T12–T18 中依赖体素级参照、二维模式或 H2 的部分不再推进，任务编号和状态行保留。
+- `scientific_conclusion` 仍为 `NOT_EVALUATED`，`core_target_validated` 仍为 `null`。G-JOINT 规则不变，继续阻断。
+- 设计：`docs/superpowers/specs/2026-11-10-unified-lesion-finding-design.md`。实施计划：`docs/superpowers/plans/2026-11-10-unified-lesion-finding.md`（本地实现，合成数据验证）。amax 真实运行和 DICOM 入口另立计划。
 
 ## 真实 T07/T08 运行（2026-11-08，amax）
 
