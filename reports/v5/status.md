@@ -281,6 +281,7 @@ tasks:
 - 按新哈希重签的冒烟资源批准已写入（研究者授权、执行方代为写入，文件内已注明，并说明取代写着旧哈希的那一份）。服务器代码同步到 `2d8d5db`，服务器上 CPU 全套测试 814 通过、2 跳过。
 - 统一冒烟第二次运行（2026-11-10，1 张 GPU，约 7 分钟）：**PASS**（`unified_smoke_20261110.md`）。连续与续训两次执行都完成 40 步，续训比较通过，参数逐位相同；显存峰值 23.42 GiB；单步 1.599 秒。整卷推理：脑 60 处所见，膝 294 处所见（模型只训练了 40 步，这些数字只说明流程走通）。`scientific_conclusion` 仍为 NOT_EVALUATED。
 - 按冒烟的单步耗时，30000 步约需 13.3 小时，超过原定 10 小时的训练预算。研究者 2026-11-10 决定加预算：训练 16 小时、整体 20 小时，步数不变。计划哈希变为 `2f43a97185292644b2ab2f1c91a8a9eeb7dba4dbec274200758bac910d3aa71c`；冒烟不重跑（与通过冒烟的计划只差这两个预算值）。G-BASE 资源批准尚未签署，训练未开始。
+- 统一模型的 G-BASE 预评估（2026-11-10，不占 GPU，服务器代码 `fd3bc53`）：两个成员的五项证据（g_data、supervision_policy、input_policy、frozen_dev_split、training_smoke）全部 PASS。三个关卡（`skm_joint_early` 的 G-BASE-A 与 G-BASE-U、`isles_u` 的 G-BASE-U）目前都是 BLOCKED，唯一的阻断项是 `APPROVAL_MISSING:resources`。
 
 ## 真实 T07/T08 运行（2026-11-08，amax）
 
