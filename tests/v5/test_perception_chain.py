@@ -172,6 +172,29 @@ def test_instances_follow_policy_connectivity_and_size():
     assert [i["instance_uid"] for i in six] == ["inst-0001", "inst-0002", "inst-0003"]
 
 
+def test_instances_refuse_to_allocate_beyond_the_mask_budget(monkeypatch):
+    """Every instance carries a full-volume mask, so the kept components times the volume is bounded before any
+    mask is allocated (a 40-step model on a 512x512x160 knee volume gave about 200,000 components)."""
+    from anatobind.v41 import perception
+
+    scope = _joint()
+    positive = np.zeros((2, *SHAPE), dtype=bool)
+    positive[0, 0, 0, 0] = positive[0, 2, 2, 2] = positive[1, 4, 4, 4] = True          # three 1-voxel components
+    positive[0, 4:6, 4:6, 0] = True                                                    # one 4-voxel component
+    accepted = np.ones_like(positive)
+    volume = int(np.prod(SHAPE))
+    monkeypatch.setattr(perception, "INSTANCE_MASK_BYTES_LIMIT", 3 * volume)
+    with pytest.raises(V5Error) as error:
+        extract_instances_v5(positive, accepted, scope, make_acceptance_policy(scope, instances={"connectivity": 26}))
+    assert (error.value.code, error.value.path) == ("INSTANCE_LIMIT_EXCEEDED", "$.abnormal_instances")
+    kept = extract_instances_v5(positive, accepted, scope,
+                                make_acceptance_policy(scope, instances={"connectivity": 26, "min_voxels": 4}))
+    assert [int(i["mask"].sum()) for i in kept] == [4]            # the size filter is applied before the budget
+    monkeypatch.setattr(perception, "INSTANCE_MASK_BYTES_LIMIT", 4 * volume)
+    assert len(extract_instances_v5(positive, accepted, scope,
+                                    make_acceptance_policy(scope, instances={"connectivity": 26}))) == 4
+
+
 def test_module_output_marks_disabled_tasks():
     scope = validate_scope_v5(make_module_scope("A"))
     model = StubPerceptionModel(scope, ("A",), anatomy_fn=_constant([0.0, 3.0, 0.0]))

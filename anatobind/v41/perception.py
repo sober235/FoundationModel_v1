@@ -27,6 +27,9 @@ from .state_rule_v5 import NOT_ASSESSABLE, REASON_BITS, derive_state_map_v5
 
 POLICY_ROLES = ("engineering", "calibrated")
 CONNECTIVITY = {6: 1, 26: 3}     # instance connectivity -> scipy structuring-element rank
+# Every instance carries a full-volume bool mask (and is saved as one file), so the kept components times the
+# volume is bounded before any mask is allocated. An engineering bound on memory and disk, not a formal threshold.
+INSTANCE_MASK_BYTES_LIMIT = 16 * 2 ** 30
 _FOV_TOLERANCE = 1e-6
 _POLICY_KEYS = {"policy_id": None, "policy_role": None, "anatomy": ("min_confidence",),
                 "abnormality": ("thresholds", "reject_band"), "instances": ("connectivity", "min_voxels")}
@@ -148,10 +151,16 @@ def extract_instances_v5(abnormality_map: np.ndarray, abnormality_accepted: np.n
             or positive.ndim != 4 or positive.shape[0] != len(scope.abnormality_classes):
         raise V5Error("GRID_MISMATCH", "$.abnormality_map")
     structure = ndimage.generate_binary_structure(3, CONNECTIVITY[policy["instances"]["connectivity"]])
+    labelled = []
+    for c in range(len(scope.abnormality_classes)):
+        labels, count = ndimage.label(positive[c] & accepted[c], structure=structure)
+        labelled.append((labels, np.bincount(labels.ravel(), minlength=count + 1)))
+    kept = sum(int((sizes[1:] >= policy["instances"]["min_voxels"]).sum()) for _, sizes in labelled)
+    if kept * int(np.prod(positive.shape[1:])) > INSTANCE_MASK_BYTES_LIMIT:
+        raise V5Error("INSTANCE_LIMIT_EXCEEDED", "$.abnormal_instances")
     found = []
     for c, name in enumerate(scope.abnormality_classes):
-        labels, count = ndimage.label(positive[c] & accepted[c], structure=structure)
-        sizes = np.bincount(labels.ravel(), minlength=count + 1)
+        labels, sizes = labelled[c]
         for k, box in enumerate(ndimage.find_objects(labels), start=1):
             if box is None or sizes[k] < policy["instances"]["min_voxels"]:
                 continue
