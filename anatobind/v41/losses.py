@@ -123,3 +123,57 @@ def masked_objective_v5(logits: torch.Tensor, target: torch.Tensor, e_pos: torch
         onehot = F.one_hot(labels, num_classes=logits.shape[1]).to(logits.dtype)
         dice = _soft_dice_v5(probs[:, 1:], onehot[:, 1:])
     return ce_weight * ce + dice_weight * dice
+
+
+# ---------------------------------------------------------------------------
+# Box multiple-instance objective (Proposal_v5 §0.6, §5.0; design 2026-11-10 §5.2)
+
+BOX_SPEC_KEYS = ("kind", "topk_fraction", "positive_weight", "negative_weight", "box_policy_sha256")
+
+
+def _number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def box_mil_objective_v5(logits: torch.Tensor, bags: torch.Tensor, e_pos: torch.Tensor, e_neg: torch.Tensor,
+                         spec: dict) -> torch.Tensor:
+    """Box-level supervision without filling boxes into voxel truth.
+
+    Positive part: for each bag (a released box on its host tissue, id > 0 in `bags`) the mean of softplus(-logit)
+    over its top ceil(topk_fraction·n) logits, so a box only has to contain *some* marked tissue; averaged over
+    bags. Negative part: mean softplus(logit) over each class's e_neg voxels, averaged over classes with support.
+    A part without support adds zero; without any support the result is a differentiable zero.
+    """
+    if not isinstance(spec, dict) or spec.get("kind") != "box_mil":
+        raise V5Error("UNKNOWN_LOSS_KIND", "$.spec.kind")
+    fraction, positive_weight, negative_weight = (spec.get(key) for key in BOX_SPEC_KEYS[1:4])
+    if not (_number(fraction) and 0 < fraction <= 1 and _number(positive_weight) and _number(negative_weight)
+            and positive_weight >= 0 and negative_weight >= 0 and positive_weight + negative_weight > 0):
+        raise V5Error("INVALID_LOSS_WEIGHTS", "$.spec")
+    if not (logits.shape == bags.shape == e_pos.shape == e_neg.shape) or logits.ndim < 3:
+        raise V5Error("GRID_MISMATCH", "$.logits")
+    e_pos, e_neg = e_pos.to(torch.bool), e_neg.to(torch.bool)
+    positive, negative = [], []
+    for c in range(logits.shape[1]):
+        class_logits, class_negative = logits[:, c], e_neg[:, c]
+        if bool(class_negative.any()):
+            selected = class_logits[class_negative]
+            if not bool(torch.isfinite(selected).all()):
+                raise V5Error("NON_FINITE_LOGITS", "$.logits")
+            negative.append(F.softplus(selected).mean())
+        for b in range(logits.shape[0]):
+            supported = bags[b, c][e_pos[b, c]]
+            for bag_id in torch.unique(supported[supported > 0]).tolist():
+                selected = logits[b, c][(bags[b, c] == bag_id) & e_pos[b, c]]
+                if not bool(torch.isfinite(selected).all()):
+                    raise V5Error("NON_FINITE_LOGITS", "$.logits")
+                top = torch.topk(selected, max(1, math.ceil(fraction * selected.numel()))).values
+                positive.append(F.softplus(-top).mean())
+    if not positive and not negative:
+        return logits.masked_fill(torch.ones_like(logits, dtype=torch.bool), 0).sum() * 0.0
+    total = logits.new_zeros(())
+    if positive:
+        total = total + float(positive_weight) * torch.stack(positive).mean()
+    if negative:
+        total = total + float(negative_weight) * torch.stack(negative).mean()
+    return total
