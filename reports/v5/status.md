@@ -265,6 +265,13 @@ tasks:
 - 此前登记为"尚未实现"的"框参照按角色读取"已实现：框参照经冻结划分按角色读取，`locked_test` 被拒绝。
 - 研究者 2026-11-10 确认了执行方的六项设计选择（报告 §4），实现不变；同日口头同意了计划文件的取值（计划哈希 `602128f3…7defaab`）。写明该哈希的资源批准尚未签署。
 
+计划二第一步（2026-11-10，amax，研究者同日同意；不占 GPU）：
+
+- 服务器代码同步到 `095d24e`；CPU 全套测试 812 通过、2 跳过。
+- 联合 scope 的划分已冻结，lineage `v51_skm_joint_early`，规则为研究者 2026-11-08 登记的 SKM-TEA 官方患者划分（`split_rule_skm_a.yaml`）：train 86、development_val 33、excluded 36、locked_test 0；`split_sha256` `32820345ccef57fe3fc7a21ba87280f134db910d8d51c752ca0abc040c9c0fb9`（`split_skm_joint_early.md`）。155 名患者在 `v51_skm_a_b2` 与本划分中的角色一致，冲突 0。
+- 联合 scope 的 G-DATA 证据六项全部 PASS，证据 sha256 `d5a567af32752c4f025a77f79a3c67aebe75f134acc4c895d51c8e0e38dd9383`（`gdata_evidence_skm_tea_joint_early.md`）。
+- 数据使用批准尚未签署，G-DATA 关卡尚未评估；冒烟与训练未开始。
+
 ## 真实 T07/T08 运行（2026-11-08，amax）
 
 研究者 2026-11-08 同意：写 amax（新工作目录与私有子目录）、最多 2 张空闲 GPU、ISLES-2022 与 SKM-TEA 的数据使用（批准文件由研究者本人写入，尚未写入）、L8 划分规则（SKM 官方划分；ISLES 按病灶体积三分位分层 70/15/15，种子 20261108）。

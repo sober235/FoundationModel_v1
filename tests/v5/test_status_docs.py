@@ -300,3 +300,20 @@ def test_unified_local_report_separates_code_checks_from_real_runs():
     for name in ("test_box_data.py", "test_box_loss.py", "test_unified_model.py", "test_unified_registration.py",
                  "test_unified_training.py", "test_findings.py", "test_findings_eval.py", "test_real_unified.py"):
         assert Path(f"tests/v5/{name}").exists() and name in text
+
+
+def test_joint_split_and_gdata_evidence_are_redacted_and_bound():
+    import hashlib
+    split = Path("reports/v5/split_skm_joint_early.md").read_text(encoding="utf-8")
+    evidence = Path("reports/v5/gdata_evidence_skm_tea_joint_early.md").read_bytes()
+    for text in (split, evidence.decode("utf-8")):
+        assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
+        assert not re.search(r"sub-[a-z]+[0-9]|[A-Z]{3}_[0-9]{3}|\.nii|\.h5", text)    # no case IDs or file names
+    digest = "32820345ccef57fe3fc7a21ba87280f134db910d8d51c752ca0abc040c9c0fb9"
+    assert "v51_skm_joint_early" in split and digest in split and digest in evidence.decode("utf-8")
+    for row in ("| development_val | 33 |", "| excluded | 36 |", "| locked_test | 0 |", "| train | 86 |"):
+        assert row in split
+    assert evidence.decode("utf-8").count("| PASS |") == 6 and "FAIL" not in evidence.decode("utf-8")
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    assert hashlib.sha256(evidence).hexdigest() in status and "数据使用批准尚未签署" in status
+
