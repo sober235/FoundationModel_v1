@@ -270,7 +270,9 @@ tasks:
 - 服务器代码同步到 `095d24e`；CPU 全套测试 812 通过、2 跳过。
 - 联合 scope 的划分已冻结，lineage `v51_skm_joint_early`，规则为研究者 2026-11-08 登记的 SKM-TEA 官方患者划分（`split_rule_skm_a.yaml`）：train 86、development_val 33、excluded 36、locked_test 0；`split_sha256` `32820345ccef57fe3fc7a21ba87280f134db910d8d51c752ca0abc040c9c0fb9`（`split_skm_joint_early.md`）。155 名患者在 `v51_skm_a_b2` 与本划分中的角色一致，冲突 0。
 - 联合 scope 的 G-DATA 证据六项全部 PASS，证据 sha256 `d5a567af32752c4f025a77f79a3c67aebe75f134acc4c895d51c8e0e38dd9383`（`gdata_evidence_skm_tea_joint_early.md`）。
-- 数据使用批准尚未签署，G-DATA 关卡尚未评估；冒烟与训练未开始。
+- 联合 scope 的数据使用批准已于 2026-11-10 写入：研究者在会话中明确授权（"授权你代签"），由执行方按研究者给出的署名代为写入，批准文件内注明了这一点。此前的批准均由研究者本人写入。
+- G-DATA 关卡（`skm_joint_early`，来源 `skm_tea_joint_early`）：engineering_status PASS，阻断项 0；`scientific_conclusion` 仍为 NOT_EVALUATED。
+- 统一冒烟的资源批准尚未签署；冒烟与训练未开始。
 
 ## 真实 T07/T08 运行（2026-11-08，amax）
 
