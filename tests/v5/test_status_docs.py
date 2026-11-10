@@ -174,7 +174,8 @@ def test_t11_admission_is_redacted_and_records_the_scope_approval_without_gdata(
     assert "NOT_EVALUATED" in text and "core_target_validated" in text
     assert "研究者 2026-11-10 批准" in text and "**提案，未批准**" not in text
     assert "G-DATA 的 data_use 尚未签署" in text                     # approving the scope opens no data gate
-    assert "只读 train 和 development_val" in text and "SPLIT_SEALED" in text and "只做了合成验证" in text
+    assert "读取全部三个官方划分" in text and "administrative_qc" in text and "只做了合成验证" in text
+    assert "SPLIT_SEALED" not in text                                 # the train/dev-only rule was replaced
     assert "CORE_RELATION_REQUIRED" in text
     assert Path("configs/v5/scope_skm_joint_early.yaml").exists()
     sources = yaml.safe_load(Path("configs/v5/sources_v5.yaml").read_text(encoding="utf-8"))
@@ -237,3 +238,14 @@ def test_t10_approval_c_package_is_redacted_and_names_the_baseline_plans():
         assert plan["smoke"]["training_smoke_sha256"] == report        # the smoke the researcher saw
         assert f"baseline_plan_sha256: {baseline_plan_sha256_v5(plan)}" in package
         assert f"scope_hash: {scope.scope_hash}" in package
+
+
+def test_import_registration_report_is_redacted_and_separates_code_from_real_data_checks():
+    text = Path("reports/v5/import_registration_report_20261110.md").read_text(encoding="utf-8")
+    assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
+    assert not re.search(r"sub-[a-z]+[0-9]|[A-Z]{3}_[0-9]{3}|\.nii|\.h5\b|skmtea:|isles2022:", text)
+    assert "NOT_EVALUATED" in text and "代码验证（合成数据）" in text and "真实数据验证（amax，只读" in text
+    assert "没有冻结正式划分" in text and "LEGACY_EXPOSURE_UNKNOWN" in text and "尚未实现的访问控制" in text
+    assert "| test | 是 | 是 | 36 | 36 | 0 | 130 |" in text
+    for name in ("test_registration_report.py", "test_real_t11.py"):
+        assert Path(f"tests/v5/{name}").exists() and name in text

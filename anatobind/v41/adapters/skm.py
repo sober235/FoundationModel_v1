@@ -52,6 +52,28 @@ def pair_assets(assets: list[dict]) -> list[dict]:
     return [cases[k] for k in sorted(cases)]
 
 
+def pairing_report(assets: list[dict]) -> dict:
+    """Counts only. One case is one scan: its echoes share one H5 file and its tracks are label versions of the
+    same scan, so neither adds a scan or a patient."""
+    seen: dict[tuple, int] = {}
+    for asset in assets:
+        if asset.get("source") != SOURCE or asset.get("kind") not in ("image", "label") or not asset.get("case_id"):
+            continue
+        rel = asset["relpath"]
+        role = "h5" if asset["kind"] == "image" else "dicom_track" if "/dicom-track/" in rel else \
+            "raw_track" if "/raw-data-track/" in rel else "other_label"
+        seen[(asset["case_id"], role)] = seen.get((asset["case_id"], role), 0) + 1
+    pairs = pair_assets(assets)
+    return {"cases": len(pairs),
+            "paired": sum(1 for p in pairs if p["h5_relpath"] and p["dicom_track_relpath"]),
+            "missing_h5": sum(1 for p in pairs if not p["h5_relpath"]),
+            "missing_dicom_track": sum(1 for p in pairs if not p["dicom_track_relpath"]),
+            "with_raw_track": sum(1 for p in pairs if p["raw_track_relpath"]),
+            "duplicate_role_assets": sum(n - 1 for n in seen.values() if n > 1),
+            "cases_with_duplicate_assets": len({case for (case, _), n in seen.items() if n > 1}),
+            "other_labels_not_registered": sum(n for (_, role), n in seen.items() if role == "other_label")}
+
+
 def channel_check(root: Path, pair: dict) -> dict:
     import h5py
 

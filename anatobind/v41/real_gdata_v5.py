@@ -30,9 +30,10 @@ The policy must register the annotation modalities of every task the scope has
 (A, U, or both for a joint scope). A joint scope's U comes from released boxes
 (Proposal_v5 §5.0), which no migrated record carries, so its evidence also
 needs the real box import (real_t11_v5): the import must be of this scope,
-source, box policy and frozen split, cover every scan of the splits it read,
-and have no failure. The scans of splits it did not read are counted in the
-markdown; their boxes are not part of this evidence.
+source and box policy, cover exactly the migrated records (all official
+splits) with every official release file present, and have no failure. The
+official split is where a scan came from, not its formal split; the evidence
+opens data use, and each later use is still limited by the frozen split's role.
 """
 from __future__ import annotations
 
@@ -83,7 +84,7 @@ def _scope_tasks(scope: ActiveScope) -> list:
     return [task for task, classes in (("A", scope.anatomy_classes), ("U", scope.abnormality_classes)) if classes]
 
 
-def _check_box_import(scope: ActiveScope, policy: SourcePolicy, registry: dict, box_import: dict | None) -> None:
+def _check_box_import(scope: ActiveScope, policy: SourcePolicy, records: list, box_import: dict | None) -> None:
     """A joint scope's box import must belong to this chain; a module scope must not bring one."""
     if scope.scope_kind != "joint":
         if box_import is not None:
@@ -91,22 +92,19 @@ def _check_box_import(scope: ActiveScope, policy: SourcePolicy, registry: dict, 
         return
     if not isinstance(box_import, dict):
         raise V5Error("BOX_IMPORT_MISSING", "$.box_import")
+    from .real_t11_v5 import records_sha256_v5
+
     for field, expected in (("scope_hash", scope.scope_hash), ("source", source_binding_v5(policy)),
-                            ("policy_id", scope.reference_policy_id), ("split_sha256", registry["split_sha256"])):
+                            ("policy_id", scope.reference_policy_id), ("records", len(records)),
+                            ("records_sha256", records_sha256_v5(records))):
         if box_import.get(field) != expected:
             raise V5Error("BOX_IMPORT_MISMATCH", f"$.box_import.{field}")
     for field in ("policy_sha256", "box_import_sha256"):
         value = box_import.get(field)
         if not (isinstance(value, str) and len(value) == 64):
             raise V5Error("BOX_IMPORT_MISMATCH", f"$.box_import.{field}")
-    splits = box_import.get("splits")
-    if not isinstance(splits, list) or not splits:
-        raise V5Error("BOX_IMPORT_MISMATCH", "$.box_import.splits")
-    counts: dict = {}
-    for split in registry["assignment"].values():
-        counts[split] = counts.get(split, 0) + 1
-    if box_import.get("selected") != {split: counts.get(split, 0) for split in splits}:
-        raise V5Error("BOX_IMPORT_MISMATCH", "$.box_import.selected")
+    if not isinstance(box_import.get("release_files"), dict) or not isinstance(box_import.get("by_release_split"), dict):
+        raise V5Error("BOX_IMPORT_MISMATCH", "$.box_import.release_files")
 
 
 def _label_qc(label_qc: dict, source: str, records: int) -> tuple[bool, dict]:
@@ -122,7 +120,7 @@ def gdata_evidence_v5(*, scope: ActiveScope, policy: SourcePolicy, prepare: dict
     only bind the chain and never enter the markdown, which keeps its counts-only form. `box_import` is the
     real_t11_v5 import report, required for a joint scope and refused for a module scope."""
     _check_chain(scope, policy, prepare, migrate, split, records, registry)
-    _check_box_import(scope, policy, registry, box_import)
+    _check_box_import(scope, policy, records, box_import)
     records = prepare["records"]
     summary = prepare["summary"]
     pairing, channel = summary["pairing"], summary["channel"]
@@ -141,10 +139,12 @@ def gdata_evidence_v5(*, scope: ActiveScope, policy: SourcePolicy, prepare: dict
         "provenance": not migrate["failures"] and migrate["records"] == records,
     }
     if box_import is not None:
-        selected = sum(box_import["selected"].values())
         imported = box_import["summary"]["scans"]
-        passed["semantics"] = passed["semantics"] and not box_import["failures"] and selected > 0
-        passed["pairing"] = passed["pairing"] and imported == selected
+        files_ok = bool(box_import["release_files"]) and all(box_import["release_files"].values())
+        passed["semantics"] = passed["semantics"] and not box_import["failures"] and imported > 0
+        passed["pairing"] = passed["pairing"] and imported == box_import["records"] and files_ok
+        passed["provenance"] = passed["provenance"] and files_ok and not (
+            set(box_import["by_release_split"]) & {"conflict", "missing"})
     binding = source_binding_v5(policy)
     lines = [f"# G-DATA 证据：{binding['source_id']}（{binding['source_version']}）→ {scope.scope_id}", "",
              "只含计数与哈希；不含病例 ID、路径或文件名。数据使用批准由研究者签署，不在本文件中。", "",
@@ -168,14 +168,15 @@ def gdata_evidence_v5(*, scope: ActiveScope, policy: SourcePolicy, prepare: dict
              f"| provenance | {'PASS' if passed['provenance'] else 'FAIL'} | 迁移 {migrate['records']}/{records}，"
              f"失败 {len(migrate['failures'])}；release 绑定 `{policy.source_release}` |"]
     if box_import is not None:
-        read = "、".join(f"{k} {v}" for k, v in box_import["selected"].items())
-        unread = "、".join(f"{k} {v}" for k, v in box_import["not_read"].items()) or "无"
-        lines += ["", "## 框导入（U 为框级，R 为组织级；并入 semantics 与 pairing 的判定）", "",
+        by_release = "、".join(f"{k} {v}" for k, v in box_import["by_release_split"].items())
+        files = "、".join(f"{k} {'存在' if v else '缺失'}" for k, v in box_import["release_files"].items())
+        lines += ["", "## 框导入（U 为框级，R 为组织级；并入 semantics、pairing 与 provenance 的判定）", "",
                   f"- 框导入摘要 sha256：`{box_import['box_import_sha256']}`",
                   f"- 框策略 `{box_import['policy_id']}`，policy_sha256：`{box_import['policy_sha256']}`",
-                  f"- 读取的划分：{read}；导入扫描 {box_import['summary']['scans']}，失败 "
+                  f"- 官方划分文件：{files}；登记扫描按来源划分：{by_release}",
+                  f"- 登记扫描 {box_import['records']}，导入 {box_import['summary']['scans']}，失败 "
                   f"{len(box_import['failures'])}",
-                  f"- 未读取的划分：{unread}。这些扫描的框不在本证据内。"]
+                  "- 来源划分不是正式划分。本证据放行数据使用；训练、模型选择和评价仍按冻结划分的角色读取。"]
     markdown = "\n".join(lines) + "\n"
     digest = hashlib.sha256(markdown.encode()).hexdigest()
     evidence = {key: {"status": "PASS" if passed[key] else "FAIL", "sha256": digest, "scope_hash": scope.scope_hash,

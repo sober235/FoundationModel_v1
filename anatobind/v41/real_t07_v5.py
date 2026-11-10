@@ -258,6 +258,99 @@ def _asdict(sample: SampleRecord) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Registration report (import and registration only: nothing is prepared, migrated or frozen)
+
+
+def registration_report_v5(assets: list, scope: ActiveScope, annotations_dir: Path | None = None) -> tuple:
+    """(report, details) for one scope's source. `report` holds counts only; `details` names cases and is private.
+
+    SKM-TEA: all three official split files are checked and read, and each scan keeps its official split as
+    `provenance.release_split`. The formal `split` of every registered scan stays `unassigned`: it is given
+    only by the freeze step, after grouping and the exposure check. ISLES: DWI, ADC and mask pairing.
+    """
+    from .audits import registration_summary, scan_skm_release
+
+    source = SCOPE_SOURCE.get(scope.scope_id)
+    if source is None:
+        raise V5Error("SOURCE_NOT_SUPPORTED", "$.scope.scope_id")
+    assets = [a for a in assets if a.get("source") == source]
+    release = details = annotations = None
+    if source == SKM_DATASET:
+        if annotations_dir is None:
+            raise V5Error("RELEASE_REQUIRED", "$.annotations_dir")
+        annotations, release, details = scan_skm_release(Path(annotations_dir))
+        pairing = skm.pairing_report(assets)
+        registered = {p["case_id"] for p in skm.pair_assets(assets) if p["h5_relpath"]}
+        release["release_scans_without_assets"] = len(set(annotations) - registered)
+        release["registered_scans_without_release_entry"] = len(registered - set(annotations))
+        details["release_scans_without_assets"] = sorted(set(annotations) - registered)
+        details["registered_scans_without_release_entry"] = sorted(registered - set(annotations))
+    else:
+        pairing = isles.pairing_report(assets)
+    records = build_registration_records(REGISTRATION_SCOPE[scope.scope_id], assets, annotations)
+    report = {"scope_id": scope.scope_id, "source_dataset": source, "pairing": pairing, "release": release,
+              "registration": registration_summary(records)}
+    return report, details
+
+
+def render_registration_md_v5(report: dict) -> str:
+    registration, pairing, release = report["registration"], report["pairing"], report["release"]
+    lines = [f"# 导入与登记汇总：{report['source_dataset']} → {report['scope_id']}", "",
+             "只含计数；不含病例 ID、路径或文件名。本汇总只到导入与登记：没有冻结正式划分，没有训练，没有解封测试。", "",
+             "## 扫描与患者", "",
+             f"- 登记扫描 {registration['scans']}；可确认的独立患者 {registration['patients_confirmed']}；"
+             f"患者身份不能确认的扫描 {registration['scans_patient_unconfirmed']}",
+             f"- 泄漏组 {registration['leakage_groups']}；跨多个泄漏组的患者 "
+             f"{registration['patients_in_multiple_leakage_groups']}；重复的样本号 "
+             f"{registration['duplicate_sample_uids']}",
+             "- 回波、标签轨道和其他派生版本不增加扫描数，也不增加患者数。", "",
+             "## 配对", "", "| 项 | 计数 |", "| --- | --- |"]
+    lines += [f"| {key} | {value} |" for key, value in pairing.items()]
+    if release is not None:
+        lines += ["", "## 官方划分文件（来源划分，不是正式划分）", "",
+                  "| 文件 | 存在 | 可读 | 扫描 | 可确认患者 | 无患者号的扫描 | 框 |", "| --- | --- | --- | --- | --- | --- | --- |"]
+        for split, entry in release["files"].items():
+            lines.append(f"| {split} | {'是' if entry['present'] else '否'} | {'是' if entry['readable'] else '否'} | "
+                         f"{entry['scans']} | {entry['patients']} | {entry['scans_without_subject']} | "
+                         f"{entry['boxes']} |")
+        lines += ["", f"- 缺失文件：{'、'.join(release['missing_files']) or '无'}；不可读文件："
+                  f"{'、'.join(release['unreadable_files']) or '无'}",
+                  f"- 三个文件合计：扫描 {release['scans']}，可确认患者 {release['patients']}",
+                  f"- 同一文件内重复的病例 {release['duplicate_cases_within_file']}；出现在多个划分的病例 "
+                  f"{release['cases_in_multiple_splits']}；出现在多个划分的患者 "
+                  f"{release['patients_in_multiple_splits']}",
+                  f"- 发布文件有而本地无影像的扫描 {release['release_scans_without_assets']}；本地有而发布文件无条目的"
+                  f"扫描 {release['registered_scans_without_release_entry']}；找不到扫描的标注 "
+                  f"{release['orphan_annotations']}",
+                  "", "### 登记记录按来源划分", "", "| 来源划分 | 扫描 | 可确认患者 | 患者不能确认的扫描 |",
+                  "| --- | --- | --- | --- |"]
+        lines += [f"| {key} | {row['scans']} | {row['patients']} | {row['scans_patient_unconfirmed']} |"
+                  for key, row in registration["by_release_split"].items()]
+    lines += ["", "## 正式划分与曝光", "",
+              "- 正式 split：" + "、".join(f"{k} {v}" for k, v in registration["formal_split"].items()),
+              "- 曝光登记（按角色，条目数）：" + ("、".join(f"{k} {v}" for k, v in registration["exposure_roles"].items())
+                                       or "无") + f"；没有曝光条目的扫描 {registration['scans_without_exposure_entry']}",
+              f"- 没有标签的扫描 {registration['scans_without_label']}",
+              "- 官方 test 的名称不构成盲测资格。曝光为 unknown 的病例保持 unknown，冻结时不能进入 locked_test。"]
+    return "\n".join(lines) + "\n"
+
+
+def run_registration_report_v5(assets: list, scope: ActiveScope, out: Path,
+                               annotations_dir: Path | None = None) -> dict:
+    report, details = registration_report_v5(assets, scope, annotations_dir)
+    out = Path(out)
+    out.mkdir(mode=0o700)                                                # FileExistsError: never overwritten
+    os.chmod(out, 0o700)
+    markdown = render_registration_md_v5(report)
+    report["registration_md_sha256"] = hashlib.sha256(markdown.encode()).hexdigest()
+    _write_private_text(out / "registration.md", markdown)
+    write_private_json(out / "registration_report.json", report)
+    if details is not None:
+        write_private_json(out / "registration_details.json", details)
+    return report
+
+
+# ---------------------------------------------------------------------------
 # Command line (run on the data server; prints counts only)
 
 
@@ -305,8 +398,19 @@ def main(argv: list | None = None) -> int:
     migrate.add_argument("--policies", required=True)
     migrate.add_argument("--source-id", required=True)
     migrate.add_argument("--out", required=True)
+    register = sub.add_parser("registration-report")
+    register.add_argument("--assets", required=True)
+    register.add_argument("--scope", required=True)
+    register.add_argument("--out", required=True)
+    register.add_argument("--skm-annotations-dir")
     args = parser.parse_args(argv)
     scope = validate_scope_v5(yaml.safe_load(Path(args.scope).read_text()))
+    if args.command == "registration-report":
+        report = run_registration_report_v5(
+            read_jsonl(Path(args.assets)), scope, Path(args.out),
+            Path(args.skm_annotations_dir) if args.skm_annotations_dir else None)
+        print(render_registration_md_v5(report), end="")
+        return 0
     policy = load_source_policies_v5(Path(args.policies))[args.source_id]
     if args.command == "prepare":
         annotations = load_skm_annotations(Path(args.skm_annotations_dir)) if args.skm_annotations_dir else None
