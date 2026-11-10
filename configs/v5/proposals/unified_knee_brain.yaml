@@ -61,7 +61,10 @@ members:
       abnormality:
         thresholds: {cartilage_lesion: 0.5, meniscal_tear: 0.5}
         reject_band: {cartilage_lesion: none, meniscal_tear: none}
-      instances: {connectivity: 26, min_voxels: 1}
+      # min_voxels 50 (2026-11-10, after the failed first smoke): a positive component under 50 voxels (about
+      # 4 mm^3 on the qDESS grid) is not reported as a finding. The smallest primary box of the train readers is
+      # 144 voxels. With 1, a 40-step model gave about 210,000 components per scan; with 50, about 290.
+      instances: {connectivity: 26, min_voxels: 50}
     metric_policy: {metrics: [dice], surface_tolerance_mm: null, iou_match_threshold: null, fp_budget_per_scan: null, class_aware: null, size_strata_voxels: null}
     finding_policy: {host: majority_accepted_anatomy, iobb_thresholds: [0.1, 0.25, 0.5]}
   brain_dwi_adc:
