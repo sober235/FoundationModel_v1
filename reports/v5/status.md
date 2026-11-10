@@ -144,7 +144,7 @@ tasks:
     code_status: PARTIAL   # 2026-11-09: SKM-TEA boxes and tissue_id import (S1–S7) with synthetic tests; no real import CLI, no SPIDER
     test_evidence: "2026-11-09 local: tests/v5/test_annotation_v5.py: 22 passed (synthetic)"
     data_run_status: NOT_STARTED
-    approval_status: PENDING   # scope_skm_joint_early and its source binding are proposals
+    approval_status: PENDING   # 2026-11-10: scope_skm_joint_early and its source binding approved; joint G-DATA data_use not signed
     scientific_conclusion: NOT_EVALUATED
   T12:
     code_status: TODO
@@ -237,7 +237,7 @@ tasks:
     - 评价准则的数值仍在开发集上选定，锁定评价前冻结。
   - 实现状态 `TODO`：
     - 2026-11-09 完成了 T11 的 SKM 框与 tissue_id 导入代码，只做了合成验证；真实导入未运行，SPIDER 未做。
-    - `skm_joint_early` 的 scope 实例与来源绑定是提案，未批准（`t11_skm_joint_early_admission_20261109.md`）。
+    - `skm_joint_early` 的 scope 实例与来源绑定由研究者 2026-11-10 批准，已移入 `configs/v5/scope_skm_joint_early.yaml` 与 `sources_v5.yaml`（`t11_skm_joint_early_admission_20261109.md` §6）。G-JOINT 仍被 `CORE_RELATION_REQUIRED` 阻断。
     - 联合 scope 的 G-DATA 证据和批准都还没有。skm_a 的 G-DATA 不能沿用。
 - **D3 原决定（2026-11-06，留作后期方案）：** 保留 SKM 联合场景；先准备 20–30 次非锁定开发扫描试点，明确主读、独立复读、仲裁责任，以及异常边界、不确定带与单层可判读规则。人员与预算未落实前 X0 不标完成，相关科学验证保持 `BLOCKED_EXPERT_REVIEW`。框、分级或伪标签不能替代原定联合验证；试点不能形成稳定体素参照时，再按实际资源提出替代场景。
 - **D4 执行主机：** 选定 amax 数据服务器。2026-11-06 完成只读预检（`reports/v5/host_precheck_amax.md`）。2026-11-08 经研究者同意写入服务器：代码以 git bundle 克隆到独立工作目录（不动旧 `main` 检出），私有产物放在私有根下的独立子目录；v5 全套测试在服务器解释器（Python 3.11 / PyTorch 2.5.1 / NumPy 2.4 / SciPy 1.17）上 585 passed，SimpleITK 对照测试实际运行。已登记为正式执行环境，blocker `EXECUTION_HOST_UNVERIFIED` 撤销。解释器与目录路径只在本地配置。
@@ -277,7 +277,7 @@ tasks:
 | smoke 计划 | isles_u 和 skm_a 各一份，**提案，未批准**（sha256 为 `02b5c260…`、`93ce6daa…`） | `configs/v5/proposals/smoke_*.yaml` |
 | 批准前运行 | 合成张量预测量（每个 scope 用 1 张 A800，候选全部 OK，都含优化器状态）；CPU 真实 batch 检查（每个 scope 读 2 个 train 样本，不注册运行） | `t10_preapproval_20261109.md` |
 | 待批准材料 | 一次性提交 A：G-DATA data_use；B：smoke resources；C：smoke PASS 后的 G-BASE resources 与基线预算 | `t10_approval_package_20261109.md` |
-| T11 前期（SKM） | 框和 tissue_id 导入代码，22 项合成测试；联合 scope 与来源绑定为**提案，未批准** | `0883395`；`t11_skm_joint_early_admission_20261109.md` |
+| T11 前期（SKM） | 框和 tissue_id 导入代码，22 项合成测试；联合 scope 与来源绑定当时为提案，2026-11-10 获批准 | `0883395`；`t11_skm_joint_early_admission_20261109.md` |
 
 - 基线驱动 `real_baseline_v5.py` 已与两份基线计划提案一起提交，见下文“基线驱动与批准 C 材料”。
 

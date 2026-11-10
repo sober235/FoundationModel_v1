@@ -219,22 +219,23 @@ def test_policy_encodes_the_adopted_s1_to_s7_values():
         load_skm_box_policy_v5(bad)
 
 
-def test_joint_early_scope_proposal_has_its_own_binding_and_cannot_complete_the_core():
+def test_joint_early_scope_has_its_own_binding_and_cannot_complete_the_core():
     import yaml
 
     from anatobind.v41.contracts_v5 import validate_scope_v5
     from anatobind.v41.gates_v5 import evaluate_gate_v5
     from anatobind.v41.source_policy_v5 import load_source_policies_v5, source_binding_v5
 
-    path = Path("configs/v5/proposals/scope_skm_joint_early.yaml")
-    assert path.read_text().startswith("# PROPOSAL — NOT APPROVED")
+    path = Path("configs/v5/scope_skm_joint_early.yaml")              # approved by the researcher 2026-11-10
+    assert "approved by the researcher 2026-11-10" in path.read_text()
+    assert not list(Path("configs/v5/proposals").glob("*joint_early*"))
     scope = validate_scope_v5(yaml.safe_load(path.read_text()))
     skm_a = validate_scope_v5(yaml.safe_load(Path("configs/v5/scope_skm_a.yaml").read_text()))
     assert scope.scope_hash != skm_a.scope_hash and scope.anatomy_classes == skm_a.anatomy_classes
     assert scope.reference_policy_id == POLICY["policy_id"]
     assert list(scope.abnormality_classes) == list(POLICY["tissue_groups_by_class"])
     assert scope.relation_contract["completion_role"] == "auxiliary_spatial"
-    policy = load_source_policies_v5(Path("configs/v5/proposals/source_skm_tea_joint_early.yaml"))[
+    policy = load_source_policies_v5(Path("configs/v5/sources_v5.yaml"))[
         "skm_tea_joint_early"]
     assert (policy.scope_id, policy.reference_policy_id, list(policy.model_modalities)) == (
         scope.scope_id, scope.reference_policy_id, list(scope.input_modalities))

@@ -1,10 +1,11 @@
-# PROPOSAL — NOT APPROVED (2026-11-09). ActiveScope for the early-phase SKM-TEA joint scenario (Proposal_v5 §2.2
-# `skm_joint_early`, §5.0; plan_v5 T11). Classes and rules follow S1–S7 (adopted 2026-11-07) as encoded in
-# configs/v5/skm_box_policy_v1.yaml, whose policy_id is this scope's reference policy.
+# ActiveScope v5.1: early-phase SKM-TEA joint scenario (Proposal_v5 §2.2 `skm_joint_early`, §5.0; plan_v5 T11).
+# Proposed 2026-11-09, approved by the researcher 2026-11-10 (reports/v5/status.md D3). Classes and rules follow
+# S1–S7 (adopted 2026-11-07) as encoded in configs/v5/skm_box_policy_v1.yaml, whose policy_id is this scope's
+# reference policy.
 # completion_role is auxiliary_spatial on purpose: box-level U and tissue-level R from released labels can never
 # complete the core host binding, so G-JOINT stays blocked (CORE_RELATION_REQUIRED) and core_target_validated
-# stays null; results go to early_phase_status only. This scope needs its own source binding and G-DATA evidence;
-# skm_a's evidence does not carry over.
+# stays null; results go to early_phase_status only. Approving the scope is not a G-DATA approval: this scope
+# needs its own G-DATA evidence and data_use sign-off; skm_a's do not carry over.
 schema_version: "v5.1"
 scope_id: skm_joint_early
 scope_kind: joint

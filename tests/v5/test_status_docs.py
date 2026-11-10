@@ -167,13 +167,18 @@ def test_t10_preapproval_and_package_are_redacted_and_bound_to_the_plans():
         assert f"scope_hash: {scope.scope_hash}" in package and f"source_version: {source['source_version']}" in package
 
 
-def test_t11_admission_is_redacted_and_keeps_proposals_unapproved():
+def test_t11_admission_is_redacted_and_records_the_scope_approval_without_gdata():
     text = Path("reports/v5/t11_skm_joint_early_admission_20261109.md").read_text(encoding="utf-8")
     assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
     assert not re.search(r"MTR_\d|\b\d+_t[12]\b|\.h5\b", text)
-    assert "**提案，未批准**" in text and "NOT_EVALUATED" in text and "core_target_validated" in text
-    for name in ("scope_skm_joint_early", "source_skm_tea_joint_early"):
-        assert Path(f"configs/v5/proposals/{name}.yaml").read_text().startswith("# PROPOSAL — NOT APPROVED")
+    assert "NOT_EVALUATED" in text and "core_target_validated" in text
+    assert "研究者 2026-11-10 批准" in text and "**提案，未批准**" not in text
+    assert "G-DATA 的 data_use 尚未签署" in text                     # approving the scope opens no data gate
+    assert Path("configs/v5/scope_skm_joint_early.yaml").exists()
+    sources = yaml.safe_load(Path("configs/v5/sources_v5.yaml").read_text(encoding="utf-8"))
+    assert sources["skm_tea_joint_early"]["index_evidence"] is None   # no real import has run
+    task = _front_matter()["tasks"]["T11"]
+    assert task["approval_status"] == "PENDING" and task["data_run_status"] == "NOT_STARTED"
 
 
 def test_real_smoke_reports_are_redacted_and_bound_to_their_evidence():

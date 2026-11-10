@@ -3,7 +3,7 @@
 - 计划：`plan_v5.md` T11（前期原标签导入）；规格：`Proposal_v5.md` §2.2 `skm_joint_early`、§5.0。
 - 完成情况：
   - 导入代码已写好，合成数据验证已通过；
-  - scope 实例与来源绑定已写成提案。
+  - scope 实例与来源绑定已写成提案；**研究者 2026-11-10 批准**，已移入正式配置（见§6）。
 - 没有做的事：
   - 没有在真实数据上运行导入；
   - SPIDER 不在本轮范围内。
@@ -16,8 +16,8 @@
 | --- | --- | --- |
 | `anatobind/v41/annotation_v5.py` | 单次扫描的框导入（`import_skm_boxes_v5`）、发布表校验、计数汇总（只有计数） | 代码完成 |
 | `configs/v5/skm_box_policy_v1.yaml` | 把 S1–S7 写成冻结规则，策略 sha256 为 `09b1003e…` | 取值是研究者 2026-11-07 已采纳的 S1–S7 |
-| `configs/v5/proposals/scope_skm_joint_early.yaml` | ActiveScope 提案，scope_hash 为 `f6e4b5f6e3c95a49f5f8cb45591b2a2c437b8db2d432551e1bd1e9e81935ec9f` | **提案，未批准** |
-| `configs/v5/proposals/source_skm_tea_joint_early.yaml` | 联合 scope 自己的来源绑定，source_id 为 `skm_tea_joint_early` | **提案，未批准** |
+| `configs/v5/scope_skm_joint_early.yaml` | ActiveScope，scope_hash 为 `f6e4b5f6e3c95a49f5f8cb45591b2a2c437b8db2d432551e1bd1e9e81935ec9f` | 研究者 2026-11-10 批准 |
+| `configs/v5/sources_v5.yaml` 的 `skm_tea_joint_early` 条目 | 联合 scope 自己的来源绑定 | 研究者 2026-11-10 批准 |
 | `tests/v5/test_annotation_v5.py` | 22 项合成测试 | 全部通过 |
 
 ## 2. 语义如何落实（S1–S7）
@@ -49,7 +49,7 @@
 
 ## 4. 准入还缺什么（按顺序）
 
-1. **研究者批准两份提案**，即 scope 实例与来源绑定。批准后，它们分别移入 `configs/v5/scope_skm_joint_early.yaml` 和 `sources_v5.yaml`。
+1. ~~研究者批准两份提案~~（2026-11-10 已批准）。scope 实例与来源绑定已分别移入 `configs/v5/scope_skm_joint_early.yaml` 和 `sources_v5.yaml`。
 2. **决定导入读哪些划分**。推荐只导入 train 和 development_val。官方 test 的 36 次扫描目前在 `excluded`，它们的框保持封存，等 G-LOCKED 时再处理。
    - 理由：导入时要读参照 A 来判断框内是否有宿主组织，等于读取标签。
    - SKM 官方 test 的曝光状态以 T08 账本为准（P6）。
@@ -75,6 +75,15 @@
 
 ## 5. 本轮没做的事
 
-- 没有在真实数据上运行导入。原因是 scope 和来源都还是提案，联合 scope 的 data_use 也没有批准。
+- 没有在真实数据上运行导入。写这份材料时 scope 和来源都还是提案，联合 scope 的 data_use 也没有批准。
 - SPIDER 的分级导入没有做：本轮数据边界不含 SPIDER。
 - 没有做 T12、T13，也没有做评价代码。
+
+## 6. 批准记录（2026-11-10）
+
+- 研究者 2026-11-10 批准 scope 实例 `skm_joint_early` 与来源绑定 `skm_tea_joint_early`。两份文件内容未改，只换了位置和文件头注释；scope_hash 仍为 `f6e4b5f6e3c95a49f5f8cb45591b2a2c437b8db2d432551e1bd1e9e81935ec9f`。
+- 这次批准的范围只是这两份配置。以下各项不在其中：
+  - 联合 scope 的 G-DATA 的 data_use 尚未签署。它要绑定真实导入产生的证据，只能在导入之后签。
+  - 导入读哪些划分（§4 第 2 项）研究者尚未指定。
+  - `completion_role` 仍是 `auxiliary_spatial`，G-JOINT 仍被 `CORE_RELATION_REQUIRED` 阻断。前期联合训练走哪个门，待研究者决定。
+- §4 第 3–5 项照旧：补真实导入命令行和 joint 链规则，在 amax 上运行导入，再签 data_use。
