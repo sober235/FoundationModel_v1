@@ -139,7 +139,7 @@ def _train_members(plan: dict, member_runs: dict, samples: dict, run_kind: str) 
 
 
 def _infer(*, model, pid: str, plan: dict, protocol: dict, observation, record, member_run: dict, registry: dict,
-           checkpoint_sha256: str, private_root: Path, repo: Path) -> tuple:
+           checkpoint_sha256: str, private_root: Path, repo: Path, folder: str = "inference") -> tuple:
     """One full-volume inference of a member's view through the formal entry, and its findings."""
     member, scope = plan["members"][pid], protocol["scope"]
     relation_fn = None
@@ -153,7 +153,7 @@ def _infer(*, model, pid: str, plan: dict, protocol: dict, observation, record, 
         model.view(pid), batch, scope, observation_uid=observation.sample_uid, checkpoint_sha256=checkpoint_sha256,
         original_geometry=original_geometry_v5(observation, record), acceptance_policy=member["acceptance_policy"],
         window=tuple(member["inference"]["window"]), stride=tuple(member["inference"]["stride"]),
-        precision=plan["shared"]["precision"], out_dir=Path(private_root) / "inference" / pid,
+        precision=plan["shared"]["precision"], out_dir=Path(private_root) / folder / pid,
         private_root=private_root, repo=repo, run=member_run, registry=registry, relation_fn=relation_fn)
     return output, findings_from_output_v5(output, scope, member["acceptance_policy"], protocol["groups"])
 
@@ -301,18 +301,57 @@ def _patient_mean(values_by_patient: dict) -> dict:
 
 def run_unified_training_v5(*, plan: dict, plan_sha256: str, protocols: dict, members: dict, approvals: dict,
                             raw: Path, label_maps: dict, private_root: Path, repo: Path, device: str, run_id: str,
-                            created_at: str, environment: dict, code: dict, fixture_mode: bool) -> dict:
-    """One unified training run and its development description; returns the summary (also summary.json)."""
+                            created_at: str, environment: dict, code: dict, fixture_mode: bool,
+                            resume: bool = False) -> dict:
+    """One unified training run and its development description; returns the summary (also summary.json).
+
+    `resume=True` continues a run whose process died: the run registered under `private_root` must be the one these
+    inputs register (same plan, records, splits, gates and approvals; its own created_at, environment and code are
+    kept), training goes on from the latest checkpoint, and the development inference starts again in a new
+    `inference_r<n>` folder, so nothing of the dead attempt is overwritten or reused. A run that already wrote its
+    summary, or that stopped with a failure record, is not resumed."""
     started = time.monotonic()
     pids = _precheck(plan, plan_sha256, protocols, members, approvals, fixture_mode)
     for pid in pids:
         _check_smoke_evidence(members[pid].get("smoke_evidence"), protocols[pid]["scope"], members[pid]["source"], pid)
     private_root, device_t = Path(private_root), torch.device(device)
     scopes = {pid: protocols[pid]["scope"] for pid in pids}
+    stored = None
+    if resume:
+        try:
+            stored = json.loads(resolve_private_output(private_root / "runs" / run_id / "run.json", private_root,
+                                                       repo).read_text())
+        except (OSError, ValueError):
+            raise V5Error("RESUME_RUN_MISSING", "$.run") from None
+        if not isinstance(stored, dict) or not all(key in stored for key in ("environment", "code", "created_at")):
+            raise V5Error("RESUME_RUN_MISSING", "$.run")
+        environment, code, created_at = stored["environment"], stored["code"], stored["created_at"]
     unified, member_runs = _register(plan=plan, plan_sha256=plan_sha256, protocols=protocols, members=members,
                                      approvals=approvals, run_id=run_id, run_kind="baseline", subsets=None,
                                      environment=environment, code=code, created_at=created_at,
                                      fixture_mode=fixture_mode)
+    carried_seconds, checkpoint, folder = 0.0, None, "inference"
+    if resume:
+        if unified != stored:
+            raise V5Error("RESUME_RUN_MISMATCH", "$.run")
+        if (private_root / "summary.json").exists():
+            raise V5Error("RUN_ALREADY_FINISHED", "$.run")
+        checkpoints = private_root / "runs" / run_id / "checkpoints"
+        steps = sorted(int(path.name[5:13]) for path in checkpoints.glob("step_????????.pt")) \
+            if checkpoints.is_dir() else []
+        if not steps:
+            raise V5Error("RESUME_NO_CHECKPOINT", "$.run")
+        latest = checkpoints / f"step_{steps[-1]:08d}.pt"
+        try:
+            digest = json.loads(latest.with_name(f"{latest.name}.json").read_text())["sha256"]
+        except (OSError, ValueError, KeyError, TypeError):
+            raise V5Error("RESUME_NO_CHECKPOINT", "$.run.checkpoint") from None
+        checkpoint = (latest, digest)
+        carried_seconds = float(load_checkpoint_v5(latest, unified, digest, "cpu")["wall_seconds"])
+        attempt = 1
+        while (private_root / f"inference_r{attempt}").exists():
+            attempt += 1
+        folder = f"inference_r{attempt}" if (private_root / "inference").exists() else "inference"
     summary = {"kind": "unified_training", "plan_id": plan["plan_id"], "plan_sha256": plan_sha256,
                "device": _device_summary(device_t),
                "run": {"run_id": run_id, "run_sha256": run_sha256_v5(unified),
@@ -325,12 +364,12 @@ def run_unified_training_v5(*, plan: dict, plan_sha256: str, protocols: dict, me
 
     def finish(stop_code: str | None, phase: str | None) -> dict:
         summary["stop_code"], summary["stop_phase"] = stop_code, phase
-        summary["elapsed_hours"] = (time.monotonic() - started) / 3600.0
+        summary["elapsed_hours"] = (carried_seconds + time.monotonic() - started) / 3600.0
         write_private_json(resolve_private_output(private_root / "summary.json", private_root, repo), summary)
         return summary
 
-    def over_budget() -> bool:
-        return time.monotonic() - started > plan["budget"]["max_wall_hours"] * 3600.0
+    def over_budget() -> bool:          # a resumed run carries the training time its checkpoint recorded
+        return carried_seconds + time.monotonic() - started > plan["budget"]["max_wall_hours"] * 3600.0
 
     def load(pid: str, roles: list) -> tuple:
         return load_member_samples_v5(
@@ -338,13 +377,16 @@ def run_unified_training_v5(*, plan: dict, plan_sha256: str, protocols: dict, me
             registry=members[pid]["registry"], raw=raw, label_maps=label_maps, roles=roles,
             box_references=members[pid].get("box_references"))
 
-    run_dir = write_unified_run_v5(unified, member_runs, {pid: members[pid]["registry"] for pid in pids},
-                                   private_root, repo)
+    if resume:
+        run_dir = private_root / "runs" / run_id
+    else:
+        run_dir = write_unified_run_v5(unified, member_runs, {pid: members[pid]["registry"] for pid in pids},
+                                       private_root, repo)
     # 1. the train part of every member, seeded random initialisation, selection rule `last`
     train = {pid: load(pid, ["train"])[0] for pid in pids}
     model = build_unified_model_v5(plan, scopes).to(device_t)
     result = train_unified_v5(unified, model, _train_members(plan, member_runs, train, "baseline"), plan, run_dir,
-                              private_root, repo, None)
+                              private_root, repo, checkpoint)
     summary["training"] = {"status": result["status"], "step": result["step"],
                            "samples": {pid: len(train[pid]) for pid in pids},
                            "checkpoint_sha256": result["last_checkpoint_sha256"],
@@ -387,7 +429,7 @@ def run_unified_training_v5(*, plan: dict, plan_sha256: str, protocols: dict, me
                                       observation=entry["observations"].pop(uid), record=record,
                                       member_run=member_runs[pid], registry=members[pid]["registry"],
                                       checkpoint_sha256=result["last_checkpoint_sha256"], private_root=private_root,
-                                      repo=repo)
+                                      repo=repo, folder=folder)
             sentences.update(render_findings_zh_v5(findings, scope, protocols[pid]["display"]))
             if "frozen" in entry:
                 rows.append(module_metrics_v5(output, entry["frozen"], member["metric_policy"],
@@ -520,6 +562,8 @@ def main(argv: list | None = None) -> int:
             command.add_argument("--member", action="append", required=True)
         if name == "train":
             command.add_argument("--baseline-summary", action="append", default=[])
+            command.add_argument("--resume", action="store_true",
+                                 help="continue the run already registered under --out from its latest checkpoint")
         if name == "gbase-gate":
             for key in ("--protocol", "--gdata-decision", "--split-summary", "--smoke-evidence", "--approvals", "--out"):
                 command.add_argument(key, required=True)
@@ -597,8 +641,10 @@ def main(argv: list | None = None) -> int:
             "smoke_evidence": load_json(paths["smoke-evidence"]) if "smoke-evidence" in paths else None,
             "box_references": Path(paths["box-references"]) if "box-references" in paths else None}
     out = Path(args.out)
-    out.mkdir(mode=0o700)                                               # never overwritten
-    os.chmod(out, 0o700)
+    resuming = args.command == "train" and args.resume
+    if not resuming:
+        out.mkdir(mode=0o700)                                           # never overwritten
+        os.chmod(out, 0o700)
     common = {"plan": plan, "plan_sha256": digest, "protocols": protocols, "members": members,
               "approvals": approvals, "raw": Path(args.raw),
               "label_maps": load_label_maps_v5(repo / "configs" / "v5" / "label_maps_v5.yaml"), "private_root": out,
@@ -613,7 +659,7 @@ def main(argv: list | None = None) -> int:
                                training_smoke_evidence_v5(summary, markdown, protocols[pid]["scope"], sources[pid]))
         ok = summary["status"] == "PASS"
     else:
-        summary = run_unified_training_v5(**common)
+        summary = run_unified_training_v5(**common, resume=resuming)
         baselines = {}
         for value in args.baseline_summary:
             pid, _, path = value.partition("=")

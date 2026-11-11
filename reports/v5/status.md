@@ -284,6 +284,7 @@ tasks:
 - 统一模型的 G-BASE 预评估（2026-11-10，不占 GPU，服务器代码 `fd3bc53`）：两个成员的五项证据（g_data、supervision_policy、input_policy、frozen_dev_split、training_smoke）全部 PASS。三个关卡（`skm_joint_early` 的 G-BASE-A 与 G-BASE-U、`isles_u` 的 G-BASE-U）目前都是 BLOCKED，唯一的阻断项是 `APPROVAL_MISSING:resources`。
 - 长期授权（2026-11-10）：研究者在会话中给出长期授权，本项目的批准文件由执行方以署名 "Congcong" 代签；授权原话没有写明范围，执行方按此前向研究者提出的有限范围执行（2 张 GPU 以内且不超过计划文件预算的资源批准、已批准数据范围内的数据使用批准、因已同意的改动导致计划哈希变化后的重签），范围以外仍逐项询问。每份代签文件内都注明这一点。
 - G-BASE 资源批准已按长期授权写入（三条：`skm_joint_early` 的 G-BASE-A 与 G-BASE-U、`isles_u` 的 G-BASE-U，都写明计划哈希 `2f43a971…3aa71c`）。三个 G-BASE 关卡随后评估：engineering_status 全部 PASS，阻断项 0。
+- 续训入口（2026-11-10，本地实现，合成数据验证）：`real_unified_v5 train --resume` 接着同一个已登记的运行继续。进程在训练中途被杀时，从最近一个检查点（每 2000 步一个，原子写入并带哈希）接着训练；在开发集评价阶段被杀时，不再多训练一步，评价在新的 `inference_r<n>` 目录里重新做，不覆盖也不复用被杀那次的输出。续训前核对当前输入登记出的运行与已登记的运行完全相同；已写出总结或已记录失败的运行不续训。
 - 统一训练尚未启动。
 
 ## 真实 T07/T08 运行（2026-11-08，amax）

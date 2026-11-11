@@ -156,6 +156,88 @@ def test_training_never_holds_development_boxes(env, monkeypatch):
     assert seen == [["train"], ["development_val"]]
 
 
+def _values(node):
+    """A summary without checkpoint hashes: a checkpoint's bytes hold its wall time, so two runs never share one."""
+    if isinstance(node, dict):
+        return {key: _values(value) for key, value in node.items() if "checkpoint" not in key}
+    return [_values(item) for item in node] if isinstance(node, list) else node
+
+
+def _events(root):
+    lines = (root / "runs" / "train-u" / "metrics.jsonl").read_text().splitlines()
+    return [json.loads(line)["event"] for line in lines if line]
+
+
+def test_training_resumes_from_the_last_checkpoint_after_a_kill(env, monkeypatch, tmp_path):
+    """A process killed after the step-2 checkpoint: `resume=True` continues the same registered run to the end and
+    gives the development values of an uninterrupted run."""
+    reference = run_unified_training_v5(**dict(env.train_kwargs, private_root=tmp_path / "reference"))
+    original = real_unified_module.train_unified_v5
+
+    def killed_after_step_2(*args, **kwargs):
+        original(*args, **kwargs, pause_at=2)
+        raise RuntimeError("killed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(real_unified_module, "train_unified_v5", killed_after_step_2)
+        with pytest.raises(RuntimeError):
+            run_unified_training_v5(**env.train_kwargs)
+    root = env.train_kwargs["private_root"]
+    assert not (root / "summary.json").exists()
+    summary = run_unified_training_v5(**env.train_kwargs, resume=True)
+    assert summary["status"] == "COMPLETED" and summary["training"]["step"] == 4, summary
+    assert summary["run"] == reference["run"] and _values(summary["members"]) == _values(reference["members"])
+    events = _events(root)
+    assert events.count("step") == 4 and events.count("resume") == 1
+    _raises("RUN_ALREADY_FINISHED", "$.run", run_unified_training_v5, **env.train_kwargs, resume=True)
+
+
+def test_evaluation_restarts_from_the_final_checkpoint_after_a_kill(env, monkeypatch, tmp_path):
+    """A process killed during the development inference: the resumed run trains no further step and writes every
+    development output into a new inference folder; nothing from the killed attempt is overwritten or reused."""
+    reference = run_unified_training_v5(**dict(env.train_kwargs, private_root=tmp_path / "reference"))
+    original, calls = real_unified_module._infer, []
+
+    def killed_at_second_scan(**kwargs):
+        if calls:
+            raise RuntimeError("killed")
+        calls.append(1)
+        return original(**kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(real_unified_module, "_infer", killed_at_second_scan)
+        with pytest.raises(RuntimeError):
+            run_unified_training_v5(**env.train_kwargs)
+    root = env.train_kwargs["private_root"]
+    assert not (root / "summary.json").exists() and (root / "inference").is_dir()
+    summary = run_unified_training_v5(**env.train_kwargs, resume=True)
+    assert summary["status"] == "COMPLETED" and summary["training"]["step"] == 4
+    assert _values(summary["members"]) == _values(reference["members"])
+    assert _events(root).count("step") == 4
+    sidecar = json.loads((root / "runs" / "train-u" / "checkpoints" / "step_00000004.pt.json").read_text())
+    assert summary["training"]["checkpoint_sha256"] == sidecar["sha256"]
+    assert sorted(p.name for p in (root / "inference_r1").iterdir()) == ["brain", "knee"]
+
+
+def test_resume_refuses_another_run_and_a_run_without_checkpoint(env, monkeypatch):
+    _raises("RESUME_RUN_MISSING", "$.run", run_unified_training_v5, **env.train_kwargs, resume=True)
+    original = real_unified_module.train_unified_v5
+
+    def killed_before_any_checkpoint(*args, **kwargs):
+        raise RuntimeError("killed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(real_unified_module, "train_unified_v5", killed_before_any_checkpoint)
+        with pytest.raises(RuntimeError):
+            run_unified_training_v5(**env.train_kwargs)
+    _raises("RESUME_NO_CHECKPOINT", "$.run", run_unified_training_v5, **env.train_kwargs, resume=True)
+    approvals = copy.deepcopy(env.train_kwargs["approvals"])
+    approvals["brain"]["approved_at"] = "2026-11-11"                 # a valid approval, but not the registered one
+    _raises("RESUME_RUN_MISMATCH", "$.run", run_unified_training_v5, **dict(env.train_kwargs, approvals=approvals),
+            resume=True)
+    assert original is real_unified_module.train_unified_v5
+
+
 def test_plan_hash_command_prints_the_hash(capsys):
     assert main(["plan-hash", "--plan", "configs/v5/proposals/unified_knee_brain.yaml", "--protocols",
                  "configs/v5/protocols_v5.yaml", "--policies", "configs/v5/sources_v5.yaml"]) == 0
