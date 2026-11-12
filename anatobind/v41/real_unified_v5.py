@@ -534,7 +534,9 @@ def _member_args(values: list) -> dict:
 
 def main(argv: list | None = None) -> int:
     """plan-hash: the unified plan's sha256 for the approvals. smoke / train: one run into a new --out.
-    gbase-gate: one member's five G-BASE evidence items and its G-BASE-A / G-BASE-U decisions."""
+    gbase-gate: one member's five G-BASE evidence items and its G-BASE-A / G-BASE-U decisions.
+    evaluate / replay: read the finished run --run-id under --run-root with its final checkpoint, never train,
+    and write into a new --out (real_unified_eval_v5); the members are given exactly as they were for train."""
     import argparse
     import os
 
@@ -552,14 +554,23 @@ def main(argv: list | None = None) -> int:
     repo = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(prog="anatobind.v41.real_unified_v5")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("plan-hash", "smoke", "gbase-gate", "train"):
+    for name in ("plan-hash", "smoke", "gbase-gate", "train", "evaluate", "replay"):
         command = sub.add_parser(name)
         for key in ("--plan", "--protocols", "--policies"):
             command.add_argument(key, required=True)
-        if name in ("smoke", "train"):
+        if name in ("smoke", "train", "evaluate", "replay"):
             for key in ("--raw", "--approvals", "--run-id", "--device", "--out"):
                 command.add_argument(key, required=True)
             command.add_argument("--member", action="append", required=True)
+        if name in ("evaluate", "replay"):
+            command.add_argument("--run-root", required=True, help="the private root of the finished training run")
+            command.add_argument("--max-wall-hours", required=True, type=float,
+                                 help="wall budget of this command; must fit in what the plan's budget has left")
+        if name == "evaluate":
+            command.add_argument("--role", action="append", required=True, choices=["train", "development_val"])
+        if name == "replay":
+            command.add_argument("--loss-steps", required=True, type=int,
+                                 help="patches per split on which the final weights' loss parts are recomputed")
         if name == "train":
             command.add_argument("--baseline-summary", action="append", default=[])
             command.add_argument("--resume", action="store_true",
@@ -637,12 +648,13 @@ def main(argv: list | None = None) -> int:
             "registry": verify_split_registry_v5(load_json(paths["split-registry"])), "source": sources[pid],
             "gdata_decision": load_json(paths["gdata-decision"]) if "gdata-decision" in paths else None,
             "gbase_decisions": {f"G-BASE-{task}": load_json(paths[f"gbase-{task.lower()}"]) for task in tasks}
-            if args.command == "train" else None,
+            if args.command != "smoke" else None,
             "smoke_evidence": load_json(paths["smoke-evidence"]) if "smoke-evidence" in paths else None,
             "box_references": Path(paths["box-references"]) if "box-references" in paths else None}
     out = Path(args.out)
+    reading = args.command in ("evaluate", "replay")                    # their driver refuses an existing --out
     resuming = args.command == "train" and args.resume
-    if not resuming:
+    if not resuming and not reading:
         out.mkdir(mode=0o700)                                           # never overwritten
         os.chmod(out, 0o700)
     common = {"plan": plan, "plan_sha256": digest, "protocols": protocols, "members": members,
@@ -658,6 +670,17 @@ def main(argv: list | None = None) -> int:
             write_private_json(out / f"smoke_evidence.{pid}.json",
                                training_smoke_evidence_v5(summary, markdown, protocols[pid]["scope"], sources[pid]))
         ok = summary["status"] == "PASS"
+    elif reading:
+        from . import real_unified_eval_v5 as finished
+
+        common.update(run_root=Path(args.run_root), max_wall_hours=args.max_wall_hours)
+        if args.command == "evaluate":
+            summary = finished.run_unified_evaluation_v5(**common, roles=list(args.role))
+            markdown, name = finished.render_unified_evaluation_md_v5(summary), "unified_evaluation.md"
+        else:
+            summary = finished.run_unified_replay_v5(**common, loss_steps=args.loss_steps)
+            markdown, name = finished.render_unified_replay_md_v5(summary), "unified_replay.md"
+        ok = summary["status"] == "COMPLETED"
     else:
         summary = run_unified_training_v5(**common, resume=resuming)
         baselines = {}
