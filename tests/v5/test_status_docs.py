@@ -372,3 +372,10 @@ def test_the_outside_count_of_the_original_report_is_recorded_with_its_real_defi
     assert "1034" in section and "异类主分析框" in section and "不能读作" in section
     summary = Path("reports/v5/context_summary_20261111.md").read_text(encoding="utf-8")
     assert "更正（2026-11-11" in summary and "异类主分析框" in summary
+
+
+def test_the_unified_training_section_carries_no_time_of_the_server():
+    """Rule of 2026-11-12: times come from the writing machine's clock only; nothing of the server's clock."""
+    section = _unified_training_section()
+    assert "CST" not in section and "amax 时间" not in section
+    assert not re.search(r"amax\s*20\d\d-\d\d-\d\d", section)

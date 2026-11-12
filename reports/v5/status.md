@@ -291,7 +291,7 @@ tasks:
 
 ## 统一训练结果（2026-11-11）
 
-时间用撰写本节的机器的时区（PST）；括号里是 amax 时间（CST，比 PST 快 16 小时）。
+时间只用撰写本节的机器（Mac）的时钟与时区（PST）；不取、不记服务器端的时间。
 
 **登记的是"运行完成，不是性能验证通过"。** 下面的数值是 development_val 上的描述，不计算区间，不形成阈值或临床判定；`scientific_conclusion` 仍为 NOT_EVALUATED，`core_target_validated` 仍为 `null`。
 
@@ -300,13 +300,13 @@ tasks:
 | 项 | 取值 |
 | --- | --- |
 | 运行号 | `unified_train_v2`（run_kind `unified_baseline`，非 fixture） |
-| 结束 | 2026-11-11 04:32 PST（amax 2026-11-11 20:32 CST），退出码 0，状态 COMPLETED |
+| 结束 | 退出码 0，状态 COMPLETED；本机于 2026-11-11（PST）核对到运行已结束 |
 | 代码版本 | `17b4656736d9e0ad2ecf0022a6e7abaf0e2370e4`，工作区干净 |
 | 计划 | `unified_knee_brain_v1`，sha256 `2f43a97185292644b2ab2f1c91a8a9eeb7dba4dbec274200758bac910d3aa71c` |
 | run_sha256 | `9019fb4f9d2f1450e85d455acfd2d144f50a3924f723a623cc40cd5d47b3e2e9` |
 | 最终检查点 sha256 | `5b1e8c6d14ca32f2a538bf43d04b61cdece62262fb2c34fadaa3b12466c72e35`（第 30000 步，选择规则 last） |
 | 原始报告 | `unified_training_20261111.md`，sha256 `3a3d312ffbd98fc2992967ce7b79fa1489eeeeffbc5dc8d0e34ea3e1c3b536fe` |
-| 设备与用时 | A800 80GB × 1；10.140 h（整体预算 20 h） |
+| 设备与用时 | A800 80GB × 1；原始报告记录的用时 10.140 h（运行自身的计时，只用于预算核算；整体预算 20 h） |
 | 环境 | Python 3.11.15，torch 2.5.1+cu121，numpy 2.4.4 |
 
 - 原始报告是 amax 上驱动写出的脱敏报告，逐字节原样入库（上表的 sha256 就是服务器上那份文件的）。以后的更正和补充统计都另写文件，不改这份报告。
