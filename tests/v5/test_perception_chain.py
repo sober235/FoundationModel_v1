@@ -325,3 +325,26 @@ def test_inference_reads_only_roles_the_run_registered(tmp_path):
     assert model.calls == 0 and not (root / "outputs").exists()
     output, path = infer("obs-dev", run, registry)
     assert output.observation_uid == "obs-dev" and path.is_file()
+
+
+def test_a_probe_sees_the_restored_probabilities_and_leaves_the_output_unchanged():
+    """Diagnostics read the probabilities the acceptance step used; the formal chain keeps binary maps only."""
+    scope = _joint()
+    policy = make_acceptance_policy(scope, instances={"min_voxels": 2})
+    batch = make_model_input_v5(scope, SHAPE, channels=_channels())
+
+    def run(**extra):
+        model = StubPerceptionModel(scope, ("A", "U"), anatomy_fn=_tissue_logits, abnormality_fn=_lesion_logits)
+        return run_perception_v5(model, batch, scope, relation_fn=_host_relations,
+                                 **_kwargs(scope, acceptance_policy=policy), **extra)
+
+    seen = {}
+    probed, plain = run(probe=seen.update), run()
+    assert set(seen) == {"anatomy", "abnormality"} and seen["abnormality"].shape == (2, *SHAPE)
+    lesion = seen["abnormality"][0]                         # sigmoid(16·1 − 8) inside the lesion, sigmoid(−8) outside
+    assert lesion[1, 1, 1] == pytest.approx(1 / (1 + np.exp(-8.0)), abs=1e-5)
+    assert lesion[0, 0, 0] == pytest.approx(1 / (1 + np.exp(8.0)), abs=1e-5)
+    assert np.array_equal(seen["abnormality"][0] >= 0.5, probed.abnormality_map[0])
+    for name in ("anatomy_map", "abnormality_map", "tissue_state_map"):
+        assert np.array_equal(getattr(probed, name), getattr(plain, name))
+    assert probed.abnormal_instances[0]["candidate_set_hash"] == plain.abnormal_instances[0]["candidate_set_hash"]

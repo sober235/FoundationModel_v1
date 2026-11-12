@@ -188,8 +188,11 @@ def state_policy_hash_v5(scope: ActiveScope, acceptance_policy: dict) -> str:
 
 def run_perception_v5(model: PerceptionModelV5, batch, scope: ActiveScope, *, observation_uid: str,
                       checkpoint_sha256: str, original_geometry: dict, acceptance_policy: dict, window: tuple,
-                      stride: tuple, precision: str, relation_fn=None):
-    """predict → restore → accept, then a validated ModuleOutput (module scope) or PerceptionOutput (joint)."""
+                      stride: tuple, precision: str, relation_fn=None, probe=None):
+    """predict → restore → accept, then a validated ModuleOutput (module scope) or PerceptionOutput (joint).
+
+    `probe`, when given, is called once with the restored probabilities {"anatomy": ..., "abnormality": ...} that
+    the acceptance step reads (original grid). It is for diagnostics: the output does not depend on it."""
     if not isinstance(scope, ActiveScope):
         raise V5Error("INVALID_TYPE", "$.scope")
     if not isinstance(model, PerceptionModelV5):
@@ -216,6 +219,8 @@ def run_perception_v5(model: PerceptionModelV5, batch, scope: ActiveScope, *, ob
     # The model-grid FOV maps back conservatively: in FOV only where every coarse voxel used is in FOV.
     fov = batch.valid_fov[0].detach().cpu().numpy().astype(np.float32)[None]
     valid_fov = restore_probabilities_v5(fov, chain, original_shape)[0][0] >= 1.0 - _FOV_TOLERANCE
+    if probe is not None:
+        probe(restored)
     decided = apply_acceptance_v5(restored, represented, valid_fov, acceptance_policy, scope)
 
     image = batch.image[0].detach().cpu().numpy()
