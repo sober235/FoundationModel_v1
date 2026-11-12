@@ -104,3 +104,49 @@ def test_anatomy_dice_matches_a_hand_value_and_is_none_when_both_are_empty():
     eligible = np.ones((4, 4, 1), dtype=bool)
     assert anatomy_dice_v5(pred, truth, eligible, ["tissue_a", "tissue_b"]) == {"tissue_a": 0.5, "tissue_b": None}
     assert anatomy_dice_v5(pred, truth, ~eligible, ["tissue_a", "tissue_b"]) == {"tissue_a": None, "tissue_b": None}
+
+
+# ---------------------------------------------------------------------------
+# Where a finding lies: four exclusive places with a fixed precedence (2026-11-11 correction of "outside")
+
+from anatobind.v41.evaluation.findings_v5 import finding_location_v5  # noqa: E402
+
+P_CARTILAGE = _box("included", "primary", "cartilage_lesion", "femoral_cartilage", [0, 0, 0], [4, 4, 2])
+P_MENISCUS = _box("included", "primary", "meniscal_tear", "meniscus", [10, 10, 0], [2, 2, 2])
+IGNORED = _box("included", "secondary", "cartilage_lesion", "patellar_cartilage", [20, 0, 0], [2, 2, 2])
+IGNORED_ON_MENISCUS = _box("excluded", "primary", "meniscal_tear", "meniscus", [11, 11, 0], [2, 2, 2])
+PLACES = _reference("s-0", [P_CARTILAGE, P_MENISCUS, IGNORED, IGNORED_ON_MENISCUS])
+
+
+def _at(cls, anchor):
+    return _finding("inst-0001", cls, anchor, [1, 1, 1], anchor, 1, None)
+
+
+@pytest.mark.parametrize("cls, anchor, location, other_primary, ignored", [
+    ("cartilage_lesion", [1, 1, 0], "same_class_primary", False, False),
+    ("meniscal_tear", [1, 1, 0], "other_class_primary", True, False),       # the original count calls this "outside"
+    ("cartilage_lesion", [20, 0, 0], "ignored", False, True),
+    ("cartilage_lesion", [11, 11, 0], "ignored", True, True),               # ignore region before another class's box
+    ("meniscal_tear", [11, 11, 0], "same_class_primary", False, True),      # its own class's box before everything
+    ("meniscal_tear", [30, 30, 0], "outside_all", False, False),
+])
+def test_a_finding_lies_in_exactly_one_of_four_places(cls, anchor, location, other_primary, ignored):
+    assert finding_location_v5(_at(cls, anchor), PLACES) == {
+        "location": location, "in_other_class_primary": other_primary, "in_ignored": ignored}
+
+
+def test_the_four_places_split_the_original_three_counts_without_changing_them():
+    findings = [_at(cls, anchor) for cls, anchor in (
+        ("cartilage_lesion", [1, 1, 0]), ("meniscal_tear", [1, 1, 0]), ("cartilage_lesion", [20, 0, 0]),
+        ("cartilage_lesion", [11, 11, 0]), ("meniscal_tear", [11, 11, 0]), ("meniscal_tear", [30, 30, 0]))]
+    row = score_findings_v5(findings, PLACES, "synthetic:p0", CLASSES, THRESHOLDS)
+    assert row["findings"] == {"total": 6, "in_reference": 2, "in_ignored": 2, "outside": 2}      # unchanged
+    places = [finding_location_v5(finding, PLACES)["location"] for finding in findings]
+    assert places.count("same_class_primary") == 2 and places.count("ignored") == 2
+    assert places.count("other_class_primary") + places.count("outside_all") == 2                # = "outside"
+
+
+def test_the_report_no_longer_says_that_the_rest_lies_outside_every_box():
+    text = render_findings_eval_md_v5(summarize_findings_v5([_row()]))
+    assert "在所有框外" not in text and "医生框外的所见" not in text
+    assert "其余 1（含定位点落在异类主分析框内的所见）" in text

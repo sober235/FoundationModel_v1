@@ -79,6 +79,15 @@ def host_relation_fn_v5(groups: dict, groups_by_class: dict):
     return relation_fn
 
 
+def host_of_relation_v5(relation: dict | None, ids: dict) -> tuple:
+    """(tissue group, status) of one instance's relation: bound when its tissues all belong to one group."""
+    if relation is not None and relation["status"] == "bound":
+        owners = [group for group, members in sorted(ids.items()) if set(relation["tissue_ids"]) <= set(members)]
+        if owners:
+            return owners[0], "bound"
+    return None, "undetermined"
+
+
 def _anchor(mask: np.ndarray) -> list:
     coordinates = np.argwhere(mask)                       # lexicographic order, so the first minimum is the lowest
     distance = ((coordinates - coordinates.mean(axis=0)) ** 2).sum(axis=1)
@@ -101,12 +110,7 @@ def findings_from_output_v5(output, scope: ActiveScope, acceptance_policy: dict,
         start, stop = instance["bbox"][:ndim], instance["bbox"][ndim:]
         host_group, host_status = None, "not_reported"
         if ids is not None:
-            relation = relations.get(instance["instance_uid"])
-            host_status = "undetermined"
-            if relation is not None and relation["status"] == "bound":
-                owners = [group for group, members in sorted(ids.items()) if set(relation["tissue_ids"]) <= set(members)]
-                if owners:
-                    host_group, host_status = owners[0], "bound"
+            host_group, host_status = host_of_relation_v5(relations.get(instance["instance_uid"]), ids)
         findings.append({"finding_uid": instance["instance_uid"], "abnormality_class": instance["class_name"],
                          "box": {"start": [int(v) for v in start], "size": [int(b - a) for a, b in zip(start, stop)]},
                          "anchor": _anchor(np.asarray(instance["mask"], dtype=bool)),

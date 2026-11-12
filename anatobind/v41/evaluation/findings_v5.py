@@ -4,9 +4,15 @@ The reference is the readers' primary boxes. A box is hit when a finding of its 
 box; the host is correct when the hit finding (the largest candidate) names the box's tissue group. Every
 denominator is the full set of primary boxes: a missed box counts against sensitivity, host accuracy and IoBB.
 
-Findings outside every box are counted, never called false positives: the release has no confirmed negatives, so
-an unmarked place is not a normal place. Boxes the readers drew outside the primary analysis are ignore regions.
-Rows carry a patient id for patient-equal summaries; summaries and reports carry counts and metrics only.
+Findings that match no box of their class are counted, never called false positives: the release has no confirmed
+negatives, so an unmarked place is not a normal place. Boxes the readers drew outside the primary analysis are
+ignore regions. Rows carry a patient id for patient-equal summaries; summaries and reports carry counts and metrics
+only.
+
+The three counts of a row are decided by the anchor in this order: `in_reference` (a primary box of the finding's
+class), else `in_ignored` (any ignore region), else `outside`. `outside` is therefore "the rest": it also holds a
+finding whose anchor lies in a primary box of ANOTHER class, and is not "geometrically outside every box".
+finding_location_v5 splits that rest in two without changing the three counts.
 """
 from __future__ import annotations
 
@@ -63,6 +69,25 @@ def score_findings_v5(findings: list, reference: dict, patient_uid: str, classes
                        for cls, group in pairs]
     return {"patient_uid": patient_uid, "classes": list(classes), "iobb_thresholds": [float(t) for t in iobb_thresholds],
             "boxes": boxes, "findings": counts, "tissue_positive": tissue_positive}
+
+
+LOCATIONS = ("same_class_primary", "ignored", "other_class_primary", "outside_all")
+
+
+def finding_location_v5(finding: dict, reference: dict) -> dict:
+    """Where the anchor of one finding lies: exactly one of LOCATIONS, decided in that order.
+
+    same_class_primary = score_findings_v5's in_reference; ignored = its in_ignored; other_class_primary and
+    outside_all together are its `outside`. An anchor inside both an ignore region and another class's primary box
+    is `ignored`, as in the original count. The two flags tell the memberships whatever the precedence."""
+    primary = [box for box in reference["boxes"] if _is_primary(box)]
+    inside = [box for box in primary if _inside(finding["anchor"], box["box"])]
+    same = any(box["abnormality_class"] == finding["abnormality_class"] for box in inside)
+    other = any(box["abnormality_class"] != finding["abnormality_class"] for box in inside)
+    ignored = any(_inside(finding["anchor"], box["box"]) for box in reference["boxes"] if not _is_primary(box))
+    location = "same_class_primary" if same else "ignored" if ignored else "other_class_primary" if other \
+        else "outside_all"
+    return {"location": location, "in_other_class_primary": other, "in_ignored": ignored}
 
 
 def _ratio(numerator: float, denominator: float):
@@ -125,8 +150,9 @@ def render_findings_eval_md_v5(summary: dict) -> str:
     lines += [f"| {threshold} | {_cell(value)} |" for threshold, value in overall["iobb_at"].items()]
     counts = overall["findings"]
     lines += ["", f"- 所见总数 {counts['total']}：定位点在同类主分析框内 {counts['in_reference']}，"
-                  f"在非主分析框（忽略区）内 {counts['in_ignored']}，在所有框外 {counts['outside']}",
-              f"- 医生框外的所见，每次扫描平均 {_cell(overall['findings_outside_reference_per_scan'])}"
+                  f"在非主分析框（忽略区）内 {counts['in_ignored']}，"
+                  f"其余 {counts['outside']}（含定位点落在异类主分析框内的所见）",
+              f"- 其余所见，每次扫描平均 {_cell(overall['findings_outside_reference_per_scan'])}"
               f"（{OUTSIDE_NOTE}：医生没有标注不等于正常）"]
     return "\n".join(lines) + "\n"
 
