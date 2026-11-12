@@ -379,3 +379,101 @@ def test_the_unified_training_section_carries_no_time_of_the_server():
     section = _unified_training_section()
     assert "CST" not in section and "amax 时间" not in section
     assert not re.search(r"amax\s*20\d\d-\d\d-\d\d", section)
+
+
+UNIFIED_EVALUATION_SERVER_SHA256 = "a14d21f814b985aa2abca2b6a374a2afcf36ea26a1421260c3b74b6c9096c49d"
+UNIFIED_EVALUATION_COPY_SHA256 = "338045de5fcdc53355d0848c9485e3cce1f7882236c41489c3b577d56288c5ae"
+UNIFIED_REPLAY_SERVER_SHA256 = "75cf09da0fbc4bd7ab17501d3f78a797746abafffc12b72c55a2c79a5298aa2d"
+UNIFIED_REPLAY_COPY_SHA256 = "4a5ab680e0b9577131f54fc7de2e5dc2b09cf4b3e5d5046bf34c17d6cb4016ea"
+UNIFIED_EVALUATION_CODE = "cfd88c6b378693337592b2e9d9318418b04e11c6"
+DURATION_MARK = "用时 [服务器端计时，未取回]"
+_REDACTED = (PRIVATE_PATH_PATTERN, r"/(Users|home|data|mnt|srv|opt)/", _CASE_OR_FILE)
+
+
+def _unified_diagnostics_section() -> str:
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    assert "## 统一模型诊断（2026-11-12）" in status
+    return status.split("## 统一模型诊断（2026-11-12）", 1)[1].split("\n## ", 1)[0]
+
+
+def test_evaluation_and_replay_reports_are_archived_with_only_the_duration_replaced():
+    """The server's own measured duration is replaced before the report leaves the server (rule of 2026-11-12)."""
+    for name, digest, phrases in (
+            ("unified_evaluation_20261112.md", UNIFIED_EVALUATION_COPY_SHA256,
+             ("读取的划分角色：train、development_val；locked_test 未读", "不能代替泛化评价",
+              "| 命中的框 | 24 | 11 |", "| 有保留的连通块触及框，但定位点在框外 | 82 | 42 |")),
+            ("unified_replay_20261112.md", UNIFIED_REPLAY_COPY_SHA256,
+             ("逐步核对", "共 60000 项，不一致 0 项", "没有记录", "从未出现的袋 0 个"))):
+        data = Path("reports/v5", name).read_bytes()
+        assert hashlib.sha256(data).hexdigest() == digest
+        text = data.decode("utf-8")
+        assert text.count(DURATION_MARK) == 1 and not re.search(r"用时 [0-9]", text)
+        assert not any(re.search(pattern, text) for pattern in _REDACTED)
+        for phrase in (UNIFIED_PLAN_SHA256, UNIFIED_CHECKPOINT_SHA256, UNIFIED_EVALUATION_CODE, "结果：COMPLETED",
+                       "scientific_conclusion: NOT_EVALUATED", "权重未被修改", *phrases):
+            assert phrase in text
+
+
+def test_unified_diagnostics_are_recorded_as_diagnostics_of_the_fixed_checkpoint():
+    section = _unified_diagnostics_section()
+    for phrase in ("unified_evaluation_20261112.md", "unified_replay_20261112.md", "unified_diagnostics_20261112.md",
+                   UNIFIED_EVALUATION_SERVER_SHA256, UNIFIED_EVALUATION_COPY_SHA256, UNIFIED_REPLAY_SERVER_SHA256,
+                   UNIFIED_REPLAY_COPY_SHA256, UNIFIED_CHECKPOINT_SHA256, UNIFIED_EVALUATION_CODE,
+                   "权重未被修改", "locked_test 未读", "NOT_EVALUATED", "不能代替泛化评价", "不是性能验证",
+                   "没有重训", "计划取值没有改动", "没有推送"):
+        assert phrase in section
+    for row in ("| 主分析框 | 106 | 53 |", "| 命中的框 | 24 | 11 |", "| 框命中率（合并） | 0.226 | 0.208 |",
+                "| 有保留的连通块触及框，但定位点在框外 | 82 | 42 |"):
+        assert row in section
+    meta = _front_matter()
+    assert meta["scientific_conclusion"] == "NOT_EVALUATED" and meta["core_target_validated"] is None
+
+
+def test_the_four_places_of_the_findings_split_the_original_counts():
+    section = _unified_diagnostics_section()
+    places = {label: (int(train), int(dev))
+              for label, train, dev in re.findall(r"\| (定位点在[^|]+?) \| (\d+) \| (\d+) \|", section)}
+    assert set(places) == {"定位点在同类主分析框内", "定位点在忽略区内", "定位点在异类主分析框内", "定位点在所有参照框之外"}
+    assert tuple(map(sum, zip(*places.values()))) == (2847, 1148)                 # every finding in exactly one place
+    assert places["定位点在同类主分析框内"][1] == 11 and places["定位点在忽略区内"][1] == 103       # the original counts
+    assert places["定位点在异类主分析框内"][1] + places["定位点在所有参照框之外"][1] == 1034         # the original `outside`
+    for phrase in ("同类主分析框 → 忽略区 → 异类主分析框 → 所有参照框之外", "不是误报"):
+        assert phrase in section
+
+
+def test_the_diagnostic_report_separates_facts_explanations_and_hypotheses():
+    text = Path("reports/v5/unified_diagnostics_20261112.md").read_text(encoding="utf-8")
+    for heading in ("已确定的事实", "证据支持的解释", "仍待检验的假设", "各个可能原因的证据强度", "最小改动"):
+        assert re.search(rf"^#+ .*{heading}", text, flags=re.M), heading
+    for phrase in ("unified_training_20261111.md", UNIFIED_REPORT_SHA256, UNIFIED_EVALUATION_SERVER_SHA256,
+                   UNIFIED_REPLAY_SERVER_SHA256, UNIFIED_CHECKPOINT_SHA256, "NOT_EVALUATED", "不能代替泛化评价",
+                   "不是误报", "缺失", "仅诊断", "未执行", "locked_test 未读"):
+        assert phrase in text
+    assert not any(re.search(pattern, text) for pattern in _REDACTED)
+    assert "CST" not in text and "amax 时间" not in text
+
+
+def test_the_supplementary_aggregates_carry_counts_only():
+    import json
+
+    folder = Path("reports/v5/unified_diagnostics_20261112")
+    report = Path("reports/v5/unified_diagnostics_20261112.md").read_text(encoding="utf-8")
+    for name in ("rows_aggregate.json", "rows_by_boxes.json", "rows_aggregate.py", "rows_by_boxes.py"):
+        data = (folder / name).read_bytes()
+        assert hashlib.sha256(data).hexdigest() in report                      # the report names what it used
+        text = data.decode("utf-8")
+        assert not any(re.search(pattern, text) for pattern in _REDACTED)
+        if name.endswith(".json"):
+            body = json.loads(text)
+            assert set(body) == {"train", "development_val"}                   # locked_test is not in it
+            assert "patient_uid" not in text and "sample_uid" not in text and "finding_uid" not in text
+    by_boxes = json.loads((folder / "rows_by_boxes.json").read_text(encoding="utf-8"))
+    assert by_boxes["train"]["n_scans"] == 86 and by_boxes["development_val"]["n_scans"] == 33
+    assert by_boxes["train"]["scans_without_any_box"]["n"] == 18
+
+
+def test_status_carries_no_clock_of_the_server():
+    """Rule of 2026-11-12, now for the whole file."""
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    assert "CST" not in status and "amax 时间" not in status
+    assert not re.search(r"amax\s*20\d\d-\d\d-\d\d", status)
