@@ -329,3 +329,46 @@ def test_unified_smoke_report_is_redacted_and_recorded():
     status = Path("reports/v5/status.md").read_text(encoding="utf-8")
     assert "统一冒烟第二次运行" in status and plan_hash in status and "训练未开始" in status
 
+
+
+UNIFIED_REPORT_SHA256 = "3a3d312ffbd98fc2992967ce7b79fa1489eeeeffbc5dc8d0e34ea3e1c3b536fe"
+UNIFIED_PLAN_SHA256 = "2f43a97185292644b2ab2f1c91a8a9eeb7dba4dbec274200758bac910d3aa71c"
+UNIFIED_CHECKPOINT_SHA256 = "5b1e8c6d14ca32f2a538bf43d04b61cdece62262fb2c34fadaa3b12466c72e35"
+_CASE_OR_FILE = r"sub-[a-z]+[0-9]|[A-Z]{3}_[0-9]{3}|\.nii|\.h5"
+
+
+def _unified_training_section() -> str:
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    assert "## 统一训练结果（2026-11-11）" in status
+    return status.split("## 统一训练结果（2026-11-11）", 1)[1].split("\n## ", 1)[0]
+
+
+def test_unified_training_report_is_archived_byte_for_byte():
+    data = Path("reports/v5/unified_training_20261111.md").read_bytes()
+    assert hashlib.sha256(data).hexdigest() == UNIFIED_REPORT_SHA256           # the server's report, unchanged
+    text = data.decode("utf-8")
+    assert not re.search(PRIVATE_PATH_PATTERN, text) and not re.search(r"/(Users|home|data|mnt|srv|opt)/", text)
+    assert not re.search(_CASE_OR_FILE, text)
+    for phrase in (UNIFIED_PLAN_SHA256, UNIFIED_CHECKPOINT_SHA256, "结果：COMPLETED",
+                   "scientific_conclusion: NOT_EVALUATED", "locked_test 未读"):
+        assert phrase in text
+
+
+def test_unified_training_is_recorded_as_a_completed_run_not_as_validated_performance():
+    section = _unified_training_section()
+    for phrase in ("unified_training_20261111.md", UNIFIED_REPORT_SHA256, UNIFIED_PLAN_SHA256,
+                   UNIFIED_CHECKPOINT_SHA256, "17b4656736d9e0ad2ecf0022a6e7abaf0e2370e4",
+                   "运行完成，不是性能验证通过", "NOT_EVALUATED", "locked_test"):
+        assert phrase in section
+    for row in ("| 脑 | 梗死 Dice | 0.756 | 0.752 | +0.004 |", "| 脑 | 病灶检出率 | 0.638 | 0.641 | -0.002 |",
+                "| 膝 | 半月板（外侧）Dice | 0.815 | 0.831 | -0.016 |", "| 合计 | 53 | 11 | 0.208 | 9 | 0.170 |"):
+        assert row in section                                    # the original development values, unchanged
+    meta = _front_matter()
+    assert meta["scientific_conclusion"] == "NOT_EVALUATED" and meta["core_target_validated"] is None
+
+
+def test_the_outside_count_of_the_original_report_is_recorded_with_its_real_definition():
+    section = _unified_training_section()
+    assert "1034" in section and "异类主分析框" in section and "不能读作" in section
+    summary = Path("reports/v5/context_summary_20261111.md").read_text(encoding="utf-8")
+    assert "更正（2026-11-11" in summary and "异类主分析框" in summary
