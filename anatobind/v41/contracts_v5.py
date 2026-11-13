@@ -35,7 +35,9 @@ def canonical_sha256(value: object) -> str:
 
 def array_sha256(array: np.ndarray) -> str:
     header = f"{array.dtype.str}|{list(array.shape)}|".encode()
-    return hashlib.sha256(header + np.ascontiguousarray(array).tobytes()).hexdigest()
+    digest = hashlib.sha256(header)
+    digest.update(np.ascontiguousarray(array).reshape(-1).view(np.uint8))   # the bytes in C order, without a copy
+    return digest.hexdigest()
 
 
 UNKNOWN_KEY = "<unknown>"
@@ -145,6 +147,7 @@ class SampleV5(SampleRecord):
     model_modalities: list[str]
     index_alignment_status: str
     physical_geometry_status: str
+    geometry_evidence: dict
 
 
 def _build(cls, record: dict):
@@ -172,6 +175,9 @@ def validate_sample_v5(record: dict) -> SampleV5:
         raise V5Error("MODALITY_LENGTH_MISMATCH", "$.image_paths")
     if not set(record["model_modalities"]) <= set(record["modality_names"]):
         raise V5Error("MODEL_MODALITY_UNKNOWN", "$.model_modalities")
+    for status, key in (("index_alignment_status", "index_alignment"), ("physical_geometry_status", "physical_geometry")):
+        if record[status] == "verified" and not record["geometry_evidence"][key]:
+            raise V5Error("GEOMETRY_EVIDENCE_MISSING", f"$.geometry_evidence.{key}")
     body = dict(record)
     body["annotation_records"] = [
         _validate_annotation_v5(item, f"$.annotation_records[{i}]")

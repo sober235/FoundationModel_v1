@@ -1,0 +1,47 @@
+# SKM-TEA released 3D boxes and tissue_id as early-phase reference candidates (Proposal_v5 §5.0; plan_v5 T11).
+# The values encode S1–S7 of reports/v5/early_phase_scope_research_20261107.md, adopted by the researcher on
+# 2026-11-07. Names come from the release's own `categories` and `tissues` tables; integer ids are never mapped
+# directly (v4.1 supervision contract). A box is box-level U and its tissue_id tissue-level R: neither becomes
+# voxel truth, and a scan or tissue without a box is annotation_unknown, never negative.
+policy_id: skm_box_reference_v1
+source: {source_id: skm_tea, source_version: skm_tea_annotations_v1.0.0}
+# bbox = [X, Y, Z, dX, dY, dZ] in the axis order of the H5 seg array (same_case_label_check_amax.md);
+# a box covers the voxels [X, X + dX) x [Y, Y + dY) x [Z, Z + dZ).
+box_format: start_size_seg_axes
+targets:                                        # S1 primary, S2 grade 1 secondary
+  "Cartilage Lesion (2A)": {abnormality: cartilage_lesion, analysis: primary}
+  "Cartilage Lesion (2B)": {abnormality: cartilage_lesion, analysis: primary}
+  "Cartilage Lesion (3)": {abnormality: cartilage_lesion, analysis: primary}
+  "Cartilage Lesion (1)": {abnormality: cartilage_lesion, analysis: secondary}
+  "Meniscal Tear (Myxoid)": {abnormality: meniscal_tear, analysis: primary}
+  "Meniscal Tear (Horizontal)": {abnormality: meniscal_tear, analysis: primary}
+  "Meniscal Tear (Radial)": {abnormality: meniscal_tear, analysis: primary}
+  "Meniscal Tear (Vertical/Longitudinal)": {abnormality: meniscal_tear, analysis: primary}
+  "Meniscal Tear (Oblique)": {abnormality: meniscal_tear, analysis: primary}
+  "Meniscal Tear (Complex)": {abnormality: meniscal_tear, analysis: primary}
+  "Meniscal Tear (Flap)": {abnormality: meniscal_tear, analysis: primary}
+out_of_scope_categories:                        # S3: not in the joint scope
+  - "Meniscal Tear (Extrusion)"
+  - "Ligament Tear (Low-Grade Sprain)"
+  - "Ligament Tear (Moderate Grade Sprain or Mucoid Degeneration)"
+  - "Ligament Tear (Full Thickness/Complete Tear)"
+  - "Effusion"
+supercategory_hosts:                            # S5: any other category/tissue pair is a mismatch
+  "Cartilage Lesion": ["Femoral Cartilage", "Patellar Cartilage", "Tibial Cartilage"]
+  "Meniscal Tear": ["Meniscus"]
+  "Ligament Tear": ["ACL", "PCL"]
+  "Effusion": [no_host]
+no_host_tissue_id: -1                           # effusion carries tissue_id -1
+host_tissues:                                   # S6 primary: four tissue groups and their A6 channels
+  "Femoral Cartilage": {group: femoral_cartilage, anatomy: [femoral_cartilage]}
+  "Patellar Cartilage": {group: patellar_cartilage, anatomy: [patellar_cartilage]}
+  "Tibial Cartilage": {group: tibial_cartilage, anatomy: [tibial_cartilage_medial, tibial_cartilage_lateral]}
+  "Meniscus": {group: meniscus, anatomy: [meniscus_medial, meniscus_lateral]}
+out_of_scope_tissues: ["ACL", "PCL"]            # no segmentation
+tissue_groups_by_class:
+  cartilage_lesion: [femoral_cartilage, patellar_cartilage, tibial_cartilage]
+  meniscal_tear: [meniscus]
+min_confidence: 1                               # S4: only confidence 0 is excluded
+sides:                                          # S6 secondary: medial/lateral from box ∩ reference A
+  tibial_cartilage: {medial: tibial_cartilage_medial, lateral: tibial_cartilage_lateral}
+  meniscus: {medial: meniscus_medial, lateral: meniscus_lateral}

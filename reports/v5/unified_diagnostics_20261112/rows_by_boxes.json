@@ -1,0 +1,724 @@
+{
+ "development_val": {
+  "ignore_union_voxels_per_scan": {
+   "max": 7433846.0,
+   "mean": 1214227.2,
+   "min": 0.0,
+   "n": 33,
+   "p10": 0.0,
+   "p25": 0.0,
+   "p50": 113458.0,
+   "p75": 1902630.0,
+   "p90": 2794393.2
+  },
+  "ignore_union_voxels_total": 40069496,
+  "join_checked": true,
+  "n_scans": 33,
+  "non_primary_boxes_per_scan": {
+   "max": 6.0,
+   "mean": 1.5,
+   "min": 0.0,
+   "n": 33,
+   "p10": 0.0,
+   "p25": 0.0,
+   "p50": 2.0,
+   "p75": 2.0,
+   "p90": 3.0
+  },
+  "non_primary_boxes_total": 51,
+  "non_primary_by_class": {
+   "None": 38,
+   "cartilage_lesion": 13
+  },
+  "non_primary_by_status_analysis": {
+   "excluded/None": 8,
+   "included/secondary": 13,
+   "out_of_scope/None": 30
+  },
+  "primary_union_voxels_total": {
+   "cartilage_lesion": 2165206,
+   "meniscal_tear": 586041
+  },
+  "scans_with_a_primary_box": {
+   "cartilage_lesion": {
+    "largest_finding_voxels_per_scan": {
+     "max": 67330.0,
+     "mean": 38787.5,
+     "min": 14675.0,
+     "n": 23,
+     "p10": 30604.6,
+     "p25": 32294.5,
+     "p50": 39676.0,
+     "p75": 44739.5,
+     "p90": 47072.4
+    },
+    "positive_voxels_per_scan": {
+     "max": 84405.0,
+     "mean": 57062.9,
+     "min": 42600.0,
+     "n": 23,
+     "p10": 46612.8,
+     "p25": 49837.0,
+     "p50": 55003.0,
+     "p75": 60938.0,
+     "p90": 69730.8
+    },
+    "scans_with_a_finding_of_at_least_10000": 23
+   },
+   "findings_per_scan": {
+    "max": 58.0,
+    "mean": 34.5,
+    "min": 26.0,
+    "n": 23,
+    "p10": 26.0,
+    "p25": 27.5,
+    "p50": 33.0,
+    "p75": 37.0,
+    "p90": 45.8
+   },
+   "meniscal_tear": {
+    "largest_finding_voxels_per_scan": {
+     "max": 10453.0,
+     "mean": 5142.8,
+     "min": 1895.0,
+     "n": 23,
+     "p10": 2720.4,
+     "p25": 3245.0,
+     "p50": 4305.0,
+     "p75": 6367.5,
+     "p90": 8299.4
+    },
+    "positive_voxels_per_scan": {
+     "max": 25619.0,
+     "mean": 15004.4,
+     "min": 8381.0,
+     "n": 23,
+     "p10": 9781.8,
+     "p25": 11440.5,
+     "p50": 15660.0,
+     "p75": 17175.5,
+     "p90": 18994.8
+    },
+    "scans_with_a_finding_of_at_least_1000": 23
+   },
+   "n": 23
+  },
+  "scans_with_only_non_primary_boxes": {
+   "cartilage_lesion": {
+    "largest_finding_voxels_per_scan": {
+     "max": 44169.0,
+     "mean": 35713.5,
+     "min": 24523.0,
+     "n": 4,
+     "p10": 26248.3,
+     "p25": 28836.2,
+     "p50": 37081.0,
+     "p75": 43958.2,
+     "p90": 44084.7
+    },
+    "positive_voxels_per_scan": {
+     "max": 61623.0,
+     "mean": 55568.5,
+     "min": 47837.0,
+     "n": 4,
+     "p10": 49538.9,
+     "p25": 52091.8,
+     "p50": 56407.0,
+     "p75": 59883.8,
+     "p90": 60927.3
+    },
+    "scans_with_a_finding_of_at_least_10000": 4
+   },
+   "findings_per_scan": {
+    "max": 41.0,
+    "mean": 35.5,
+    "min": 30.0,
+    "n": 4,
+    "p10": 31.2,
+    "p25": 33.0,
+    "p50": 35.5,
+    "p75": 38.0,
+    "p90": 39.8
+   },
+   "meniscal_tear": {
+    "largest_finding_voxels_per_scan": {
+     "max": 7137.0,
+     "mean": 4350.2,
+     "min": 2856.0,
+     "n": 4,
+     "p10": 3078.3,
+     "p25": 3411.8,
+     "p50": 3704.0,
+     "p75": 4642.5,
+     "p90": 6139.2
+    },
+    "positive_voxels_per_scan": {
+     "max": 17287.0,
+     "mean": 13227.8,
+     "min": 11326.0,
+     "n": 4,
+     "p10": 11373.7,
+     "p25": 11445.2,
+     "p50": 12149.0,
+     "p75": 13931.5,
+     "p90": 15944.8
+    },
+    "scans_with_a_finding_of_at_least_1000": 4
+   },
+   "n": 4
+  },
+  "scans_without_any_box": {
+   "cartilage_lesion": {
+    "largest_finding_voxels_per_scan": {
+     "max": 57212.0,
+     "mean": 45095.5,
+     "min": 33895.0,
+     "n": 6,
+     "p10": 34402.5,
+     "p25": 37939.8,
+     "p50": 47771.0,
+     "p75": 48888.8,
+     "p90": 53113.0
+    },
+    "positive_voxels_per_scan": {
+     "max": 70547.0,
+     "mean": 60136.3,
+     "min": 45852.0,
+     "n": 6,
+     "p10": 50108.5,
+     "p25": 54816.8,
+     "p50": 61341.0,
+     "p75": 67156.5,
+     "p90": 68959.5
+    },
+    "scans_with_a_finding_of_at_least_10000": 6
+   },
+   "findings_per_scan": {
+    "max": 46.0,
+    "mean": 35.3,
+    "min": 22.0,
+    "n": 6,
+    "p10": 27.0,
+    "p25": 32.2,
+    "p50": 34.0,
+    "p75": 41.8,
+    "p90": 45.0
+   },
+   "meniscal_tear": {
+    "largest_finding_voxels_per_scan": {
+     "max": 5606.0,
+     "mean": 4301.2,
+     "min": 2203.0,
+     "n": 6,
+     "p10": 2923.0,
+     "p25": 3790.8,
+     "p50": 4396.5,
+     "p75": 5311.2,
+     "p90": 5584.0
+    },
+    "positive_voxels_per_scan": {
+     "max": 16579.0,
+     "mean": 13307.7,
+     "min": 9768.0,
+     "n": 6,
+     "p10": 9879.5,
+     "p25": 10991.8,
+     "p50": 14195.0,
+     "p75": 14937.5,
+     "p90": 15848.5
+    },
+    "scans_with_a_finding_of_at_least_1000": 6
+   },
+   "n": 6
+  },
+  "scans_without_ignore_and_without_primary_cartilage_lesion": {
+   "cartilage_lesion": {
+    "largest_finding_voxels_per_scan": {
+     "max": 57212.0,
+     "mean": 43216.0,
+     "min": 32467.0,
+     "n": 9,
+     "p10": 33609.4,
+     "p25": 34910.0,
+     "p50": 46046.0,
+     "p75": 48513.0,
+     "p90": 50653.6
+    },
+    "positive_voxels_per_scan": {
+     "max": 70547.0,
+     "mean": 58470.3,
+     "min": 45852.0,
+     "n": 9,
+     "p10": 48376.8,
+     "p25": 54365.0,
+     "p50": 57851.0,
+     "p75": 66510.0,
+     "p90": 68007.0
+    },
+    "scans_with_a_finding_of_at_least_10000": 9
+   },
+   "findings_per_scan": {
+    "max": 46.0,
+    "mean": 32.6,
+    "min": 22.0,
+    "n": 9,
+    "p10": 25.2,
+    "p25": 27.0,
+    "p50": 32.0,
+    "p75": 35.0,
+    "p90": 44.4
+   },
+   "meniscal_tear": {
+    "largest_finding_voxels_per_scan": {
+     "max": 6116.0,
+     "mean": 4260.7,
+     "min": 2203.0,
+     "n": 9,
+     "p10": 2576.6,
+     "p25": 3643.0,
+     "p50": 4234.0,
+     "p75": 5562.0,
+     "p90": 5708.0
+    },
+    "positive_voxels_per_scan": {
+     "max": 16579.0,
+     "mean": 13335.9,
+     "min": 9768.0,
+     "n": 9,
+     "p10": 9946.4,
+     "p25": 11131.0,
+     "p50": 13994.0,
+     "p75": 15118.0,
+     "p90": 16431.8
+    },
+    "scans_with_a_finding_of_at_least_1000": 9
+   },
+   "n": 9
+  },
+  "scans_without_ignore_and_without_primary_meniscal_tear": {
+   "cartilage_lesion": {
+    "largest_finding_voxels_per_scan": {
+     "max": 57212.0,
+     "mean": 45287.3,
+     "min": 33895.0,
+     "n": 7,
+     "p10": 34504.0,
+     "p25": 40674.0,
+     "p50": 47029.0,
+     "p75": 48763.5,
+     "p90": 52293.2
+    },
+    "positive_voxels_per_scan": {
+     "max": 70547.0,
+     "mean": 61515.4,
+     "min": 45852.0,
+     "n": 7,
+     "p10": 50959.8,
+     "p25": 55268.5,
+     "p50": 66510.0,
+     "p75": 68581.0,
+     "p90": 70092.8
+    },
+    "scans_with_a_finding_of_at_least_10000": 7
+   },
+   "findings_per_scan": {
+    "max": 48.0,
+    "mean": 37.1,
+    "min": 22.0,
+    "n": 7,
+    "p10": 28.0,
+    "p25": 32.5,
+    "p50": 35.0,
+    "p75": 45.0,
+    "p90": 46.8
+   },
+   "meniscal_tear": {
+    "largest_finding_voxels_per_scan": {
+     "max": 7337.0,
+     "mean": 4734.9,
+     "min": 2203.0,
+     "n": 7,
+     "p10": 3067.0,
+     "p25": 3938.5,
+     "p50": 4559.0,
+     "p75": 5584.0,
+     "p90": 6298.4
+    },
+    "positive_voxels_per_scan": {
+     "max": 16579.0,
+     "mean": 13764.7,
+     "min": 9768.0,
+     "n": 7,
+     "p10": 9901.8,
+     "p25": 11992.5,
+     "p50": 14396.0,
+     "p75": 15812.5,
+     "p90": 16535.8
+    },
+    "scans_with_a_finding_of_at_least_1000": 7
+   },
+   "n": 7
+  }
+ },
+ "train": {
+  "ignore_union_voxels_per_scan": {
+   "max": 5424612.0,
+   "mean": 877798.4,
+   "min": 0.0,
+   "n": 86,
+   "p10": 0.0,
+   "p25": 0.0,
+   "p50": 116772.5,
+   "p75": 1376639.2,
+   "p90": 3206440.0
+  },
+  "ignore_union_voxels_total": 75490662,
+  "join_checked": true,
+  "n_scans": 86,
+  "non_primary_boxes_per_scan": {
+   "max": 5.0,
+   "mean": 1.6,
+   "min": 0.0,
+   "n": 86,
+   "p10": 0.0,
+   "p25": 0.2,
+   "p50": 1.0,
+   "p75": 2.0,
+   "p90": 3.0
+  },
+  "non_primary_boxes_total": 136,
+  "non_primary_by_class": {
+   "None": 106,
+   "cartilage_lesion": 30
+  },
+  "non_primary_by_status_analysis": {
+   "excluded/None": 12,
+   "included/secondary": 30,
+   "out_of_scope/None": 94
+  },
+  "primary_union_voxels_total": {
+   "cartilage_lesion": 6655233,
+   "meniscal_tear": 1675745
+  },
+  "scans_with_a_primary_box": {
+   "cartilage_lesion": {
+    "largest_finding_voxels_per_scan": {
+     "max": 67536.0,
+     "mean": 42597.7,
+     "min": 17026.0,
+     "n": 46,
+     "p10": 29410.0,
+     "p25": 35387.0,
+     "p50": 43439.0,
+     "p75": 47657.2,
+     "p90": 55203.0
+    },
+    "positive_voxels_per_scan": {
+     "max": 86040.0,
+     "mean": 59244.8,
+     "min": 29933.0,
+     "n": 46,
+     "p10": 45967.5,
+     "p25": 52041.0,
+     "p50": 58390.0,
+     "p75": 69245.2,
+     "p90": 73155.5
+    },
+    "scans_with_a_finding_of_at_least_10000": 46
+   },
+   "findings_per_scan": {
+    "max": 71.0,
+    "mean": 34.0,
+    "min": 19.0,
+    "n": 46,
+    "p10": 22.5,
+    "p25": 27.0,
+    "p50": 32.0,
+    "p75": 39.0,
+    "p90": 46.0
+   },
+   "meniscal_tear": {
+    "largest_finding_voxels_per_scan": {
+     "max": 14158.0,
+     "mean": 5439.4,
+     "min": 1874.0,
+     "n": 46,
+     "p10": 2520.0,
+     "p25": 3463.8,
+     "p50": 5495.5,
+     "p75": 6800.5,
+     "p90": 8849.0
+    },
+    "positive_voxels_per_scan": {
+     "max": 32892.0,
+     "mean": 15193.8,
+     "min": 5392.0,
+     "n": 46,
+     "p10": 8826.0,
+     "p25": 11515.5,
+     "p50": 14687.0,
+     "p75": 19225.8,
+     "p90": 21357.5
+    },
+    "scans_with_a_finding_of_at_least_1000": 46
+   },
+   "n": 46
+  },
+  "scans_with_only_non_primary_boxes": {
+   "cartilage_lesion": {
+    "largest_finding_voxels_per_scan": {
+     "max": 66251.0,
+     "mean": 36099.0,
+     "min": 14653.0,
+     "n": 22,
+     "p10": 22454.3,
+     "p25": 26401.5,
+     "p50": 32301.5,
+     "p75": 44826.8,
+     "p90": 52541.6
+    },
+    "positive_voxels_per_scan": {
+     "max": 79180.0,
+     "mean": 51489.1,
+     "min": 30349.0,
+     "n": 22,
+     "p10": 38581.6,
+     "p25": 43525.2,
+     "p50": 48966.0,
+     "p75": 58290.8,
+     "p90": 65672.3
+    },
+    "scans_with_a_finding_of_at_least_10000": 22
+   },
+   "findings_per_scan": {
+    "max": 48.0,
+    "mean": 31.4,
+    "min": 15.0,
+    "n": 22,
+    "p10": 18.2,
+    "p25": 26.2,
+    "p50": 30.0,
+    "p75": 38.8,
+    "p90": 45.7
+   },
+   "meniscal_tear": {
+    "largest_finding_voxels_per_scan": {
+     "max": 10158.0,
+     "mean": 4190.9,
+     "min": 1630.0,
+     "n": 22,
+     "p10": 2416.6,
+     "p25": 2693.5,
+     "p50": 3423.5,
+     "p75": 4857.5,
+     "p90": 7863.9
+    },
+    "positive_voxels_per_scan": {
+     "max": 25047.0,
+     "mean": 11818.6,
+     "min": 5665.0,
+     "n": 22,
+     "p10": 7204.4,
+     "p25": 8499.8,
+     "p50": 10293.5,
+     "p75": 12124.0,
+     "p90": 19514.0
+    },
+    "scans_with_a_finding_of_at_least_1000": 22
+   },
+   "n": 22
+  },
+  "scans_without_any_box": {
+   "cartilage_lesion": {
+    "largest_finding_voxels_per_scan": {
+     "max": 54762.0,
+     "mean": 38429.4,
+     "min": 23727.0,
+     "n": 18,
+     "p10": 26518.0,
+     "p25": 30760.0,
+     "p50": 39223.5,
+     "p75": 45955.2,
+     "p90": 48450.4
+    },
+    "positive_voxels_per_scan": {
+     "max": 103250.0,
+     "mean": 54135.4,
+     "min": 36041.0,
+     "n": 18,
+     "p10": 40712.1,
+     "p25": 44616.2,
+     "p50": 52293.5,
+     "p75": 59872.8,
+     "p90": 63303.9
+    },
+    "scans_with_a_finding_of_at_least_10000": 18
+   },
+   "findings_per_scan": {
+    "max": 122.0,
+    "mean": 32.9,
+    "min": 19.0,
+    "n": 18,
+    "p10": 19.0,
+    "p25": 22.2,
+    "p50": 29.5,
+    "p75": 31.0,
+    "p90": 39.0
+   },
+   "meniscal_tear": {
+    "largest_finding_voxels_per_scan": {
+     "max": 9982.0,
+     "mean": 4472.7,
+     "min": 1906.0,
+     "n": 18,
+     "p10": 2615.6,
+     "p25": 3288.0,
+     "p50": 3850.0,
+     "p75": 5576.2,
+     "p90": 7010.2
+    },
+    "positive_voxels_per_scan": {
+     "max": 22153.0,
+     "mean": 11924.8,
+     "min": 6798.0,
+     "n": 18,
+     "p10": 7670.9,
+     "p25": 8750.8,
+     "p50": 11474.0,
+     "p75": 14025.2,
+     "p90": 16999.3
+    },
+    "scans_with_a_finding_of_at_least_1000": 18
+   },
+   "n": 18
+  },
+  "scans_without_ignore_and_without_primary_cartilage_lesion": {
+   "cartilage_lesion": {
+    "largest_finding_voxels_per_scan": {
+     "max": 54762.0,
+     "mean": 38429.4,
+     "min": 23727.0,
+     "n": 18,
+     "p10": 26518.0,
+     "p25": 30760.0,
+     "p50": 39223.5,
+     "p75": 45955.2,
+     "p90": 48450.4
+    },
+    "positive_voxels_per_scan": {
+     "max": 103250.0,
+     "mean": 54135.4,
+     "min": 36041.0,
+     "n": 18,
+     "p10": 40712.1,
+     "p25": 44616.2,
+     "p50": 52293.5,
+     "p75": 59872.8,
+     "p90": 63303.9
+    },
+    "scans_with_a_finding_of_at_least_10000": 18
+   },
+   "findings_per_scan": {
+    "max": 122.0,
+    "mean": 32.9,
+    "min": 19.0,
+    "n": 18,
+    "p10": 19.0,
+    "p25": 22.2,
+    "p50": 29.5,
+    "p75": 31.0,
+    "p90": 39.0
+   },
+   "meniscal_tear": {
+    "largest_finding_voxels_per_scan": {
+     "max": 9982.0,
+     "mean": 4472.7,
+     "min": 1906.0,
+     "n": 18,
+     "p10": 2615.6,
+     "p25": 3288.0,
+     "p50": 3850.0,
+     "p75": 5576.2,
+     "p90": 7010.2
+    },
+    "positive_voxels_per_scan": {
+     "max": 22153.0,
+     "mean": 11924.8,
+     "min": 6798.0,
+     "n": 18,
+     "p10": 7670.9,
+     "p25": 8750.8,
+     "p50": 11474.0,
+     "p75": 14025.2,
+     "p90": 16999.3
+    },
+    "scans_with_a_finding_of_at_least_1000": 18
+   },
+   "n": 18
+  },
+  "scans_without_ignore_and_without_primary_meniscal_tear": {
+   "cartilage_lesion": {
+    "largest_finding_voxels_per_scan": {
+     "max": 54762.0,
+     "mean": 37145.0,
+     "min": 17026.0,
+     "n": 22,
+     "p10": 24154.0,
+     "p25": 30760.0,
+     "p50": 37151.5,
+     "p75": 45330.2,
+     "p90": 48148.3
+    },
+    "positive_voxels_per_scan": {
+     "max": 103250.0,
+     "mean": 52591.1,
+     "min": 29933.0,
+     "n": 22,
+     "p10": 38568.3,
+     "p25": 44507.2,
+     "p50": 51422.0,
+     "p75": 58891.0,
+     "p90": 62154.1
+    },
+    "scans_with_a_finding_of_at_least_10000": 22
+   },
+   "findings_per_scan": {
+    "max": 122.0,
+    "mean": 32.2,
+    "min": 19.0,
+    "n": 22,
+    "p10": 19.0,
+    "p25": 22.2,
+    "p50": 29.5,
+    "p75": 32.5,
+    "p90": 38.7
+   },
+   "meniscal_tear": {
+    "largest_finding_voxels_per_scan": {
+     "max": 9982.0,
+     "mean": 4224.8,
+     "min": 1906.0,
+     "n": 22,
+     "p10": 2544.8,
+     "p25": 2875.5,
+     "p50": 3662.0,
+     "p75": 4999.8,
+     "p90": 6384.6
+    },
+    "positive_voxels_per_scan": {
+     "max": 22153.0,
+     "mean": 11504.4,
+     "min": 5392.0,
+     "n": 22,
+     "p10": 7000.7,
+     "p25": 8750.8,
+     "p50": 10929.5,
+     "p75": 13050.0,
+     "p90": 16741.9
+    },
+    "scans_with_a_finding_of_at_least_1000": 22
+   },
+   "n": 22
+  }
+ }
+}

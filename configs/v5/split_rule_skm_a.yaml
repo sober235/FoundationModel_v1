@@ -1,0 +1,5 @@
+# Split rule for skm_a, registered by the researcher on 2026-11-08 before the real T08 run (plan_v5 §1.6 L8).
+# The SKM-TEA official patient split of annotations v1.0.0: train -> train, val -> development_val,
+# test -> locked_test; real_t08_v5 reads each record's release split at freeze time.
+kind: official
+exposed_groups: excluded

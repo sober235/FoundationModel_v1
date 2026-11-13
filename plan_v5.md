@@ -8,13 +8,30 @@
 
 **Tech Stack:** Python ≥3.9（本机 `.venv` 为 3.9.6；数据服务器为 3.11），NumPy、SciPy、PyTorch、PyYAML、pytest（均已安装）；Google DeepMind surface-distance 源码按固定提交内置（仅 T06a）。不新增运行时依赖。
 
-**Spec:** [Proposal_v5.md](Proposal_v5.md)，v5.1，SHA256 `b25b0e1beae512320b29beeba2b0eac367cf62e94304d70c28100da1fb006dbf`。其 §1–12 是本计划的约束依据；本计划与之冲突时以 Proposal 为准。
+**Spec:** [Proposal_v5.md](Proposal_v5.md)，v5.1（2026-11-10 修订），SHA256 `532ff42129510d7d11082d351dd7df78a0d8d0466a3a417e861cd1dc62509953`。其 §1–12 是本计划的约束依据；本计划与之冲突时以 Proposal 为准。
 
 **本次修订（相对提交 `8dc38be` 的上一版）：**
+- 2026-11-10：研究者修订验收目标（Proposal §0.6）。按原标注粒度验收、只做三维、一个 checkpoint 处理膝与脑两种协议。新工作的实施计划是 `docs/superpowers/plans/2026-11-10-unified-lesion-finding.md`；本文件的 T12–T18 中依赖体素级参照、二维模式或 H2 的部分暂停，编号保留。
 - 执行基线改为 GitHub `sober235/FoundationModel_v1` 当前内容（本地 `restart-dev`，代码与 `main`/`d7cbd5b` 相同）。上一版依赖的 `02a2447`、`9c972f9` 不在仓库内，相关“复用/适配”假设全部取消，缺失模块改为新建。远端 `docs/skm-a-200step-summary-20261106` 报告的服务器实现与试训结果不作为本计划任何任务的完成证据。
 - 拆成阶段：阶段 A（T00–T06c）在本文件详写；阶段 B–F 只保留路线图及必须纳入的审查项。
 - 吸收 2026-11-06 计划审查：缺陷探针改为本仓库实测值（§0.2）；未落实的 Proposal 要求逐项指派任务（§1.2 最后一列）；`memory.md` 私有路径、T17 能力标准、专家资源、执行主机列为待研究者决定事项（§1.3）；实例/关系字典结构在 T01b 定义；T03/T13 共用。
 - 上一版中 `migrate_v41` 移到 T07（真实记录迁移处），各 schema 移到首次使用它的任务，避免 T01 一次性建 18 个契约。
+- **2026-11-07 核心目标对齐修订**（依据 `reports/v5/core_goal_alignment_review_20261107.md`，审查基线 `aad3e5e`；随后 Proposal v5.1 同步修订，见其 §0.4）：
+  - 拆开核心能力终点 F1 与研究包终点 F2，H2（T15）不再阻塞 T17（§1.1、§1.2）。
+  - X0 专家试点与 T11 提到与 B2 同级并行，T11 不再等待 B2（§1.1、§1.4）。
+  - B1 遗留项中会污染下一次真实运行的，指派到明确的关闭点（§1.6）。
+  - B2 先冻结模型输入/输出接口，避免 T16 迁移双模式时返工（§1.7）。
+  - 写明 v5.1 相对长期“MRI 基础模型”目标的定位，新增待决定事项 D5（§1.3、§1.5）。
+- **2026-11-07 研究者决定（D3 修订，Proposal §0.5、§5.0）：**
+  - 前期不引入医生，联合参照只用 FM_data 原有标注。核查见 `reports/v5/same_case_label_check_amax.md`。
+  - SKM-TEA 为主场景（框级/组织级），SPIDER 为第二场景（组织级）。
+  - X0 专家试点移到后期；上一条中“X0 与 B2 同级并行”改为后期启动后才适用。T11 改为先导入原标签（§1.1、§1.2、§1.4）。
+  - 体素级核心目标不变；前期结果进 `early_phase_status`，`core_target_validated` 保持 `null`。
+  - 同日研究者全部采纳前期范围建议 S1–S7、P1–P6（`reports/v5/early_phase_scope_research_20261107.md`，§1.4）。
+- **2026-11-07 B2 细化（§2C）：**
+  - T09a–T10 细化到 B1 的粒度，纳入 §1.6 的 L2、L4–L6 与 §1.7 的接口。
+  - 真实模块基线只有 `skm_a`（A-only）与 `isles_u`（U-only）。shared-AU 在 B2 只做架构与合成验证，真实训练随 H1 在 T13。
+  - SKM 的框与 SPIDER 不进 B2 训练；SPIDER 只备 MHA 读取，供 T11 复用。
 
 ## Global Constraints
 
@@ -83,50 +100,166 @@ flowchart TD
   T04 --> T06b
   T05 --> T06b
   T06a --> T06b
-  T06b --> B[阶段B T07-T10]
-  T02 --> B
-  T01c --> B
-  B --> C[阶段C T11-T14]
-  B --> D[阶段D T15]
-  B --> E[阶段E T16]
-  C --> F[阶段F T17-T18]
-  D --> F
-  E --> F
-  X0[X0 专家资源线] -.真实参照.-> C
+  T06b --> B1[阶段B1 T07-T08]
+  T02 --> B1
+  T01c --> B1
+  B1 --> RUN[真实 T07/T08 运行]
+  B1 --> B2[阶段B2 T09-T10]
+  RUN -.真实训练.-> B2
+  B1 --> T11[T11 原标签导入]
+  RUN -.原标签.-> T11
+  T11 --> T12
+  X0[X0 专家试点（后期）] -.体素级参照（后期）.-> T12
+  T12 --> T13
+  B2 --> T13
+  T13 --> T14
+  B2 --> D[阶段D T15 H2]
+  B2 --> E[阶段E T16 双模式]
+  T14 --> F1[F1 核心能力终点]
+  E --> F1
+  F1 --> F2[F2 研究包终点]
+  D --> F2
 ```
 
 阶段 A 内部按 T00 → T01a → T01b → T01c → T02 → T03 → T04 → T05 → T06a → T06b → T06c 顺序串行执行。
+
+**两个终点（2026-11-07 修订）：**
+- **F1 核心能力终点** 由 T17 和核心 scope 的 G-LOCKED、T18a/b 组成。它只等待：
+  - 同例参照（T12）；
+  - 联合模型与接受/拒判策略的开发集校准（T13–T14）；
+  - 共享权重双模式（T16）；
+  - 八项指标及对应冻结条件。
+  F1 产出 `capability_status` 与 `core_target_validated`。前期只有框级/组织级参照（§1.4），T17 另产出 `early_phase_status`。`core_target_validated` 要等后期体素级参照，前期保持 `null`。
+- **F2 研究包终点** 由 T18c 的 `study_package_complete` 组成。它在 F1 之外还要等 H1/H2/H3 全部预定实验与完整证据（含 T15）。
+- 依据：
+  - Proposal §11：“H2 尚未完成可以不阻止已有核心能力结论，但 `study_package_complete=false`”。
+  - Proposal §9：`G-LOCKED(scope)` 不等待无关阶段，`G-JOINT` 不等待 H2/H3。
+- F1 不等待 T14 的 H1 结论，不论支持与否；它只需要 T14 中的接受策略校准。H1 不被支持时按 Proposal §11 登记 `hypothesis_supported[H1]=NOT_SUPPORTED`。
+
+**并行线：**
+- B1 交付后，以下两条线同级并行（§1.4）：
+  - B2：先用合成预测桩打通链路，Proposal §6.1 允许这样做；
+  - T11 原标签导入（SKM-TEA、SPIDER）。X0 移到后期（§1.4）。
+- 真实训练和原标签参照导入，都要先完成真实 T07/T08 运行。真实运行需要：
+  - 对应来源的 G-DATA 批准（含 SPIDER）；
+  - 研究者同意写 amax 服务器。
+- B2 的模块结果只按模块报告。ISLES 的 U 与 SKM 的 A 各自成功，不能相加为同例联合成功（Proposal §1.3）。
 
 ### 1.2 各阶段范围
 
 | 阶段 | 任务 | 在当前基线上要新建或改造的内容 | 前置门/条件 | 必须纳入（含审查补齐项） |
 | --- | --- | --- | --- | --- |
 | A | T00–T06c | 见 §2 | 无 | 见 §2 |
-| B | T07 来源/可见性/几何 | `source_policy_v5.py`；`migrate_v41`；适配 `adapters/`、`geometry_qc` | 真实只读核验需数据访问批准 | 降采样对薄软骨/小病灶的信息损失报告（§3.2）；可逆仿射往返 `1e-4 voxel` 软件测试；离散标签重采样与原网格回写分别验证 |
-| B | T08 曝光与划分 | 扩展 `identity.py`、`splits.py`；新建曝光账本 | 曝光/划分签核 | SKM 官方患者组优先；曝光 unknown 不因换 seed 消失 |
-| B | T09a/b/c 登记、训练、推理 | 新建 `engine/registration_v5.py`、H5/NIfTI 读取、patch 采样、可恢复训练核、`perception.py`（调用 T01b 的 `derive_state_map_v5`）与 `perception_io.py`（ArrayRef 落盘 schema 在此建） | G-BASE-A/U | 训练只接收影像/FOV/模式；checkpoint 保存模型、优化器、调度器、scaler、RNG、采样器 |
-| B | T10 模块基线 | 新建残差 U-Net 的 A-only、U-only、shared-AU | G-BASE-A/U、资源批准 | GPU 单 batch、小样本过拟合、显存/吞吐实测后再锁 patch/batch/精度（§6.3），实测结果写入 `reports/v5/` |
-| C | T11 标注桥接 | 新建 `annotation_v5.py`（导出/导入、读者版本、仲裁字段） | X0 落实 | 二维单层可判读字段；框不转体素 |
-| C | T12 联合参照发布 | 新建 `reference_release_v5.py`，复用 T04 `freeze_reference_set_v5`、T06b `build_state_reference_v5` | G-ANNOTATION | 辅助关系不能认证核心 R |
+| B | T07 来源/可见性/几何 | `source_policy_v5.py`；`migrate_v41`；适配 `adapters/`、`geometry_qc` | 真实只读核验需数据访问批准 | 降采样对薄软骨/小病灶的信息损失报告（§3.2）；可逆仿射往返 `1e-4 voxel` 软件测试；离散标签重采样与原网格回写分别验证；真实运行前关闭 §1.6 L1–L3 |
+| B | T08 曝光与划分 | 扩展 `identity.py`、`splits.py`；新建曝光账本 | 曝光/划分签核 | SKM 官方患者组优先；曝光 unknown 不因换 seed 消失；真实运行前登记种子与划分规则（§1.6 L8） |
+| B | T09a/b/c 登记、训练、推理（细化见 §2C） | 新建 `engine/registration_v5.py`、`engine/volume_io_v5.py`（H5/NIfTI/MHA 读取，MHA 供 T11 读 SPIDER）、`engine/data_v5.py`（patch 采样）、`engine/train_v5.py`（可恢复训练核）、`engine/infer_v5.py`、`perception.py`（调用 T01b 的 `derive_state_map_v5`）与 `perception_io.py`（ArrayRef 落盘 schema 在此建） | 代码无；真实 smoke 需 G-DATA 与资源批准，真实基线需 G-BASE-A/U | 训练只接收影像/FOV/模式；checkpoint 保存模型、优化器、调度器、scaler、RNG、采样器；关闭 §1.6 L2、L4–L6；冻结 §1.7 模型输入/输出接口 |
+| B | T10 模块基线（细化见 §2C） | 新建残差 U-Net 的 A-only、U-only、shared-AU；GPU 实测与开发集模块结果汇总 | G-BASE-A/U、资源批准 | GPU 单 batch、小样本过拟合、显存/吞吐实测后再锁 patch/batch/精度（§6.3），实测结果写入 `reports/v5/`；首次真实训练前 L6 已接入；模型实现 §1.7 接口；真实基线为 `skm_a` A-only 与 `isles_u` U-only；shared-AU 的真实训练与主方法同数据，在 T13（Proposal §7.1） |
+| C | T11 标注桥接 | 新建 `annotation_v5.py`。前期：把 SKM-TEA 的框与 `tissue_id`、SPIDER 的分级导入为参照候选，带 `reference_granularity` 与原标注来源。后期再加导出/导入、读者版本、仲裁字段 | B1；SKM-TEA、SPIDER 的 G-DATA（不等 B2，不等 X0） | 框不转体素；SKM 无框记 annotation_unknown，不作阴性；类别与组织不符的框、低置信框按冻结规则排除并计数；SPIDER 的异常定义由研究者填（Global Constraint 7）；二维单层可判读字段 |
+| C | T12 联合参照发布 | 新建 `reference_release_v5.py`，复用 T04 `freeze_reference_set_v5`、T06b `build_state_reference_v5` | G-ANNOTATION | 辅助关系不能认证核心 R；前期发布框级/组织级参照（Proposal §5.0），粒度字段随参照集冻结 |
 | C | T13 联合模型与核心归属 | 新建共享编码器双解码器、AnatoBind 软融合、2D/3D 实例与归属 | G-JOINT | R 在 class-only / class+position / image-only / geometry-only / learned 信息条件下对照（§7.1） |
-| C | T14 H1 | 新建 `experiments/h1_v5.py` | G-JOINT | 接受/拒判策略的设计与开发集校准（§2.1、§8.4）；J 提高不能认证 S |
+| C | T14 H1 | 新建 `experiments/h1_v5.py` | G-JOINT | 接受/拒判策略的设计与开发集校准（§2.1、§8.4）；J 提高不能认证 S；前期 J 的 extent_ok 按预注册的框级准则，结果标注粒度 |
 | D | T15 H2（ISLES） | 新建缺标生成器与同信息臂 | G-H2；不依赖专家 | 按大小与按可见性两种偏置遗漏（§7.2） |
 | E | T16 双模式 | 新建观察适配模型（单 checkpoint 2D/3D） | G-H3-ENG | 二维只读当前平面 |
-| F | T17 八格能力/H3 | 新建 `evaluation/capability.py`、`experiments/h3_v5.py` | G-H3-SCI；D1 | 八格每格绑定 scope/checkpoint/支持/门槛/区间 |
-| F | T18a/b/c 锁定评价与证据 | 新建批次账本、锁定评分、完成判定 | G-LOCKED | 能力/假设/研究包三类状态分开 |
+| F1 | T17 八格能力/H3 | 新建 `evaluation/capability.py`、`experiments/h3_v5.py` | G-H3-SCI；D1；不等 T15 | 八格每格绑定 scope/checkpoint/支持/门槛/区间；前期另出 `early_phase_status`（每格带 `reference_granularity`），不写入八格表 |
+| F1/F2 | T18a/b/c 锁定评价与证据 | 新建批次账本、锁定评分、完成判定 | G-LOCKED(scope) | 能力/假设/研究包三类状态分开；核心 scope 的 T18a/b 与 T18c 的 `capability_status`、`core_target_validated` 属于 F1，不等 T15；`study_package_complete` 属于 F2；正式测试准入前关闭 §1.6 L7 |
 
-### 1.3 待研究者决定事项
+### 1.3 研究者决定事项（D1–D4 于 2026-11-06 决定，D3 于 2026-11-07 修订，D5 待决定；实现与运行状态见 `reports/v5/status.md` `decisions`）
 
-| ID | 事项 | 影响 |
-| --- | --- | --- |
-| D1 | 能力标准：上一版要求每格同时满足“批准的绝对下限”和“相对专用模型非劣”；Proposal §8.5 允许绝对要求、读者容差、批准的参照比较三选一 | T17；T06b 模板字段 `standard_kind` 保持 `null` |
-| D2 | `memory.md` 含服务器私有路径且被 Git 跟踪（文件头声明不得提交）。选项：仅移出索引并加入 `.gitignore`；另行重写历史；保留 | T00 只登记 blocker，不改文件 |
-| D3 | 专家资源与替代场景（X0） | 阶段 C 的真实部分与核心目标验证 |
-| D4 | 真实数据执行主机（数据服务器）与该主机上的解释器 | 阶段 B 起的真实数据步骤 |
+| ID | 事项 | 影响 | 决定（2026-11-06） |
+| --- | --- | --- | --- |
+| D1 | 能力标准：上一版要求每格同时满足“批准的绝对下限”和“相对专用模型非劣”；Proposal §8.5 允许绝对要求、读者容差、批准的参照比较三选一 | T17；T06b 模板字段 `standard_kind` 保持 `null` | `reference_comparison`，保留 H3 对同场景专用二维／三维系统的预注册非劣；容差与约束在独立测试前依据专家／开发证据冻结；政策实例待联合 scope 冻结后建立 |
+| D2 | `memory.md` 含服务器私有路径且被 Git 跟踪（文件头声明不得提交）。选项：仅移出索引并加入 `.gitignore`；另行重写历史；保留 | T00 只登记 blocker，不改文件 | 移出索引并忽略（FX3 已实施）；历史不改写，另行审查 |
+| D3 | 专家资源与替代场景（X0） | 阶段 C 的真实部分与核心目标验证 | **2026-11-07 修订：** 前期不引入医生，联合参照只用 FM_data 原有标注；SKM-TEA 为主场景（框级/组织级），SPIDER 为第二场景（组织级）；X0 专家试点移到后期，`BLOCKED_EXPERT_REVIEW` 只约束后期体素级目标。原决定（SKM 联合场景，20–30 次开发扫描试点）留作后期方案 |
+| D4 | 真实数据执行主机（数据服务器）与该主机上的解释器 | 阶段 B 起的真实数据步骤 | 选定 amax 数据服务器；只读预检通过前不登记为就绪 |
+| D5 | 长期目标定位：v5.1 是否作为“可迁移 MRI 基础模型”长期目标中的一个能力验证阶段；若是，是否在 v5.1 之后另立复用/迁移/泛化里程碑（§1.5） | 不改变 v5.1 的任务与完成判定；影响 v5.1 之后的路线和对外表述 | 待研究者决定（2026-11-07 提出） |
 
-### 1.4 X0：专家资源线（非代码，现在即可并行）
+### 1.4 前期原标签场景与 X0（2026-11-07 研究者决定）
 
-按 Proposal §5.1–5.2：指定标注负责人、主读者、独立复读者、仲裁者、工具和预算；书面写出 E1/E2 上所选软骨异常的体素边界与不确定带规则；在 20–30 次非锁定开发扫描上试点，记录每例用时、可判读率和复读一致性；若无法形成可靠体素场景，由研究者决定替代场景或保持未完成。未落实前，阶段 C 的真实数据部分为 `BLOCKED_EXPERT_REVIEW`。
+**前期（现在）：** 不引入医生，只用 FM_data 原有标注（Proposal §0.5、§5.0）。核查见 `reports/v5/same_case_label_check_amax.md`。
+
+- **SKM-TEA 主场景：**
+  - A：6 类人工分割，体素级。
+  - U：原有 3D 框，框级。
+  - R：框的 `tissue_id`，组织级。
+  - S：只评价目标阳性；无框记 annotation_unknown，不作阴性。
+- **SPIDER 第二场景：**
+  - A：椎体、椎管、椎间盘分割。
+  - S、R：每个椎间盘的组织级状态与归属。
+  - 无 U。
+- **由研究者决定（Agent 不代填，Global Constraint 7）：**
+  - SKM：启用的异常类别；排除规则（类别与组织不符的框、低置信阈值）。
+  - SPIDER：序列选择；“目标异常”的分级阈值；终板分级的归属语义。
+  - 两个场景的 scope 字段。
+  - **2026-11-07 研究者全部采纳** `reports/v5/early_phase_scope_research_20261107.md` 的 S1–S7、P1–P6：
+    - SKM 主分析为软骨病变 2A/2B/3 加半月板撕裂（不含挤出），1 级单列；只排除置信度 0 分、类别与组织不符、零尺寸和不含宿主组织的框。
+    - SPIDER 输入矢状 T2；主目标为 Pfirrmann ≥ III，终板改变作次要目标。
+    - scope 实例在 T11/T12 建立时引用这一决定；模板字段仍保持 `null`。评价准则的数值在开发集上选定，锁定评价前冻结。
+- **结果去向：** 前期结果进 `early_phase_status`，不进八格表；`core_target_validated` 保持 `null`。
+- **需要的批准：** SKM-TEA 与 SPIDER 的 G-DATA，按来源与版本。
+
+**X0（后期）：** 以下安排保留为后期体素级方案，前期不启动。
+
+按 Proposal §5.1–5.2：指定标注负责人、主读者、独立复读者、仲裁者、工具和预算；书面写出 E1/E2 上所选软骨异常的体素边界与不确定带规则；在 20–30 次非锁定开发扫描上试点，记录每例用时、可判读率和复读一致性；若无法形成可靠体素场景，由研究者决定替代场景或保持未完成。未落实前，阶段 C 的后期体素级部分为 `BLOCKED_EXPERT_REVIEW`。
+
+**2026-11-07 修订（核心目标复核）：X0 启动后与 B2 同级。** 体素级同例参照能否建立，决定后期体素级主线能否成立；B2 的训练、保存、统计做得再完善，也补不了这一项。同日研究者决定前期不引入医生，X0 移到后期（见上）。
+
+- **试点要回答的五个问题：**
+  1. 目标异常在 E1/E2 上的书面定义，以及体素边界与不确定带规则；
+  2. 单层与三维的可判读范围；
+  3. 主读与独立复读的一致性；
+  4. 每例标注用时与总预算；
+  5. 能否形成同例 A/U/S/核心 R 参照。
+- **扫描来源：** 试点扫描只取自真实 T08 冻结后的 SKM 开发划分，不得取 `locked_test`。
+- **工具：** 由 T11 提供导出/导入与读者、用时记录。
+- **结论回填：**
+  - 由负责人把试点结论填入 `configs/v5/scope_skm_joint.template.yaml` 的 `state_anatomy_classes`、`abnormality_classes`、`relation_type`、`relation_predicate`、`relation_contract`、`reference_policy_id`。
+  - Agent 不代填（Global Constraint 7），也不得按测试结果填写。
+- **定位：** 试点只回答参照能否建立，不是最终盲测。结果不达标时，按 Proposal §11 风险表处置。
+
+### 1.5 v5.1 的定位（2026-11-07）
+
+- v5.1 完成的含义以 Proposal §11 为准：`core_target_validated=true` 只要求至少一个预注册独立同例场景，由同一 checkpoint 通过二维、三维八项能力。
+  - 跨来源、跨部位泛化不是核心完成条件（Proposal §7.3）。
+  - 全库 SSL 不在一期（Proposal §1.3）。
+- 因此，v5.1 完成不等于通用或可迁移 MRI 基础模型完成。
+  - 复用表征、少样本迁移、跨协议/跨部位泛化都不在本计划的验收内。
+  - `reports/v5` 与对外表述不得把 v5.1 结论写成基础模型结论。
+- 这一收窄不是 B1 引入的。v4.1 已把“全身、全病种的基础模型”和“一期就做 SSL 预训练”列为非目标（`docs/archive/v4.1/spec.md` §1.4）。
+- A–F 是工程与验证阶段，不等同于审查报告提到的“表征预训练—结构化感知—解剖绑定”模型培养路线。
+  - 若长期目标保留基础模型，v5.1 对应其中“结构化感知 + 解剖绑定”在一个受限同例场景上的能力验证。
+  - 迁移与泛化需要另立里程碑，由 D5 决定。本计划不新增该里程碑的任务。
+
+### 1.6 B1 遗留项的关闭点（2026-11-07）
+
+**判定标准：** 会不会污染下一次真实运行。会污染的，指派到明确的关闭点。只影响格式、提示、汇总的，按实际影响处理，不升级为全项目阻塞。编号对应 `reports/v5/stage_b1_report.md`。
+
+| ID | 遗留项（B1 报告出处） | 不关闭的后果 | 关闭点 |
+| --- | --- | --- | --- |
+| L1 | 记录的 `source_release` 未与政策的 `source_version` 绑定（裁定 21） | 其他版本的记录按这个政策迁移 | 真实 T07 运行前（2026-11-08 已关闭：政策登记 `source_release`，`dfbef2d`） |
+| L2 | 政策的 `model_modalities` 未与 scope 的 `input_modalities` 核对（M2） | 训练与评价不在同一观察条件 | 真实 T07 运行前核对；T09 数据加载只按 scope 的 `input_modalities` 取通道（2026-11-08 迁移时核对，`dfbef2d`） |
+| L3 | 几何为 pass 但 `image_geometry` 为 None 时抛 `AttributeError`，整批中断（M1） | 不污染，但会中断真实批次 | 与 L1 一起修（2026-11-08 已关闭：`GEOMETRY_MISSING`，`dfbef2d`） |
+| L4 | 迁移后保留的 v41 `split` 不是权威值（M4） | `locked_test` 或 `unassigned` 样本进入训练 | T09a/b 数据加载：只读 `freeze_splits_v5` 的 `assignment`，并核对 `split_sha256`；不读 `SampleV5.split` |
+| L5 | `lost_positive_mask` 未接入阴性资格（裁定 19） | 小病灶、薄软骨被当作正常背景学习 | T09b 的 patch 采样与损失 |
+| L6 | lineage 只精确匹配，不随权重继承传播（裁定 20） | 从已曝光 checkpoint 继续训练的模型换个新 ID，就获得“干净”的 locked_test | T09a 登记记录初始化 checkpoint 的父 lineage；曝光检查覆盖全部祖先 lineage；T10 首次真实训练前接入 |
+| L7 | 冻结划分未与测试独立性证据、人工确认连接（裁定 17） | 固定划分文件被当作合格独立测试 | G-LOCKED(scope) / T18a 正式测试准入前 |
+| L8 | 种子、比例、分层与小层规则未登记（裁定 18；B1 完成判定） | 反复换种子挑选有利划分 | 真实 T08 运行前，由研究者批准登记（2026-11-08 已登记：`configs/v5/split_rule_*.yaml`） |
+
+按实际影响继续延后的有 M5、M6、M7、M8。其中 M5（合并小层不报告）要在真实 T08 登记时人工核对各层大小。
+
+### 1.7 B2 先冻结的模型输入/输出接口（2026-11-07）
+
+在 T09a 定义并冻结以下接口。T10 的 A-only、U-only、shared-AU，以及 T13、T16 的模型，都实现同一接口。B2 不实现联合网络或双模式网络；先完成独立 3D H1 再迁入双模式骨干，是 Proposal §6.2 允许的路线。
+
+- **输入：**
+  - 按 scope `input_modalities` 顺序排列的影像通道；
+  - `valid_fov`；
+  - `observation_mode`（取值沿用 T01a 契约）；
+  - 有效切片掩膜；
+  - 模型网格几何，以及到原网格的变换。
+  - `strict_2d` 输入只含当前切片与合法元数据，不含邻层、全卷归一化或三维候选（Proposal §6.2）。
+- **输出：** 模型网格上的 A/U logits。经 T09c 恢复到原网格、应用接受策略后，构造 T01b 的 `ModuleOutput` 或 `PerceptionOutput`。
+- **模式不支持时：** 只支持 `3d` 的模型收到其他模式时报 `V5Error`，不得静默按三维运行。
+- **依赖边界：** 训练核、推理入口、保存与评价只依赖这一接口。T16 只替换骨干与深度聚合，不改这条链路。
 
 ---
 
@@ -1303,6 +1436,699 @@ git commit -m "Add lesion-level detection metrics for U"
 
 ---
 
+## 2A. 阶段 A 补修（2026-11-06，外部审查后）
+
+**Goal:** 关闭外部审查在 `6231fbb` 上复现的两处缺口，落实研究者对 D1–D4 的决定，并同步状态文档；不新增科学结论。
+
+**依据：** 研究者 2026-11-06 采纳外部审查建议——D1 选 `reference_comparison` 并保留 H3 对同场景专用二维/三维系统的预注册非劣；D2 停止跟踪 `memory.md` 并忽略，历史另审；D3 保留 SKM 联合场景，先准备 20–30 次非锁定开发扫描试点，人员未落实前保持 `BLOCKED_EXPERT_REVIEW`；D4 优先 amax 数据服务器，“已选定”与“已核验就绪”分开登记。
+
+**约束：** Global Constraints 全部适用；§2.0 共用约定适用。四个任务串行：FX1 → FX2 → FX3 → FX4。
+
+**Review Focus（补修）：**
+1. 证据缺少绑定字段（旧格式 `{status, sha256}`）必须被挡住，不能因字段缺失而默认匹配 —— FX1 `test_evidence_without_binding_is_rejected`。
+2. 同一 scope 不同数据版本的证据不能互用 —— FX1 `test_evidence_from_other_source_or_version_is_rejected`。
+3. A 为 `limited` 时只在 A 可见区域内可评，区域外不得变成目标阴性 —— FX2 `test_limited_a_visibility_restricts_eligibility`。
+4. A 可见性只作用于参照状态组织体素；非状态组织仍只带 `not_state_tissue` —— FX2 `test_a_visibility_bit_only_on_state_tissue`。
+5. 移出跟踪后的 `memory.md` 不能再被 `git add` 误加 —— FX3 `test_memory_md_untracked_and_ignored`。
+
+### FX1：准入证据绑定 scope／来源／任务
+
+**Files:**
+- Modify: `anatobind/v41/gates_v5.py`
+- Modify: `tests/v5/factories.py`（`make_evidence` 加绑定字段；新增 `SYNTH_SOURCE`）
+- Test: `tests/v5/test_gates_v5.py`
+- Modify: `reports/v5/status.md`（T01c `test_evidence`）
+
+**Interfaces:**
+- Produces: `evaluate_gate_v5(gate_id: str, scope: ActiveScope, evidence: dict, approvals: dict, source: dict, fixture_mode: bool = False) -> dict`；`gate_task_v5(scope: ActiveScope) -> str`（joint scope → `"joint"`；module scope 只有 A → `"A"`，只有 U → `"U"`，两者都有 → `"A+U"`）；`FIXTURE_APPROVERS = ("synthetic-fixture",)`。
+- 证据条目契约：`{"status": "PASS", "sha256": <64 位小写 hex>, "scope_hash": scope.scope_hash, "source_id": source["source_id"], "source_version": source["source_version"], "task": gate_task_v5(scope)}`。
+- 返回值在原有键之外增加 `source_id`、`source_version`、`task`。
+- 工厂：`SYNTH_SOURCE = {"source_id": "synthetic_source", "source_version": "v0"}`；`make_evidence(keys, scope, source=SYNTH_SOURCE) -> dict`。
+
+**规则：**
+- `source` 不是含非空字符串 `source_id`、`source_version` 的 dict → `V5Error("INVALID_SOURCE", "$.source")`；`fixture_mode` 非 bool → `V5Error("INVALID_TYPE", "$.fixture_mode")`。
+- 证据：非 PASS 或 sha256 非法 → `EVIDENCE_MISSING:<key>`（不变）；PASS 且 sha256 合法、但四个绑定字段任一缺失或不等 → `EVIDENCE_BINDING_MISMATCH:<key>`。
+- 批准：缺失 → `APPROVAL_MISSING:<key>`；`approved_by` 属于 `FIXTURE_APPROVERS` 且 `fixture_mode` 不为 True → `APPROVAL_FIXTURE_NOT_ALLOWED:<key>`；否则 scope_hash 不等 → `APPROVAL_SCOPE_MISMATCH:<key>`。每个批准键至多一个 blocker。
+
+- [ ] **Step 1: 改写现有 gate 测试并新增失败测试**
+
+现有 7 个测试改为传 `SYNTH_SOURCE` 与 `fixture_mode=True`，`make_evidence` 传当前 scope。新增：
+
+```python
+U_SCOPE = validate_scope_v5(make_module_scope("U"))
+
+@pytest.mark.parametrize("gate_id", ["G-DATA", "G-BASE-U"])
+def test_evidence_from_other_scope_is_rejected(gate_id):
+    keys = list(GATE_REQUIREMENTS[gate_id]["evidence"])
+    a_evidence = make_evidence(keys, A_SCOPE)
+    decision = evaluate_gate_v5(gate_id, U_SCOPE, a_evidence,
+                                make_approvals(U_SCOPE, GATE_REQUIREMENTS[gate_id]["approvals"]),
+                                SYNTH_SOURCE, fixture_mode=True)
+    assert decision["engineering_status"] == "BLOCKED"
+    assert {f"EVIDENCE_BINDING_MISMATCH:{k}" for k in keys} <= set(decision["blockers"])
+
+@pytest.mark.parametrize("field", ["source_id", "source_version"])
+def test_evidence_from_other_source_or_version_is_rejected(field):
+    other = {**SYNTH_SOURCE, field: "other"}
+    decision = evaluate_gate_v5("G-BASE-A", A_SCOPE, make_evidence(BASE_KEYS, A_SCOPE, other),
+                                make_approvals(A_SCOPE, ["resources"]), SYNTH_SOURCE, fixture_mode=True)
+    assert decision["blockers"] == sorted(f"EVIDENCE_BINDING_MISMATCH:{k}" for k in BASE_KEYS)
+
+def test_evidence_without_binding_is_rejected():
+    legacy = {k: {"status": "PASS", "sha256": hashlib.sha256(k.encode()).hexdigest()} for k in BASE_KEYS}
+    decision = evaluate_gate_v5("G-BASE-A", A_SCOPE, legacy, make_approvals(A_SCOPE, ["resources"]),
+                                SYNTH_SOURCE, fixture_mode=True)
+    assert decision["blockers"] == sorted(f"EVIDENCE_BINDING_MISMATCH:{k}" for k in BASE_KEYS)
+
+def test_fixture_approver_rejected_outside_fixture_mode():
+    args = ("G-BASE-A", A_SCOPE, make_evidence(BASE_KEYS, A_SCOPE), make_approvals(A_SCOPE, ["resources"]), SYNTH_SOURCE)
+    assert evaluate_gate_v5(*args)["blockers"] == ["APPROVAL_FIXTURE_NOT_ALLOWED:resources"]
+    assert evaluate_gate_v5(*args, fixture_mode=True)["engineering_status"] == "PASS"
+
+def test_decision_records_source_and_task():
+    decision = evaluate_gate_v5("G-BASE-A", A_SCOPE, make_evidence(BASE_KEYS, A_SCOPE),
+                                make_approvals(A_SCOPE, ["resources"]), SYNTH_SOURCE, fixture_mode=True)
+    assert (decision["source_id"], decision["source_version"], decision["task"]) == ("synthetic_source", "v0", "A")
+    assert gate_task_v5(U_SCOPE) == "U" and gate_task_v5(validate_scope_v5(make_scope())) == "joint"
+
+@pytest.mark.parametrize("source", [None, {}, {"source_id": "", "source_version": "v0"}, {"source_id": "s"}])
+def test_invalid_source_raises(source):
+    with pytest.raises(V5Error) as error:
+        evaluate_gate_v5("G-DATA", A_SCOPE, {}, {}, source)
+    assert error.value.code == "INVALID_SOURCE"
+```
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_gates_v5.py`
+Expected: FAIL（`ImportError: gate_task_v5` / `SYNTH_SOURCE`）
+
+- [ ] **Step 3: 在 `gates_v5.py` 实现上述签名与规则；更新模块 docstring 写明证据与批准都绑定 scope_hash，证据另绑定来源与任务**
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `pytest_cpu tests/v5/test_gates_v5.py && pytest_cpu tests/v41 tests/v5`
+Expected: 本文件全部通过；`tests/v41` 144 passed
+
+- [ ] **Step 5: 更新 status.md T01c 的 `test_evidence` 计数并提交**
+
+```bash
+git add anatobind/v41/gates_v5.py tests/v5/factories.py tests/v5/test_gates_v5.py reports/v5/status.md
+git commit -m "Bind gate evidence to scope, source and task; reject fixture approvers outside tests"
+```
+
+### FX2：StateReference 应用 A 的输入可见性
+
+**Files:**
+- Modify: `anatobind/v41/evaluation/state.py`
+- Modify: `tests/v5/factories.py`（`make_state_reference_inputs` 新增覆盖项 `a_visibility`、`a_visibility_region`）
+- Test: `tests/v5/test_tissue_state_metrics.py`
+- Modify: `reports/v5/status.md`（T06b `test_evidence`）
+
+**Interfaces:**
+- Consumes: `visibility_support_v5(annotation, record, visibility_regions, shape, {"track": "observable_target"}, path)`（T02）。
+- Produces: `STATE_ELIGIBILITY_BITS["a_not_visible"] = 128`；`build_state_reference_v5` 签名不变。
+- 工厂：`a_visibility`（默认 `"visible"`；`"unknown"` 时 `visibility_evidence=None`，其余为 `"synthetic"`）；`a_visibility_region`（bool 数组，登记在 `visibility_regions["visibility/a1"]`，`limited` 时 A 标注的 `visibility_region_path="visibility/a1"`）。
+
+**规则：** 对每个 `scope.state_anatomy_classes` 中的组织 `k`，A 支持 `a_support_k` = 所有合格 A 参照标注（`expert_voxel`、`target_complete`、`k ∈ class_scope`）的 `visibility_support_v5` 并集；体素 `v` 若 `anatomy[v] == tissue_id(k)` 且 `a_support_k[v]` 为假，置 `a_not_visible`。参照组织不在 `state_tissue_ids` 的体素不置此位（已有 `not_state_tissue`）。U 的 `not_visible` 规则不变。哈希随 `eligibility_reason` 自然变化，无需改哈希字段。
+
+- [ ] **Step 1: 写失败测试**
+
+```python
+@pytest.mark.parametrize("visibility", ["unknown", "unobservable", "limited_empty"])
+def test_a_not_visible_is_never_normal(visibility):
+    overrides = ({"a_visibility": "limited", "a_visibility_region": np.zeros((1, 2, 2), bool)}
+                 if visibility == "limited_empty" else {"a_visibility": visibility})
+    reference = _reference(**overrides)
+    assert not reference.state_eligible.any()
+    assert (reference.eligibility_reason & STATE_ELIGIBILITY_BITS["a_not_visible"]).all()
+
+def test_visible_a_keeps_eligibility():
+    reference = _reference(a_visibility="visible")
+    assert reference.state_eligible.all()
+    assert int((reference.state_truth[reference.state_eligible] == 0).sum()) == 2
+
+def test_limited_a_visibility_restricts_eligibility():
+    region = np.zeros((1, 2, 2), bool)
+    region[0, 0, :] = True
+    reference = _reference(a_visibility="limited", a_visibility_region=region)
+    assert np.array_equal(reference.state_eligible, region)
+
+def test_a_visibility_bit_only_on_state_tissue():
+    inputs = make_state_reference_inputs(SCOPE, a_visibility="unobservable")
+    inputs["arrays"]["anatomy"][0, 0, 0] = 0
+    reference = build_state_reference_v5(inputs["record"], inputs["arrays"], SCOPE, "obs-synth-1")
+    assert reference.eligibility_reason[0, 0, 0] & STATE_ELIGIBILITY_BITS["a_not_visible"] == 0
+    assert reference.eligibility_reason[0, 0, 0] & STATE_ELIGIBILITY_BITS["not_state_tissue"]
+```
+
+（`_reference` 是该测试文件已有的辅助函数，按覆盖项调用 `make_state_reference_inputs` 再 `build_state_reference_v5`；若其签名不同，按其现有写法传覆盖项。）
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_tissue_state_metrics.py`
+Expected: FAIL（`KeyError: 'a_not_visible'` 或断言失败）
+
+- [ ] **Step 3: 在 `state.py` 按规则实现；在 docstring 写明 A 可见性按参照组织身份应用**
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `pytest_cpu tests/v5/test_tissue_state_metrics.py && pytest_cpu tests/v41 tests/v5`
+Expected: 全部通过；`tests/v41` 144 passed
+
+- [ ] **Step 5: 更新 status.md T06b 计数并提交**
+
+```bash
+git add anatobind/v41/evaluation/state.py tests/v5/factories.py tests/v5/test_tissue_state_metrics.py reports/v5/status.md
+git commit -m "Apply anatomy input visibility per reference tissue in StateReference"
+```
+
+### FX3：D2 —— 停止跟踪 memory.md
+
+**Files:**
+- Untrack: `memory.md`（`git rm --cached`，本地文件保留）
+- Modify: `.gitignore`（新增一节 `# private project memory (contains server paths)` 与一行 `memory.md`）
+- Create: `memory.example.md`
+- Test: `tests/v5/test_status_docs.py`
+
+**`memory.example.md` 内容：** 首段写明“本文件是 `memory.md` 的脱敏示例；真实 `memory.md` 只在本地、已被 `.gitignore` 忽略。其他机器上的旧克隆在 `git pull` 前先备份本机 `memory.md`，否则拉取会把它从工作区删除。”；保留 `## 关键路径`、`## GitHub 推送方式` 两节，所有路径与命令参数替换为 `<PRIVATE_ROOT>`、`<ASKPASS_SCRIPT>` 等占位符；`## 用户偏好/规则` 一节逐字照抄。不含“已完成 / spec.md / 待用户操作”等历史流水。
+
+- [ ] **Step 1: 写失败测试**
+
+```python
+def test_memory_md_untracked_and_ignored():
+    tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "memory.md"], capture_output=True)
+    ignored = subprocess.run(["git", "check-ignore", "-q", "memory.md"])
+    assert tracked.returncode != 0 and ignored.returncode == 0
+    example = Path("memory.example.md").read_text(encoding="utf-8")
+    assert "## 用户偏好/规则" in example
+    assert not re.search(r"/(Users|home|data|mnt|private|srv|opt)/", example)
+```
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_status_docs.py`
+Expected: FAIL（`memory.md` 仍被跟踪）
+
+- [ ] **Step 3: 执行**
+
+```bash
+git rm --cached memory.md
+```
+
+写 `.gitignore` 与 `memory.example.md`。若删除钩子拦截 `git rm --cached`，请研究者在会话中运行 `! git rm --cached memory.md`。Git 历史不改写。
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `pytest_cpu tests/v5/test_status_docs.py && test -f memory.md`
+Expected: PASS，且本地 `memory.md` 仍在
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add .gitignore memory.example.md tests/v5/test_status_docs.py
+git commit -m "Stop tracking memory.md and add a redacted example"
+```
+
+（`git rm --cached` 已暂存删除；提交前 `git diff --cached --stat` 只应列出这四个路径。）
+
+### FX4：D1–D4 决定登记与文档同步
+
+**Files:**
+- Modify: `reports/v5/status.md`、`tests/v5/test_status_docs.py`
+- Modify: `plan_v5.md` §1.3、§4
+- Modify: `README.md`（“当前边界”首段）
+- Modify: `reports/v5/traceability.md`（状态列）
+
+**status.md 头部：** `open_decisions: []`；新增 `decisions`，D1–D4 各含 `choice`、`decided_at`、`implementation_status`、`run_status`、`scientific_conclusion` 五项：
+
+| ID | choice | implementation_status | run_status | scientific_conclusion |
+| --- | --- | --- | --- | --- |
+| D1 | `reference_comparison_with_h3_noninferiority` | `TODO`（容差与约束在独立测试前冻结；政策实例待联合 scope 冻结后建立） | `NOT_RUN` | `NOT_EVALUATED` |
+| D2 | `untrack_and_ignore_history_review_pending` | `PASS`（FX3） | `NOT_APPLICABLE` | `NOT_APPLICABLE` |
+| D3 | `skm_joint_pilot_20_30_dev_scans` | `TODO`（人员、预算未落实） | `NOT_RUN` | `NOT_EVALUATED` |
+| D4 | `server_amax` | `TODO`（只读预检未做） | `NOT_RUN` | `NOT_EVALUATED` |
+
+`decided_at` 取执行当天日期。`blockers` 改为 `["PRIVATE_PATHS_IN_HISTORY:memory.md", "BLOCKED_EXPERT_REVIEW", "EXECUTION_HOST_UNVERIFIED"]`。正文“待研究者决定事项”改为“研究者决定（2026-11-06）”，逐条写选择、未完成部分，并新增“阶段 A 补修”表（FX1–FX4，各附提交号与测试）。
+
+**D1 正文须写明：** 患者间等权；J 为患者内冻结病灶集合的成功数/支持数；A/U/S 观测级指标先观测、再患者内汇总、再患者等权；逐指标登记支持集合、患者内权重与空值原因；预测为空或全部弃权造成的 `None` 不得记作“参照无支持”（当前 `summarize_state_by_patient_v5` 的 `n_patients_without_support` 混记 precision 的这两种情形，修订放入阶段 C 汇总任务）；不得按测试结果选择聚合方式。
+
+- [ ] **Step 1: 改写 `test_known_blockers_are_recorded` 为失败测试**
+
+```python
+def test_decisions_recorded_with_separate_statuses():
+    meta = _front_matter()
+    assert meta["open_decisions"] == []
+    assert list(meta["decisions"]) == ["D1", "D2", "D3", "D4"]
+    for row in meta["decisions"].values():
+        assert set(row) == {"choice", "decided_at", "implementation_status", "run_status", "scientific_conclusion"}
+    assert meta["decisions"]["D1"]["choice"] == "reference_comparison_with_h3_noninferiority"
+    assert meta["decisions"]["D4"]["run_status"] == "NOT_RUN"
+    assert {"PRIVATE_PATHS_IN_HISTORY:memory.md", "BLOCKED_EXPERT_REVIEW",
+            "EXECUTION_HOST_UNVERIFIED"} == set(meta["blockers"])
+```
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `pytest_cpu tests/v5/test_status_docs.py`
+Expected: FAIL（`KeyError: 'decisions'`）
+
+- [ ] **Step 3: 按上文改 status.md；plan §1.3 表格加“决定（2026-11-06）”列；§4 写明补修后下一步为阶段 B 细化与 amax 只读预检；README “当前边界”首段写明执行基线与当前实现提交、科学结论仍为 `NOT_EVALUATED`；traceability 状态列按 status.md 实际填写（V5-02–V5-06、V5-14–V5-16 写“阶段 A 软件已交付，真实数据未运行”，其余照实）**
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `pytest_cpu tests/v41 tests/v5`
+Expected: 全部通过；`tests/v41` 144 passed
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add reports/v5/status.md tests/v5/test_status_docs.py plan_v5.md README.md reports/v5/traceability.md
+git commit -m "Record D1-D4 decisions and sync status documents"
+```
+
+### 补修终审修复（2026-11-06）
+
+独立终审后追加：G-DATA 的批准另绑定 `source_id`、`source_version`（`APPROVAL_SOURCE_MISMATCH:<key>`）；决定增加 `fixture_mode` 与 `fixture_approvals`；证据条目带 `fixture_mode: true` 时在非 fixture 模式下报 `EVIDENCE_FIXTURE_NOT_ALLOWED:<key>`；4 个仍被跟踪的 v4.1 文档含私有路径，登记 blocker `PRIVATE_PATHS_TRACKED:v41_docs`，是否脱敏由研究者决定。
+
+### 补修完成判定
+
+`pytest_cpu tests/v41 tests/v5` 全部通过；FX1–FX4 提交齐全；整段补修做一次独立审查；推送前征得研究者同意。补修只改软件行为与登记，不产生真实数据或科学结论。
+
+---
+
+## 2B. 阶段 B1：来源、几何、曝光与划分（T07a–T08b）
+
+**Goal:** 把 v41 记录迁移到 v5.1 契约，登记来源政策并固化几何软件检查，建立符合 Proposal §3.3 的曝光账本和划分；全部用合成数据在 CPU 上验证，真实数据步骤单列且等待批准。
+
+**范围划分（执行者裁定，2026-11-06）：** 阶段 B 拆为 B1（T07–T08，数据层，CPU 可测）与 B2（T09a–c、T10，训练/推理与基线，需 GPU、G-BASE 批准和 amax 环境核验）。B2 在 B1 完成并经审查后再细化。
+
+**依据：** Proposal §3.1–3.3、§4.1；`reports/v5/host_precheck_amax.md`（ISLES 250 例 DWI/ADC/mask；SKM 155 个 H5，含 `echo1`、`echo2`、`seg`，标注 v1.0.0）。
+
+**约束：** Global Constraints 与 §2.0 适用。真实数据只在获得对应来源的 G-DATA 数据使用批准、且研究者同意写服务器后运行；仓库只接纳脱敏汇总。串行顺序：T07a → T07b → T07c → T08a → T08b。
+
+**Review Focus（B1）：**
+1. 几何状态只能保持或降级，不能因迁移升级为 `verified` —— T07a `test_geometry_status_never_upgraded`。
+2. v41 的 `limited` 可见性没有区域，不能被静默改成 visible/unknown —— T07a `test_limited_visibility_without_region_is_not_silently_migrated`。
+3. 降采样后消失的小阳性必须被报告并排除出阴性资格 —— T07b `test_downsample_reports_vanished_small_lesion`。
+4. 换随机种子不能让有曝光的组进入 locked_test —— T08b `test_exposure_survives_reseeding`。
+5. 官方分组缺失的组不能被猜测分配 —— T08b `test_missing_official_group_stays_unassigned`。
+
+### T07a：来源政策与 v41 记录迁移
+
+**Files:**
+- Create: `anatobind/v41/source_policy_v5.py`、`anatobind/v41/migrate_v5.py`
+- Create: `configs/v5/sources_v5.template.yaml`
+- Test: `tests/v5/test_source_policy.py`、`tests/v5/test_migrate_v41.py`
+- Modify: `tests/v5/factories.py`（新增 `make_source_policy(**overrides) -> SourcePolicy`）
+
+**Interfaces:**
+- Produces: `SourcePolicy`（frozen dataclass）：`source_id: str, source_version: str, source_dataset: str, scope_id: str, reference_policy_id: str, model_modalities: tuple[str, ...], annotation_modalities: dict[str, tuple[str, ...] | None], index_evidence: str | None, physical_units_policy: str | None`（`"trust_header"` 或 `None`）, `physical_units_evidence: str | None`（单位策略非空时必填；终审 I5 补）。
+- `load_source_policies_v5(path: Path) -> dict[str, SourcePolicy]`（键为 `source_id`）；`source_binding_v5(policy) -> dict`（`{"source_id", "source_version"}`，供 FX1 的 `evaluate_gate_v5(..., source=...)`）。
+- `migrate_v41_record_v5(record: SampleRecord, policy: SourcePolicy, scope: ActiveScope) -> SampleV5`；`migrate_v41_records_v5(records, policy, scope) -> tuple[list[SampleV5], list[dict]]`，失败行只含 `{"index", "code", "path"}`，不含 sample_uid 或病例标识。
+
+**模板值：** `isles_2022`：`source_dataset: ISLES_ltr`、`source_version: isles2022_bids1.6.0`、`scope_id: isles_u`、`reference_policy_id: isles_released_reference_v1`、`model_modalities: [dwi, adc]`；`skm_tea`：`source_dataset: SKM-TEA_ltr`、`source_version: skm_tea_annotations_v1.0.0`、`scope_id: skm_a`、`reference_policy_id: skm_a6_released_reference_v1`、`model_modalities: [qdess_e1, qdess_e2]`。两者的 `annotation_modalities`、`index_evidence`、`physical_units_policy` 为 `null`，由 T07c 的真实核验依据填写（填写前迁移对真实记录失败关闭）。
+
+**迁移规则：**
+- `record.source_dataset != policy.source_dataset` → `V5Error("SOURCE_MISMATCH", "$.source_dataset")`；`policy.scope_id != scope.scope_id` 或 `policy.reference_policy_id != scope.reference_policy_id` → `SCOPE_MISMATCH`。
+- 新增字段：`schema_version: "v5.1"`、`active_scope_id`、`reference_policy_id`、`model_modalities`；其余 v41 字段原样保留；输入记录不被修改；输出经 `validate_sample_v5`。
+- `index_alignment_status`：`geometry_status == "fail"` → `failed`；`"pass"` 且 `index_evidence` 非空 → `verified`；其余 → `unknown`。
+- `physical_geometry_status`：`"fail"` → `failed`；`"pass"` 且 `physical_units_policy == "trust_header"` 且 `image_geometry["units"] == "mm"` → `verified`；其余 → `unknown`。不改 header 或单位。
+- 标注：`annotation_modalities = policy.annotation_modalities[task]`（缺失或 `None` → `ANNOTATION_MODALITY_UNKNOWN`）；`visibility_region_path = None`；`input_visibility` 原样保留，v41 的 `limited` → `MIGRATION_NEEDS_VISIBILITY_REGION`。
+- `exposure_history` 在 T07a 原样保留（T08a 改为 v5 角色）。
+
+- [ ] **Step 1: 写失败测试**：`test_policies_load_and_bind_sources`（模板两条来源可加载，`source_binding_v5` 返回两键）、`test_policy_rejects_unknown_or_missing_fields`（`INVALID_SOURCE_POLICY`）、`test_migrated_record_validates_and_keeps_v41_fields`（基于 `tests.v41.conftest._sample()`，输出为 `SampleV5`，`patient_uid`、`split` 不变）、`test_geometry_status_never_upgraded`（参数化上述两条状态规则的全部分支）、`test_limited_visibility_without_region_is_not_silently_migrated`、`test_source_or_scope_mismatch_rejected`、`test_v41_record_not_mutated`、`test_batch_failures_report_index_not_ids`、`test_template_unknowns_fail_closed`（模板政策迁移真实形态记录报 `ANNOTATION_MODALITY_UNKNOWN`）。
+- [ ] **Step 2: 运行确认失败** —— `pytest_cpu tests/v5/test_source_policy.py tests/v5/test_migrate_v41.py`，Expected: `ImportError`。
+- [ ] **Step 3: 实现上述接口与规则。**
+- [ ] **Step 4: 运行确认通过** —— 同上命令全部通过；`pytest_cpu tests/v41 tests/v5` 全绿。
+- [ ] **Step 5: 提交** `Add v5 source policies and v41 record migration`。
+
+### T07b：几何软件检查与降采样信息损失
+
+**Files:**
+- Create: `anatobind/v41/geometry_v5.py`
+- Test: `tests/v5/test_geometry_v5.py`
+
+**Interfaces:**
+- `affine_roundtrip_error_v5(points_vox: np.ndarray, affine: np.ndarray) -> float`：`inverse(transform(points))` 的最大绝对体素误差（复用 v41 `geometry.transform_points`/`inverse_transform_points`）。
+- `resample_labels_v5(labels: np.ndarray, src_affine, dst_affine, dst_shape) -> np.ndarray`：最近邻（平局按 half-up 取整，`floor(x + 0.5)`；终审 I1）；非整数 dtype → `DTYPE_MISMATCH`；输出取值 ⊆ 输入取值。
+- `pad_or_crop_v5(array, target_shape, fill) -> tuple[np.ndarray, np.ndarray]`（数组与 `valid_mask`）；`restore_grid_v5(array, valid_mask, original_shape) -> np.ndarray`（精确逆操作）。
+- `downsample_loss_report_v5(mask: np.ndarray, factor: tuple[int, ...], class_names: list[str]) -> dict`：`mask` 为 bool `[C, *spatial]`；降采样为步长取样；逐类给 `voxels_before`、`voxels_after`、`components_before`、`components_vanished`（降采样后在其覆盖块内无阳性的连通域，26 邻接）；另给 bool `lost_positive_mask`（降采样网格上，块内有阳性而步长取样为阴性的块为 True——含连通域整体保留、但薄结构部分块丢失的情形；终审 C1 修正，原定义只标消失连通域），调用方必须把它从阴性资格中去掉。
+
+- [ ] **Step 1: 写失败测试**：`test_affine_roundtrip_within_1e-4_voxel`（各向异性加旋转仿射，1000 个随机点，误差 `< 1e-4`）、`test_label_resampling_is_discrete`（float 输入报错；恒等仿射输出相等；取值子集）、`test_original_grid_write_back_is_exact`（pad 再还原逐元素相等，padding 处 `valid_mask` 为 False）、`test_downsample_reports_vanished_small_lesion`（单体素病灶在 factor 2 下 `components_vanished == 1` 且 `lost_positive_mask` 在其块为 True；8×8×8 病灶保留）、`test_downsample_rejects_non_bool_or_bad_factor`。
+- [ ] **Step 2: 运行确认失败** —— `pytest_cpu tests/v5/test_geometry_v5.py`，Expected: `ImportError`。
+- [ ] **Step 3: 实现。**
+- [ ] **Step 4: 运行确认通过** —— 本文件与全套测试全绿。
+- [ ] **Step 5: 提交** `Add v5 geometry checks and downsampling loss report`。
+
+### T07c：来源只读核验入口（代码合成验证；真实运行待批准）
+
+**Files:**
+- Create: `anatobind/v41/source_check_v5.py`
+- Test: `tests/v5/test_source_check.py`
+
+**Interfaces:**
+- `summarize_source_check_v5(geometry_rows: list[dict], pairing_rows: list[dict], channel_reports: list[dict], loss_reports: list[dict], policy: SourcePolicy) -> dict`：只输出计数与比例——配对状态计数、几何 pass/fail/unknown 计数、SKM 通道变换一致的病例数、逐类降采样消失连通域总数与受影响扫描数；不含病例 ID、路径、文件名。复用 v41 `geometry_qc.run_geometry_qc` 产生的行。
+- `render_source_check_md_v5(summary: dict) -> str`：生成 `reports/v5/source_check_<source_id>.md` 的正文。
+
+- [ ] **Step 1: 写失败测试**：`test_summary_has_counts_only`（合成行含 `case_id`/路径，汇总与 markdown 中均不出现）、`test_summary_counts_match_rows`、`test_missing_pairs_are_counted_not_dropped`。
+- [ ] **Step 2–4:** 同上 RED → 实现 → GREEN。
+- [ ] **Step 5: 提交** `Add redacted source-check summaries`。
+- **真实运行（不在本任务完成条件内）：** 在 amax 上对 ISLES、SKM 各跑一次 `run_geometry_qc` 与 `downsample_loss_report_v5`，原始行写 `$PRIVATE_ROOT`，脱敏 markdown 入库，并据此填写来源政策的 `null` 项。前提：对应来源的 G-DATA 数据使用批准、研究者同意写服务器。
+
+### T08a：v5 曝光账本
+
+**Files:**
+- Modify: `schemas/v5/sample.schema.json`（`exposure_history` 条目）
+- Create: `anatobind/v41/exposure_v5.py`
+- Modify: `anatobind/v41/migrate_v5.py`（角色映射）
+- Test: `tests/v5/test_exposure_v5.py`；按需更新 `tests/v5/factories.py`
+
+**Interfaces:**
+- `EXPOSURE_ROLES_V5 = ("training", "unlabeled_pretraining", "model_selection", "test_results_seen", "administrative_qc", "unknown")`。
+- 条目：`{"experiment_id": str, "role": <上面之一>, "recorded_at": str, "lineage_id": str | null, "evidence": str | null}`，`additionalProperties: false`。
+- `V41_ROLE_MAP = {"train": "training", "val": "model_selection", "test": "test_results_seen", "ssl": "unlabeled_pretraining", "pseudo_label": "training", "unknown": "unknown"}`；迁移时 `lineage_id = None`、`evidence = "migrated_from_v41"`。
+- `locked_test_blockers_v5(exposure_history: list[dict], lineage_id: str) -> list[str]`：返回阻止该谱系 locked_test 的条目角色（排序去重）。规则：`administrative_qc` 不阻止；`test_results_seen` 与 `unknown` 对所有谱系都阻止（研究选择层面的曝光）；`training`、`unlabeled_pretraining`、`model_selection` 仅当 `lineage_id` 相同或条目 `lineage_id` 为 null 时阻止。
+
+- [ ] **Step 1: 写失败测试**：`test_v5_roles_validate_and_v41_roles_rejected`、`test_v41_roles_are_mapped_on_migration`、`test_administrative_qc_never_blocks`、`test_unknown_and_seen_results_block_every_lineage`、`test_training_blocks_only_its_lineage_or_null`。
+- [ ] **Step 2–4:** RED → 实现 → GREEN（全套测试含 T07a 迁移测试）。
+- [ ] **Step 5: 提交** `Add v5 exposure roles and locked-test blockers`。
+
+### T08b：v5 划分（官方分组优先、组内分层）
+
+**Files:**
+- Create: `anatobind/v41/splits_v5.py`
+- Test: `tests/v5/test_splits_v5.py`
+
+**Interfaces:**
+- `freeze_splits_v5(records: list[SampleV5], groups: dict[str, str], policy: dict, lineage_id: str) -> dict`：纯函数，不写文件；返回 `{"assignment": {sample_uid: split}, "counts": {split: n_groups}, "exposed_groups": int, "unassigned_groups": int, "split_sha256": str}`。按组分配，同组记录同 split。
+- `policy["kind"] == "official"`：`policy["official_split"]: {group: "train" | "val" | "test"}`，映射为 `train` / `development_val` / `locked_test`；不在映射中的组 → `unassigned`。
+- `policy["kind"] == "stratified"`：必需 `seed: int`、`fractions`（三个 split，和为 1）、`strata: {group: str}`、`min_stratum_groups: int`、`small_stratum_rule: "merge"`（小于阈值的层并入 `"__merged__"`）；组内按 `sha256(f"{seed}:{stratum}:{group}")` 排序后按比例切分。缺键 → `V5Error("INVALID_SPLIT_POLICY", "$.policy.<key>")`，不设默认值（GC11）。
+- 两种 kind 都必需 `exposed_groups: "train" | "excluded"`：组内任一记录的 `locked_test_blockers_v5(..., lineage_id)` 非空且被分到 `locked_test` 时，改为该值。
+
+- [ ] **Step 1: 写失败测试**：`test_official_split_is_mapped`、`test_missing_official_group_stays_unassigned`、`test_stratified_split_is_deterministic_and_group_consistent`、`test_small_strata_are_merged_by_rule`、`test_exposure_survives_reseeding`（参数化 3 个种子，曝光组从不进 `locked_test`）、`test_policy_without_seed_or_rule_raises`。
+- [ ] **Step 2–4:** RED → 实现 → GREEN。
+- [ ] **Step 5: 提交** `Add v5 official and stratified splits with exposure exclusion`。
+
+### B1 终审修复（2026-11-06）
+
+独立终审（opus）结论“修复后可合并”。一轮修复，每项先写复现测试（RED→GREEN），全套 414 passed：
+- C1 `lost_positive_mask` 漏标存活薄结构的丢失块 → 按块判定（`test_downsample_reports_lost_blocks_of_surviving_thin_structure`）。
+- I1 重采样平局 half-to-even 使奇数标签消失 → half-up（`test_resample_half_voxel_tie_rounds_half_up`）。
+- I2 已迁移的 v5 记录可被再次迁移并升级几何状态 → 只接受 v41 记录（`test_only_v41_records_are_migrated`）。
+- I5 Proposal §3.2 要求的 `geometry_evidence` 未登记 → v5 样本新增必填 `geometry_evidence {index_alignment, physical_geometry}`，`verified` 必须带证据；来源政策新增 `physical_units_evidence`（`test_migration_records_geometry_evidence`、`test_verified_geometry_needs_evidence`）。
+- I3 分组映射可把同一患者/泄漏组拆到不同划分 → `LEAKAGE_GROUP_SPLIT`（`test_group_mapping_cannot_split_a_patient_or_leakage_group`）。
+- I4 来源核验把 CSV 读回的 JSON 字符串 reasons 按字符计数 → 畸形行报 `INVALID_TYPE`（`test_malformed_rows_raise_v5_errors`）。
+- 原 M3（按影响上调）空白 lineage 的训练曝光不阻断 → 视同未命名（`test_blank_lineage_entry_blocks_like_null`）。
+
+### B1 完成判定
+
+`pytest_cpu tests/v41 tests/v5` 全部通过；`reports/v5/status.md` 的 T07、T08 行 `code_status: PASS`、`data_run_status: TODO`（真实运行待批准）；整段 B1 做一次独立审查。B1 不产生真实数据结论；划分的种子、比例、分层与小层规则由研究者在真实运行前批准登记。
+
+---
+
+## 2C. 阶段 B2：登记、训练、推理与模块基线（T09a–T10，2026-11-07 细化）
+
+**Goal:** 在 B1 数据层上交付运行登记与谱系继承、只读冻结划分、冻结的 §1.7 模型接口、可恢复训练核、原网格推理与私有落盘，以及 A-only、U-only、shared-AU 残差 U-Net。代码与合成测试在本机 CPU 完成；GPU 实测与真实模块基线单列，逐步等待批准。
+
+**依据：** Proposal §2.1、§3.3、§4.1–4.3、§6.1–6.3、§7.1、§9；本文件 §1.6（L2、L4–L6）、§1.7；`reports/v5/host_precheck_amax.md`；`reports/v5/early_phase_scope_research_20261107.md`。
+
+**范围（含 D3 修订的影响）：**
+- B2 的真实模块基线只有两个，都已有 scope 与来源政策：`skm_a`（SKM-TEA A6，E1/E2，体素级 A）与 `isles_u`（ISLES DWI/ADC，体素级 U）。两者分开报告，不相加（§1.1）。
+- shared-AU 在 B2 只实现架构并做合成验证。H1 要求它与主方法同数据（Proposal §7.1），真实训练随联合 scope 在 T13（G-JOINT）。
+- SKM 的原有框不进 B2 训练：框只作单列 MIL/定位，不转体素资格（Proposal §4.2、§5.0）。现有 `annotation_channel_v5` 已把 `bbox` 表示排除在监督之外；框损失随联合 scope 在 T13 实现。
+- SPIDER（P1：矢状 T2）在 B2 只备 MHA 读取，供 T11 复用。SPIDER 的 A 训练要先在真实 T07 登记来源政策与 module scope，不在 B2 完成条件内。
+- 数据增强不在 B2：先用无增强配方得到可复现基线。增强作为新配方另行登记，H1 各组用同一增强。
+- B2 的模型只支持 `3d`；前期场景的二维 U/S/R 记 NOT_EVALUATED（Proposal §5.0）。
+
+**约束：** Global Constraints 与 §2.0 适用。另：
+- 模型 forward 只接收 §1.7 的输入；GT、资格、复核与可见性只进损失或评价，不进模型与推理入口（GC8）。
+- 配方、监督政策、接受政策中的数值（种子、patch、batch、精度、学习率、步数、阈值、容差）一律由登记文件显式给出，函数不设默认值；模板保持 `null`（GC7、GC11）。
+- 私有产物（运行登记、曝光追加、checkpoint、预测数组、指标日志）只经 `paths.resolve_private_output` 写入 `$PRIVATE_ROOT`（目录 700、文件 600），不覆盖已有文件。
+- 测试只用合成数组和 `tmp_path` 下的合成 H5/NIfTI/MHA，在 CPU 上运行，不访问 amax。
+- 串行顺序：T09a → T09b → T09c → T10。
+
+**Review Focus（B2）：**
+1. 记录的模态或通道顺序与 scope 不一致（如 E1/E2 互换）时拒绝，不按文件顺序取通道 —— T09b `test_record_modalities_must_equal_scope_inputs`。
+2. 只按冻结划分的 `assignment` 取样；`SampleV5.split` 写着 train 的 locked_test 样本也读不到 —— T09a `test_selection_reads_assignment_not_sample_split`。
+3. 从已曝光的 checkpoint 继续训练并换一个 lineage ID，仍被祖先曝光阻断 —— T09a `test_renamed_lineage_still_blocked_by_ancestor_exposure`。
+4. 填充区和降采样丢失的小阳性不产生阴性梯度 —— T09b `test_lost_positive_blocks_have_no_negative_eligibility`、`test_patch_padding_has_no_eligibility_or_fov`。
+5. 配方、数据或 checkpoint 文件变了就拒绝续跑，不静默接着训练 —— T09b `test_resume_refuses_hash_or_run_mismatch`。
+
+### T09a：运行登记、谱系继承、冻结划分读取与模型接口
+
+**Files:**
+- Create: `anatobind/v41/engine/__init__.py`、`anatobind/v41/engine/registration_v5.py`、`schemas/v5/run.schema.json`
+- Create: `configs/v5/run_recipe.template.yaml`、`configs/v5/supervision.template.yaml`
+- Create: `anatobind/v41/models/__init__.py`、`anatobind/v41/models/interface_v5.py`
+- Modify: `anatobind/v41/exposure_v5.py`、`anatobind/v41/splits_v5.py`；`tests/v5/test_splits_v5.py`（所有现有调用补 `ancestor_lineages=[]`）
+- Test: `tests/v5/test_run_registration.py`、`tests/v5/test_model_interface.py`；追加 `tests/v5/test_exposure_v5.py`
+- Modify: `tests/v5/factories.py`（`make_recipe(**overrides) -> dict`、`make_supervision(scope, **overrides) -> dict`、`make_split_registry(records, **overrides) -> dict`、`make_run(**overrides) -> dict`）
+
+**Interfaces（谱系与划分，L4、L6）：**
+- `exposure_v5.lineage_blockers_v5(exposure_history, lineage_id: str, ancestor_lineages: list[str]) -> list[str]`：对 `lineage_id` 与每个祖先分别调用 `locked_test_blockers_v5`，取并集并排序。祖先含空串、重复或 `lineage_id` 本身 → `INVALID_LINEAGE`（`$.ancestor_lineages`）。
+- `splits_v5.freeze_splits_v5(records, groups, policy, lineage_id, *, ancestor_lineages: list[str])`：关键字参数必填、无默认；曝光排除改用 `lineage_blockers_v5`。返回值增加 `lineage_id`、`ancestor_lineages`、`policy`，使登记可以自证；`split_sha256 = split_registry_sha256_v5(assignment, lineage_id, ancestor_lineages, policy)`（四项的 canonical JSON 哈希）。
+- `splits_v5.verify_split_registry_v5(registry: dict) -> dict`：重算哈希，不符 → `SPLIT_HASH_MISMATCH`（`$.split_sha256`）。
+- `registration_v5.select_samples_v5(records: list[SampleV5], registry: dict, roles: list[str]) -> list[SampleV5]`：先 `verify_split_registry_v5`；只按 `registry["assignment"]` 取样，从不读 `record.split`。`roles` 只能取 `train`、`development_val`：含 `locked_test` → `LOCKED_TEST_NOT_READABLE`，其他 → `INVALID_ROLE`。记录不在 assignment 中 → `SPLIT_ASSIGNMENT_MISSING`（`$[i].sample_uid`）。
+- `registration_v5.inherit_lineage_v5(parents: list[dict], lineage_id: str) -> list[str]`：`parents` 每项为 `{"run": <父运行登记>, "checkpoint_sha256": str}`；结果为各父 `lineage_id` 及其 `ancestor_lineages` 的并集，去掉 `lineage_id` 本身后排序（合并、蒸馏有多个父）。父缺运行登记（如 v41 遗留权重）→ `PARENT_RUN_REQUIRED`；父为 smoke 运行 → `SMOKE_PARENT_NOT_ALLOWED`。
+
+**Interfaces（运行登记，Proposal §6.3）：** `engine/registration_v5.py`
+- `validate_recipe_v5(recipe: dict) -> dict`：键集固定，见模板 `run_recipe.template.yaml`。任一叶子为 `null` → `RECIPE_VALUE_MISSING`（`$.<键路径>`）；越界或不在枚举内 → `INVALID_RECIPE_VALUE`。
+  - 模板键：`recipe_id`；`model{architecture, tasks, widths, strides, blocks_per_stage}`；`seeds{init, sampler}`；`patch_size`；`batch_size`；`precision`；`optimizer{name, lr, weight_decay}`；`scheduler{name, exponent}`；`downsample_factor`；`normalization`；`sampling{positive_fraction}`；`readable_roles`；`selection_rule`；`inference{window, stride}`；`checkpoint_every`；`budget{max_steps, max_wall_hours}`。
+  - 枚举：`architecture ∈ {resunet3d}`；`tasks` 为 `{A, U}` 的非空子集；`precision ∈ {fp32, amp_bf16, amp_fp16}`；`optimizer.name ∈ {adamw}`；`scheduler.name ∈ {poly}`，学习率 `lr·(1 - step/max_steps)^exponent`，`exponent = 0` 即恒定；`normalization ∈ {zscore_volume}`；`readable_roles ⊆ {train, development_val}`；`selection_rule ∈ {last}`（B2 只用末个 checkpoint，不在训练中看开发集）。
+- `validate_supervision_v5(policy: dict, scope: ActiveScope) -> dict`：键 `policy_id, scope_id, reference_policy_id, track, allow_unknown_visibility, channel, tasks{A|U: kind, ce_weight, dice_weight, task_weight}`。`scope_id`、`reference_policy_id` 与 scope 一致；`channel == "expert"`（B2 不用 pseudo）；`A.kind == "softmax"`、`U.kind == "sigmoid"`；`null` → `SUPERVISION_VALUE_MISSING`。
+- `capture_environment_v5() -> dict`（python、torch、numpy 版本，CUDA 版本或 null，设备名列表）；`capture_code_v5(repo: Path) -> dict`（`git_commit`、`dirty`）。
+- `register_run_v5(*, run_id, lineage_id, run_kind, recipe, supervision, scope, source, split_registry, records, gate_decisions, approvals, parents, environment, code, created_at, fixture_mode) -> dict`：纯函数，输出经 `run.schema.json` 校验（`additionalProperties: false`）。
+  - 字段：`schema_version: "v5.1"`、`run_id`、`run_kind`（`smoke` | `baseline`）、`lineage_id`、`ancestor_lineages`、`parents[{run_id, run_sha256, checkpoint_sha256, lineage_id}]`、`scope{scope_id, scope_hash}`、`source{source_id, source_version}`、`split{split_sha256, readable_roles}`、`data_manifest_sha256`（`select_samples_v5` 按 `readable_roles` 选出的记录的 canonical 哈希）、`supervision_sha256`、`recipe_sha256`、`code`、`environment`、`gate_decisions[{gate_id, decision_sha256}]`、`approvals`、`fixture_mode`、`created_at`。
+  - `recipe.model.tasks` 须为 scope 可训练任务的子集（A 要 `anatomy_classes` 非空，U 要 `abnormality_classes` 非空），且等于监督政策的任务集 → 否则 `MODEL_TASKS_INVALID`。
+  - `smoke`：需同 scope、同来源的 `G-DATA` 决定为 `PASS`，以及 `approvals["resources"]`（`approved_by`、`approved_at`、`scope_hash`）；`readable_roles` 只能是 `[train]` → 否则 `SMOKE_ROLES_INVALID`。smoke 只产出 G-BASE 的 `training_smoke` 证据，不作基线结果，也不能作父权重。
+  - `baseline`：模型含 A 需 `G-BASE-A` 为 `PASS`，含 U 需 `G-BASE-U` 为 `PASS`，均绑定同 scope 与来源。
+  - 缺决定或未通过 → `GATE_NOT_PASSED`（`$.gate_decisions.<gate_id>`）；scope 或来源不符 → `GATE_BINDING_MISMATCH`；非 fixture 运行收到 `fixture_mode: true` 的决定或 `synthetic-fixture` 批准 → `GATE_FIXTURE_NOT_ALLOWED`；非 fixture 运行的 `code.dirty` 为真 → `CODE_DIRTY`。
+- `run_sha256_v5(run: dict) -> str`。
+- `write_run_v5(run: dict, registry: dict, private_root: Path, repo: Path) -> Path`：在任何训练之前写 `runs/<run_id>/run.json` 与 `runs/<run_id>/exposure.json`（`run_exposure_entries_v5` 的结果），不覆盖；返回运行目录。曝光在登记时就落盘，训练中途失败也已记录（L6）。
+- `run_exposure_entries_v5(run: dict, registry: dict) -> dict[str, list[dict]]`：`readable_roles` 中 `train` 的样本记 `training`，`development_val` 的样本记 `model_selection`；条目为 T08a 格式，`lineage_id` 取本运行，`recorded_at` 取 `run["created_at"]`，`evidence = "run_sha256:<哈希>"`。
+- `merge_run_exposure_v5(records: list[SampleV5], exposure_files: list[dict]) -> list[SampleV5]`：把各运行的曝光文件追加到记录副本，再经 `validate_sample_v5`；未知样本 → `EXPOSURE_SAMPLE_UNKNOWN`；同一 `run_id` 出现两次 → `DUPLICATE_EXPOSURE_FILE`。
+
+**Interfaces（§1.7 模型接口，在此冻结）：** `models/interface_v5.py`
+- `ModelInputV5`（frozen dataclass）：
+  - `image: torch.Tensor`：float32 `[B, C, *spatial]`，C 按 scope `input_modalities` 顺序；
+  - `valid_fov: torch.Tensor`：bool `[B, *spatial]`；
+  - `observation_mode: str`；
+  - `valid_slices: torch.Tensor`：bool `[B, n_slices]`；
+  - `grids: tuple[dict, ...]`：每项含 T01b `GEOMETRY_KEYS` 与 `slice_axis`。`slice_axis` 取间距最大的轴，并列或间距未知时取最后一轴；
+  - `to_original: tuple[tuple[dict, ...], ...]`：每项为到原网格的变换链。
+- `ModelOutputV5`（frozen dataclass）：`anatomy_logits`（`[B, 1+K, *spatial]` 或 None，通道 0 为背景，softmax）、`abnormality_logits`（`[B, C_U, *spatial]` 或 None，sigmoid）。
+- `build_model_input_v5(channels: dict[str, np.ndarray], scope, valid_fov: np.ndarray, grid: dict, to_original: list[dict]) -> ModelInputV5`（B=1）：按 `scope.input_modalities` 顺序堆叠；缺通道 → `INPUT_MODALITY_MISSING`（`$.input_modalities[i]`），多余通道 → `INPUT_MODALITY_UNEXPECTED`；`valid_slices` 由 `valid_fov` 沿 `slice_axis` 求 any 得到，不由调用方给。
+- `collate_model_inputs_v5(items: list[ModelInputV5]) -> ModelInputV5`：空间形状不一致 → `GRID_MISMATCH`，模式不一致 → `MODE_MISMATCH`。
+- `check_model_input_v5(batch, scope, supported_modes: tuple[str, ...]) -> None`：模式不在 `supported_modes` → `MODE_NOT_SUPPORTED`（`$.observation_mode`）；与 scope 模式不同 → `MODE_MISMATCH`；通道数不符 → `CHANNEL_COUNT_MISMATCH`；形状或类型不符 → `GRID_MISMATCH`；非有限值 → `NON_FINITE_INPUT`。
+- `check_model_output_v5(output, batch, scope, tasks: tuple[str, ...]) -> None`：启用任务的 logits 形状如上；未启用任务必须为 None → 否则 `MODULE_TASKS_INVALID`。
+- `PerceptionModelV5(torch.nn.Module)`：`__init__(self, scope: ActiveScope, tasks: tuple[str, ...])`；类属性 `supported_modes = ("3d",)`；`forward(batch)` 依次调用 `check_model_input_v5`、子类的 `_forward_v5(batch) -> ModelOutputV5`、`check_model_output_v5`。T10、T13、T16 的模型只实现 `_forward_v5`。
+
+- [ ] **Step 1: 写失败测试（谱系、划分与登记）**，同时给 `test_splits_v5.py` 的现有调用补 `ancestor_lineages=[]`：
+  - `test_renamed_lineage_still_blocked_by_ancestor_exposure`：样本有 lineage `lin-a` 的 training 曝光；`locked_test_blockers_v5(h, "lin-b") == []`，`lineage_blockers_v5(h, "lin-b", ["lin-a"]) == ["training"]`。
+  - `test_freeze_splits_excludes_groups_exposed_to_ancestors`、`test_split_registry_hash_is_verified`（改一条 assignment → `SPLIT_HASH_MISMATCH`）。
+  - `test_selection_reads_assignment_not_sample_split`：`record.split == "train"` 而 assignment 为 `locked_test` 时不返回；请求 `locked_test` → `LOCKED_TEST_NOT_READABLE`。
+  - `test_unassigned_record_rejected`、`test_lineage_inherits_all_ancestors`（祖→父→子；两个父取并集）、`test_parent_without_run_record_or_smoke_parent_rejected`。
+  - `test_recipe_and_supervision_templates_fail_closed`（两个模板分别报 `RECIPE_VALUE_MISSING`、`SUPERVISION_VALUE_MISSING`）。
+  - `test_registration_requires_passing_gates_per_task`（A、U、A+U 三种 baseline；smoke 只需 G-DATA 与资源批准；fixture 决定在非 fixture 运行中被拒）、`test_smoke_run_reads_train_only`、`test_dirty_code_rejected_for_real_runs`。
+  - `test_run_exposure_entries_cover_read_roles_only`、`test_merged_exposure_validates_and_rejects_unknown_samples`。
+  - `test_run_record_written_privately_without_overwrite`：`run.json` 与 `exposure.json` 同时写出；`tmp_path` 下的私有根中文件 600、目录 700；第二次写 → `PRIVATE_FILE_EXISTS`；写进 Git 工作区 → `PRIVATE_PATH_IN_GIT`。
+- [ ] **Step 2: 运行确认失败** —— `pytest_cpu tests/v5/test_run_registration.py tests/v5/test_exposure_v5.py tests/v5/test_splits_v5.py`，Expected：新测试 `ImportError`，划分测试 `TypeError`（新关键字）。
+- [ ] **Step 3: 实现谱系、划分与登记接口。**
+- [ ] **Step 4: 运行确认通过** —— 同上命令全部通过；`pytest_cpu tests/v41 tests/v5` 全绿。
+- [ ] **Step 5: 提交** `Add v5 run registration with lineage inheritance and frozen-split access`。
+- [ ] **Step 6: 写失败测试（模型接口）**：`test_model_input_stacks_channels_in_scope_order`（以相反键序传入，堆叠仍按 scope 顺序）、`test_missing_or_extra_modality_rejected`、`test_valid_slices_follow_fov`（尾部填充层为 False）、`test_3d_only_model_rejects_2d_input`（`MODE_NOT_SUPPORTED`，且 `_forward_v5` 未被调用）、`test_output_shapes_and_disabled_tasks_checked`、`test_nonfinite_input_rejected`、`test_collate_rejects_mixed_grids`。
+- [ ] **Step 7–9:** RED（`ImportError`）→ 实现 → GREEN（全套测试）。
+- [ ] **Step 10: 提交** `Freeze the v5 model input/output interface`；同一提交把 status.md 的 T09a 行改为 `code_status: PASS`。
+
+### T09b：读取、按资格采样与可恢复训练核
+
+**Files:**
+- Create: `anatobind/v41/engine/volume_io_v5.py`、`anatobind/v41/engine/data_v5.py`、`anatobind/v41/engine/train_v5.py`、`configs/v5/label_maps_v5.yaml`
+- Test: `tests/v5/test_volume_io.py`、`tests/v5/test_training_data.py`、`tests/v5/test_training_core.py`
+- Modify: `tests/v5/factories.py`：`write_nifti(path, array, affine, slope=None)`、`write_skm_h5(path, echo1, echo2, seg)`、`write_mha(path, array, spacing, direction, offset, compressed)`；`TinyPerceptionModel(PerceptionModelV5)`（单层 3×3×3 卷积，按任务给 A/U 头）
+
+**Interfaces（读取）：** `engine/volume_io_v5.py`
+- `VolumeV5`（frozen dataclass）：`array: np.ndarray`；`header: dict | None`（`shape, spacing_mm, affine, axis_codes`，仿射统一为 RAS；H5 为 None）。
+- `read_volume_v5(root: Path, ref: str, kind: str) -> VolumeV5`：`ref` 为相对路径，含 `..` 或为绝对路径 → `INVALID_REF`；`kind ∈ {image, label}`。按后缀分派：
+  - `.nii`/`.nii.gz`：图像用 `get_fdata(dtype=np.float32)`，保留 scaling；标签用 v41 `labels.read_categorical_nifti`（近整数容差 `1e-5`，不把概率图取整）；header 取自 v41 `geometry.geometry_from_nifti`。
+  - `.h5`：`ref` 写成 `<相对路径>#<数据集>`（SKM：`echo1`、`echo2`、`seg`），缺 `#` → `H5_DATASET_REQUIRED`。图像转 float32；`seg` 返回 bool `[X, Y, Z, 6]`；header 为 None。H5 没有几何，物理几何以记录的 `image_geometry` 与 `physical_geometry_status` 为准。真实 T07 生成 SKM 记录时按这一约定写 `image_paths`。
+  - `.mha`：`read_mha_v5`。
+- `read_mha_v5(path: Path) -> VolumeV5`：只用 numpy 与 zlib（本机无 SimpleITK）。
+  - 支持 `NDims = 3`、`ElementDataFile = LOCAL`、`CompressedData`、`BinaryDataByteOrderMSB`、`ElementType ∈ {MET_UCHAR, MET_CHAR, MET_USHORT, MET_SHORT, MET_UINT, MET_INT, MET_FLOAT, MET_DOUBLE}`；其他（外部数据文件、多通道等）→ `MHA_UNSUPPORTED`（`$.<键名>`）。
+  - 数据按 x 最快变化存放，读出后转为 `(x, y, z)` 轴序。
+  - `TransformMatrix` 的第 j 组三个数是第 j 轴的方向（MetaIO 约定）。LPS 仿射为 `[D·diag(spacing) | Offset]`，再左乘 `diag(-1, -1, 1, 1)` 转为 RAS。
+- SPIDER 的影像与 mask 网格差异 ≤ 8e-5 mm，属浮点精度（早期研究报告 §4.2）。比较时用 v41 `geometry.audit_geometry`，容差由调用方显式传入并登记，不要求精确相等。
+
+**Interfaces（样本、资格与采样，L2、L4、L5）：** `engine/data_v5.py`
+- `configs/v5/label_maps_v5.yaml`：
+  - `skm_a6_h5_channels_v1`：`encoding: channels`；`patellar_cartilage: 0, femoral_cartilage: 1, tibial_cartilage_medial: 2, tibial_cartilage_lateral: 3, meniscus_medial: 4, meniscus_lateral: 5`。依据 SKM-TEA DATASET.md 中 `seg` 的通道顺序（早期研究报告 §2），与 `scope_skm_a.yaml` 的类别顺序一致；真实 T07 用 v41 `channel_check` 复核。
+  - `isles_binary_v1`：`encoding: values`；`ischemic_infarct: 1`。
+  - `load_label_maps_v5(path: Path) -> dict`。
+- `decode_targets_v5(volume: VolumeV5, annotation: AnnotationV5, classes: list[str], label_maps: dict) -> np.ndarray`：返回 bool `[len(classes), *spatial]`；按 `annotation.label_map_version` 查表，未知 → `LABEL_MAP_UNKNOWN`；A 的通道相互重叠 → `LABEL_OVERLAP`（A6 为互斥输出，Proposal §2.1）。
+- `ObservationV5`（frozen dataclass）：`sample_uid, patient_uid, channels: dict[str, np.ndarray], valid_fov: np.ndarray, grid: dict, to_original: list[dict], original_shape: tuple`。
+- `load_observation_v5(root: Path, record: SampleV5, scope: ActiveScope, recipe: dict) -> ObservationV5`：训练与推理共用，只读影像，不读任何标签、复核或可见性文件（GC8）。
+  1. L2：`list(record.model_modalities) != list(scope.input_modalities)` → `MODALITY_SCOPE_MISMATCH`（`$.model_modalities`）；所需模态在 `available_modality_mask` 中为假 → `INPUT_MODALITY_UNAVAILABLE`，不补零通道。通道按 `modality_names` 找到对应的 `image_paths` 读取。
+  2. 有效 FOV 初始为全真（来源没有 FOV 掩膜）；通道之间形状不一致 → `GRID_MISMATCH`。
+  3. `downsample_factor` 不全为 1 时，按该步长取样（原点对齐，与 T07b 一致）；不做平均池化，避免图像与标签错开半个块。变换链记 `{"op": "downsample", "factor", "input_shape"}`。
+  4. `zscore_volume`：每通道在有效 FOV 内求均值与标准差；标准差为 0 → `DEGENERATE_CHANNEL`。只用于 3D。
+- `TrainingSampleV5`（frozen dataclass）：`observation: ObservationV5, targets: dict[str, np.ndarray], e_pos: dict[str, np.ndarray], e_neg: dict[str, np.ndarray]`。A 的 target 为 int 图（0 为背景，1..K 按 `scope.anatomy_classes`）；U 的 target 为 bool `[C_U, ...]`。
+- `load_training_sample_v5(root: Path, record: SampleV5, scope: ActiveScope, supervision: dict, recipe: dict, label_maps: dict, regions: dict) -> TrainingSampleV5`（`regions = {"review": {...}, "visibility": {...}}`，原网格数组，按路径为键）：
+  1. 先 `load_observation_v5`；标签与通道形状不一致 → `GRID_MISMATCH`。
+  2. 标签、复核与可见区域用 observation 记录的同一步长取样。
+  3. 资格：每个任务调用 `build_eligibility_v5(..., channel="expert")`，`policy` 取监督政策中的 `track`、`allow_unknown_visibility`、`reference_policy_id`。
+  4. L5：降采样时，对每个任务的阳性目标调用 `downsample_loss_report_v5`，`e_neg &= ~lost_positive_mask`；不降采样时该掩膜全假。A 的 softmax 资格是全部类别同时合格的位置，与 `masked_objective_v5` 一致。
+- `PatchSamplerV5(sample_uids: list[str], positive_centers: dict[str, np.ndarray], positive_fraction: float, seed: int)`：
+  - 用 `np.random.Generator(np.random.PCG64(seed))`；每个 epoch 打乱样本顺序。
+  - 每次抽取以概率 `positive_fraction` 取该样本的合格阳性体素为中心（A 取前景且全类合格的体素，U 取任一类阳性且该类 `e_pos` 为真的体素，两任务时取并集），样本无阳性时改为随机；否则在有效 FOV 内均匀取中心。
+  - `state_dict()` 保存 `bit_generator.state`（纯 Python 整数）、epoch 与游标；`load_state_dict()` 精确恢复。
+- `extract_patch_v5(sample: TrainingSampleV5, center: tuple[int, ...], patch_size: tuple[int, ...]) -> dict`：越界部分填 0，填充处的 `valid_fov`、`e_pos`、`e_neg` 均为假。
+- `make_batch_v5(samples: dict[str, TrainingSampleV5], sampler: PatchSamplerV5, recipe: dict, scope) -> tuple[ModelInputV5, dict, dict]`：返回模型输入、targets 与资格（torch 张量）。单进程，不用多进程 DataLoader，采样器状态才能完整保存。
+- 训练样本只由 `select_samples_v5(records, registry, ["train"])` 给出（L4）。
+
+**Interfaces（训练核，Proposal §4.3、§6.3）：** `engine/train_v5.py`
+- `training_loss_v5(output: ModelOutputV5, targets: dict, eligibility: dict, supervision: dict) -> tuple[torch.Tensor, dict]`：每个启用任务调用 `masked_objective_v5`，总损失为 `Σ task_weight_t · L_t`。无支持的任务得到可反传的有限零，不改变其他任务的尺度。返回每任务的损失与支持体素数；损失非有限 → `NON_FINITE_LOSS`。
+- `build_optimizer_v5(model, recipe)`（AdamW）；`build_scheduler_v5(optimizer, recipe)`（poly）。`amp_fp16` 用 `torch.amp.GradScaler`；`fp32`、`amp_bf16` 的 scaler 关闭，但状态照存。
+- `save_checkpoint_v5(path: Path, state: dict, run: dict, private_root: Path, repo: Path) -> str`：
+  - 内容为 `{"format": "anatobind_ckpt_v5", "run_sha256", "step", "model", "optimizer", "scheduler", "scaler", "sampler", "rng": {"python", "torch", "cuda"}}`；
+  - 先写临时文件再链接，不覆盖，权限 600；
+  - 返回文件 sha256，并写旁注 `<文件名>.json`（sha256、step、run_sha256）。
+- `load_checkpoint_v5(path: Path, run: dict, expected_sha256: str, device: str) -> dict`：先比对文件 sha256 → `CHECKPOINT_HASH_MISMATCH`；再 `torch.load(..., weights_only=True)`，不反序列化任意对象；`run_sha256` 与当前运行登记不同 → `RUN_MISMATCH`（配方或数据变了就是新 run）。
+- `train_v5(run: dict, model: PerceptionModelV5, samples: dict[str, TrainingSampleV5], recipe: dict, supervision: dict, run_dir: Path, private_root: Path, repo: Path, resume: tuple[Path, str] | None) -> dict`：
+  - 第一个 step 之前核对 `run_dir` 中已有 `write_run_v5` 写出的 `run.json` 与 `exposure.json`，且 `run.json` 与传入的运行登记一致 → 否则 `RUN_NOT_REGISTERED`。没有落盘的曝光就不能训练（L6）。
+  - 每 `checkpoint_every` 步和结束时保存 checkpoint；每步指标追加到私有 `metrics.jsonl`。
+  - 到达 `budget.max_steps` 记 `COMPLETED`。
+  - 超过 `budget.max_wall_hours`、损失或 logit 非有限、OOM（`torch.cuda.OutOfMemoryError`）时：写 `failure.json`（`code`、`step`、`recorded_at`，不含数值），保留已有 checkpoint，返回 `status: "FAILED"`，不重试。
+  - 返回 `{"status", "step", "last_checkpoint", "last_checkpoint_sha256", "failure_code"}`。
+
+- [ ] **Step 1: 写失败测试（读取、样本与采样）**：
+  - `test_nifti_image_keeps_scaling_and_ras_header`；`test_skm_h5_reads_named_dataset_only`（`#echo1` 只读 echo1；缺 `#` → `H5_DATASET_REQUIRED`；`#seg` 为 bool 六通道）。
+  - `test_mha_raw_and_zlib_agree_and_affine_is_ras`（非单位方向矩阵；与按 MetaIO 约定手算的 RAS 仿射一致）；`test_mha_matches_simpleitk`（`pytest.importorskip("SimpleITK")`：本机跳过，在 amax 解释器上运行）；`test_unsupported_mha_rejected`；`test_ref_must_stay_inside_root`。
+  - `test_record_modalities_must_equal_scope_inputs`（E1/E2 互换 → `MODALITY_SCOPE_MISMATCH`；模态不可用 → `INPUT_MODALITY_UNAVAILABLE`）；`test_observation_loader_reads_no_labels`（标注文件不存在时 `load_observation_v5` 照常返回）。
+  - `test_label_maps_decode_channels_and_values`（未知版本 → `LABEL_MAP_UNKNOWN`；A 通道重叠 → `LABEL_OVERLAP`）。
+  - `test_lost_positive_blocks_have_no_negative_eligibility`（factor 2 下单体素病灶所在块的 `e_neg` 为假）；`test_patch_padding_has_no_eligibility_or_fov`。
+  - `test_sampler_is_deterministic_and_resumable`（抽 10 次、存状态、再抽 5 次；恢复后的 5 次相同）；`test_positive_centers_come_from_eligible_positives`；`test_locked_test_samples_never_loaded`。
+- [ ] **Step 2–4:** RED（`ImportError`）→ 实现读取与数据模块 → GREEN（全套测试）。
+- [ ] **Step 5: 提交** `Add v5 volume readers and eligibility-aware patch sampling`。
+- [ ] **Step 6: 写失败测试（训练核）**：
+  - `test_loss_has_no_gradient_outside_eligibility`；`test_task_without_support_does_not_change_other_task`。
+  - `test_resume_is_bitwise_identical_on_cpu`：连续 6 步，对比 3 步 + 存 + 读 + 3 步；参数、优化器状态与采样序列逐位相同（fp32）。
+  - `test_checkpoint_contains_all_states`；`test_resume_refuses_hash_or_run_mismatch`（改文件一字节 → `CHECKPOINT_HASH_MISMATCH`；改配方一项 → `RUN_MISMATCH`）；`test_checkpoints_never_overwrite`。
+  - `test_nonfinite_or_oom_writes_failure_without_retry`：假模型输出 inf，或抛 `torch.cuda.OutOfMemoryError`；`failure.json` 只含 code、step 与时间，forward 只被调用一次。
+  - `test_training_requires_registered_run_and_exposure`。
+- [ ] **Step 7–9:** RED → 实现训练核 → GREEN。
+- [ ] **Step 10: 提交** `Add resumable v5 training core`；同一提交更新 status.md 的 T09b 行。
+
+### T09c：全体积推理、原网格恢复、输出链与私有落盘
+
+**Files:**
+- Create: `anatobind/v41/engine/infer_v5.py`、`anatobind/v41/perception.py`、`anatobind/v41/perception_io.py`
+- Create: `schemas/v5/perception_record.schema.json`、`configs/v5/acceptance_policy.template.yaml`
+- Test: `tests/v5/test_inference_v5.py`、`tests/v5/test_perception_chain.py`、`tests/v5/test_perception_io.py`
+
+**Interfaces（推理与恢复，Proposal §2.1、§4.3）：** `engine/infer_v5.py`
+- `predict_volume_v5(model: PerceptionModelV5, batch: ModelInputV5, window: tuple[int, ...], stride: tuple[int, ...], precision: str) -> dict[str, np.ndarray]`：
+  - B=1，全体积。某轴小于窗口时在函数内补到窗口大小，返回前裁回模型网格。
+  - 窗口按 stride 平铺，最后一个窗口贴齐体积末端。
+  - 对 softmax/sigmoid 后的概率按覆盖次数等权平均，不平均 logits。
+  - 返回模型网格上的 `{"anatomy": [1+K, ...], "abnormality": [C_U, ...]}`，未启用的任务不出现。
+- `restore_probabilities_v5(prob: np.ndarray, to_original: list[dict], original_shape: tuple) -> tuple[np.ndarray, np.ndarray]`：
+  - 按变换链逆序还原：`pad_or_crop` 用 T07b `restore_grid_v5`；`downsample` 用线性插值。粗网格第 i 个样本对应原网格 f·i，原网格 j 处取粗网格坐标 j/f 的线性插值，越界取边界值（`scipy.ndimage.map_coordinates(order=1, mode="nearest")`）。
+  - 只接受浮点概率；bool 或 int 输入 → `DTYPE_MISMATCH`。离散图从不插值，阈值化在恢复之后。
+  - 返回概率与 `represented`（原网格上有模型输出的位置）。
+
+**Interfaces（接受、状态组合与输出，Proposal §2.1 规则 1–5）：** `perception.py`
+- 接受政策模板 `configs/v5/acceptance_policy.template.yaml`：`policy_id`、`policy_role`（`engineering` | `calibrated`）、`anatomy.min_confidence`、`abnormality.thresholds{class}`、`abnormality.reject_band{class: [lo, hi] | "none"}`、`instances.connectivity`（6 | 26）、`instances.min_voxels`，全部为 `null`。`validate_acceptance_policy_v5(policy, scope) -> dict`。
+  - B2 只用 `policy_role: engineering` 的登记值（Proposal §9：工程值不自动成为正式阈值）；`calibrated` 由 T14 在开发集上选定。
+- `apply_acceptance_v5(probabilities: dict, represented: np.ndarray, valid_fov: np.ndarray, policy: dict, scope) -> dict`：
+  - A：标签取 argmax；最大概率 < `min_confidence` → 未接受，原因 `anatomy_uncertain`；`anatomy_map` 在未接受处为 -1。
+  - U：逐类 `prob >= threshold` 为阳性；落在 `reject_band` 内 → 未接受，原因 `abnormality_uncertain`。
+  - 不在 `represented` 或 FOV 内 → 未接受，原因 `out_of_fov`。原因位用 `state_rule_v5.REASON_BITS`。
+- `extract_instances_v5(abnormality_map, abnormality_accepted, scope, policy) -> list[dict]`：在已接受的阳性上逐类求连通域（连通性与最小体素数取政策值），按类别、再按 bbox 排序生成稳定的 `instance_uid`。字段为 T01b `INSTANCE_KEYS`；`candidate_set_hash` 为整组候选的 canonical 哈希。被拒判的阳性体素留在体素图与原因中，不组成实例。
+- `run_perception_v5(model, batch: ModelInputV5, scope, *, observation_uid: str, checkpoint_sha256: str, original_geometry: dict, acceptance_policy: dict, window, stride, precision, relation_fn=None) -> PerceptionOutput | ModuleOutput`：依次 `predict_volume_v5` → `restore_probabilities_v5` → `apply_acceptance_v5`，然后：
+  - module scope：组装 `ModuleOutput`，未启用任务写入 `disabled_tasks`，不伪造 S/R；
+  - joint scope：`derive_state_map_v5` 生成 S，`extract_instances_v5` 生成实例；`relation_fn` 必填，缺 → `RELATION_FN_REQUIRED`。B2 只用合成桩验证这条链（Proposal §6.1），T13 接入真实 R；
+  - 最后经 `validate_module_output_v5` 或 `validate_perception_output_v5`。
+  - `provenance.input_sha256` 为各输入通道 `array_sha256` 按 scope 顺序的 canonical 哈希；`model_sha256 = checkpoint_sha256`；`output_policy_version = policy_id`。3D 的 `observation_uid` 取 `sample_uid`。
+  - 签名中没有参照、资格、复核或可见性参数（GC8）。
+- `infer_and_save_v5(..., out_dir: Path, private_root: Path, repo: Path) -> tuple[PerceptionOutput | ModuleOutput, Path]`：先 `run_perception_v5`，再 `save_output_v5`。这是唯一的正式推理入口；其输入由 T09b `load_observation_v5` 加 T09a `build_model_input_v5` 构造，不经过训练样本加载。
+
+**Interfaces（落盘，Proposal §2.1“私有数组引用和哈希”）：** `perception_io.py`
+- ArrayRef 为 `{"file": "<名称>.npy", "sha256": <array_sha256>, "dtype": str, "shape": [int]}`。输出中的每个数组（含实例 mask、接受图与原因图）各写一个 `.npy`（`allow_pickle=False`，不覆盖，权限 600）。记录 JSON 用 ArrayRef 代替数组，其余字段原样，按 `perception_record.schema.json` 校验。文件名用 `observation_uid` 的哈希前缀，不用原始标识。
+- `save_output_v5(output, out_dir: Path, private_root: Path, repo: Path) -> Path`。
+- `load_output_v5(record_path: Path, scope) -> PerceptionOutput | ModuleOutput`：逐个核对 sha256、dtype、shape → 不符报 `ARRAY_HASH_MISMATCH`；再重新经 `validate_*_output_v5`。
+
+- [ ] **Step 1: 写失败测试**：
+  - `test_sliding_window_covers_volume_and_averages_probabilities`：体积不是窗口的整数倍；每个位置至少被覆盖一次；常数桩模型的输出不因平均而改变。
+  - `test_restore_inverts_pad_crop_and_downsample`；`test_discrete_maps_are_never_interpolated`（bool/int 输入 → `DTYPE_MISMATCH`）。
+  - `test_acceptance_reasons_per_task`：A 不确定 → -1 与 `anatomy_uncertain`；FOV 外 → `out_of_fov`；U 落在拒判带 → `abnormality_uncertain`。
+  - `test_module_output_marks_disabled_tasks`：A-only 时 `disabled_tasks == ["U", "S", "R"]`、`abnormality_map is None`，并通过 `validate_module_output_v5`。
+  - `test_joint_chain_uses_state_rule_and_validates`：合成桩概率 → `PerceptionOutput` 通过校验，`tissue_state_map` 等于 `derive_state_map_v5` 的结果。
+  - `test_a_uncertainty_does_not_erase_u`（规则 5：A 被拒判处，U 通道与实例保留，S 为 not_assessable）。
+  - `test_3d_only_model_rejects_2d_scope_before_forward`。
+  - `test_inference_entry_takes_no_reference_inputs`：`inspect.signature` 的参数名中不含 target、reference、eligib、review、visib、truth。
+  - `test_saved_output_roundtrips_with_hashes`、`test_tampered_array_rejected`、`test_output_never_written_inside_repo`、`test_output_files_private_and_not_overwritten`。
+- [ ] **Step 2: 运行确认失败** —— `pytest_cpu tests/v5/test_inference_v5.py tests/v5/test_perception_chain.py tests/v5/test_perception_io.py`，Expected：`ImportError`。
+- [ ] **Step 3: 实现。**
+- [ ] **Step 4: 运行确认通过** —— 本任务与全套测试全绿。
+- [ ] **Step 5: 提交** `Add v5 full-volume inference, original-grid restore and private output chain`；同一提交更新 status.md 的 T09c 行。
+
+### T10：残差 U-Net 模块基线、GPU 实测与模块结果
+
+**Files:**
+- Create: `anatobind/v41/models/resunet_v5.py`、`anatobind/v41/engine/smoke_v5.py`、`anatobind/v41/engine/module_eval_v5.py`
+- Test: `tests/v5/test_resunet_v5.py`、`tests/v5/test_module_baseline.py`
+
+**Interfaces（模型，Proposal §6.1、§7.1）：** `models/resunet_v5.py`
+- 编码器：每级 `model.blocks_per_stage` 个残差块。残差块为 Conv3d 3×3×3 → InstanceNorm3d(affine) → LeakyReLU(0.01) → Conv3d → InstanceNorm3d，加跳连后 LeakyReLU；通道数变化时跳连用 1×1×1 卷积。下采样用步长卷积，第 i 级步长取 `model.strides[i]`，可各向异性（如 SKM 先只在平面内下采样）。
+- 解码器：转置卷积上采样（核与步长同该级）→ 与同级编码特征拼接 → 一个残差块。输出头为 1×1×1 卷积。不用深监督。
+- `AOnlyModelV5`（编码器 + A 解码器，头 1+K 通道）、`UOnlyModelV5`（编码器 + U 解码器，头 C_U 通道）、`SharedAUModelV5`（一个共享编码器、两个独立解码器）。三者都继承 `PerceptionModelV5`，`supported_modes = ("3d",)`。
+- `build_model_v5(recipe: dict, scope: ActiveScope) -> PerceptionModelV5`：按 `recipe.model.tasks` 选类。`patch_size` 与 `inference.window` 每轴须能被该轴步长之积整除 → 否则 `PATCH_NOT_DIVISIBLE`（`$.patch_size` 或 `$.inference.window`）。
+- `count_parameters_v5(model) -> int`，供后续容量匹配报告。
+
+**Interfaces（实测与模块结果）：**
+- `engine/smoke_v5.py`：
+  - `measure_candidates_v5(build_model, make_batch, candidates: list[dict], device: str) -> list[dict]`：`candidates` 为显式的 `{patch_size, batch_size, precision}` 列表，没有默认网格；每项做一次前向加反向，记录峰值显存（`torch.cuda.max_memory_allocated`）、每步秒数与样本吞吐。OOM 记 `status: "OOM"`，继续下一项，同一项不重试。
+  - `overfit_check_v5(model, samples, recipe, supervision, steps: int, criteria: dict) -> dict`：在给定的少量训练样本上训练 `steps` 步，记录损失曲线与这些样本上的 Dice。通过标准（损失下降比例、Dice 下限）由 `criteria` 显式给出。
+  - `render_measurement_md_v5(summary: dict) -> str`：只写设备型号与数量、显存、吞吐、配置与通过与否；不写路径、病例 ID、文件名。
+- `engine/module_eval_v5.py`：
+  - `freeze_module_reference_v5(references: dict[str, dict]) -> dict`：在预测前冻结开发集参照（每个观察的数组哈希与评价区域），带 `reference_set_hash`；评价时核对，不符 → `REFERENCE_HASH_MISMATCH`。
+  - `module_metrics_v5(output: ModuleOutput, reference: dict, metric_policy: dict) -> dict`：
+    - A：逐组织调用 T06a `segmentation_metrics_v5`，`pred = (anatomy_map == k)`；拒判处计为未预测，分母不缩小。
+    - U：调用 `segmentation_metrics_v5` 与 T06c `lesion_detection_metrics_v5`；预测与参照的实例都用 `extract_instances_v5` 按同一连通规则生成。
+    - 物理几何未验证时，毫米指标为 None。
+  - `summarize_module_metrics_v5(rows: list[dict]) -> dict`：逐例指标先在患者内汇总，再患者等权；病灶灵敏度与 FP/scan 用 T06c `summarize_lesion_detection_v5`。每个指标报告支持数与 None 数。只作开发集描述，不算区间（区间属于 T14 的 H1 比较）。
+  - `render_module_baseline_md_v5(summary: dict) -> str`：脱敏；写明 `development_val`、`scientific_conclusion: NOT_EVALUATED`，以及模块结果不相加。
+
+- [ ] **Step 1: 写失败测试（模型）**：
+  - `test_models_implement_interface_and_shapes`：A-only、U-only、shared-AU 在合成 scope 上的输出形状；未启用的头为 None。
+  - `test_shared_au_has_one_encoder_two_decoders`：编码器参数对象只有一份，两个解码器的参数不相交。
+  - `test_models_reject_2d_mode`；`test_patch_divisibility_checked`。
+  - `test_cpu_synthetic_overfit`：宽度 `[4, 8]`、16³ 合成体积、显式 AdamW 参数；A-only 与 U-only 各训练至多 100 步，末损失低于初始损失的一半；本机 CPU 数秒内完成。
+- [ ] **Step 2–4:** RED → 实现 → GREEN。
+- [ ] **Step 5: 提交** `Add residual U-Net A-only, U-only and shared-AU baselines`。
+- [ ] **Step 6: 写失败测试（实测与模块结果）**：`test_measurement_needs_explicit_candidates`（空列表或缺键 → `V5Error`）、`test_oom_candidate_recorded_not_retried`、`test_measurement_report_is_redacted`（合成汇总含 `case_id` 与路径，渲染结果中都不出现）、`test_module_reference_frozen_before_prediction`、`test_rejected_voxels_stay_in_denominator`、`test_module_summary_is_patient_weighted`（一名患者 3 次扫描、另一名 1 次：患者等权）、`test_module_report_is_redacted_and_not_a_conclusion`。
+- [ ] **Step 7–9:** RED → 实现 → GREEN（全套测试）。
+- [ ] **Step 10: 提交** `Add GPU measurement and module baseline reporting`；同一提交把 status.md 的 T10 行改为 `code_status: PASS`，`data_run_status` 保持 `NOT_STARTED`。
+
+**真实运行（不在 T10 代码完成条件内；每一步先征得研究者同意）：**
+- 前提：
+  1. 研究者同意在 amax 写入（独立工作目录与 `$PRIVATE_ROOT`），并给出 GPU 资源范围；
+  2. 真实 T07/T08 已完成（L1–L3、L8 已关闭），`G-DATA(SKM-TEA, skm_a)` 与 `G-DATA(ISLES, isles_u)` 为 `PASS`；
+  3. 配方与监督政策由研究者填写并批准；patch、batch、精度等第 2 步实测后再锁定。
+- 顺序：
+  1. 在服务器解释器（Python 3.11、PyTorch 2.5.1）上 CPU 运行 `pytest_cpu tests/v41 tests/v5`；`test_mha_matches_simpleitk` 在这里实际运行。
+  2. 每个 scope 一次 smoke 运行（`run_kind: smoke`，只读 train）：一个真实 batch；小样本过拟合；候选配置的显存与吞吐；一例全体积推理，恢复到原网格并通过 `validate_module_output_v5`；GPU 续跑核对（步数、采样序列与优化器状态一致，损失差在登记的容差内；逐位一致只在 CPU 测试中要求）。写 `reports/v5/gpu_measurement_<scope_id>.md`。
+  3. 研究者据此锁定 patch、batch、精度。测量报告的 sha256 作为 G-BASE 的 `training_smoke` 证据，再对 `G-BASE-A(skm_a)`、`G-BASE-U(isles_u)` 求值。
+  4. 基线运行（`run_kind: baseline`，随机初始化）：按 `selection_rule` 取 checkpoint；开发集全体积推理，经 `infer_and_save_v5` 私有保存；`module_metrics_v5` 汇总；写 `reports/v5/module_baseline_<scope_id>.md`。
+- 两个 scope 的结果分开报告，不相加为同例联合成功（§1.1）。只有开发集结果，`scientific_conclusion` 保持 `NOT_EVALUATED`。上述报告与私有产物齐全后，T10 的 `data_run_status` 才改为 `PASS`。
+
+### B2 完成判定
+
+`pytest_cpu tests/v41 tests/v5` 全部通过（`tests/v41` 仍为 144 passed）；`reports/v5/status.md` 中 T09a、T09b、T09c、T10 行为 `code_status: PASS`；L2、L4、L5、L6 由上列测试关闭；整段 B2 做一次独立审查。真实 GPU 实测与模块基线按 T10 的“真实运行”单列，不计入代码完成。
+
+---
+
 ## 3. Proposal 追踪（V5-01–V5-18）
 
 | ID | 必须关闭的问题 | 任务 |
@@ -1329,3 +2155,16 @@ git commit -m "Add lesion-level detection metrics for U"
 ## 4. 执行交接
 
 执行方式沿用研究者已选的 subagent-driven-development。阶段 A 共 11 个任务，按 §1.1 顺序串行；每个任务结束后做任务审查，阶段 A 结束后做一次整分支审查。阶段 B 的细化在阶段 A 整分支审查之后进行，并先处理 D4。
+
+阶段 A 实际由 executing-plans 内联执行并经整分支独立审查；§2A 补修（FX1–FX4）同样内联执行。补修完成后的下一步：把阶段 B（T07–T10）细化到阶段 A 的粒度；amax 服务器只读预检与 X0 专家试点准备可并行。真实 G-DATA 放行与真实 StateReference 发布分别以 FX1、FX2 为前提。
+
+B1（§2B）已内联执行，经独立终审并完成修复。2026-11-07 核心目标对齐修订后，下一步如下：
+
+1. B2（T09a–c、T10）已细化到 B1 的粒度（§2C，2026-11-07），纳入 §1.6 的 L2、L4–L6 与 §1.7 的接口。研究者审阅后按 T09a → T09b → T09c → T10 执行；T10 的真实 smoke 与基线运行单列，逐步征得同意。
+2. 与 B2 同级并行推进 T11 原标签导入（SKM-TEA、SPIDER，§1.4）。X0 移到后期。
+3. 真实 T07/T08 运行要等两件事：G-DATA(ISLES、SKM-TEA、SPIDER) 批准，研究者同意写 amax 服务器。运行前关闭 L1–L3、L8。
+
+下一轮的检验标准，是开始产生真实数据与模型产物，而不是更多合成测试：
+- 真实 batch、小样本过拟合、恢复训练、原网格预测；
+- A-only、U-only 模块结果；
+- 前期框级/组织级参照的脱敏汇总。

@@ -27,3 +27,6 @@ private/
 .venv/
 .vscode/
 .idea/
+
+# private project memory (contains server paths); see memory.example.md
+memory.md

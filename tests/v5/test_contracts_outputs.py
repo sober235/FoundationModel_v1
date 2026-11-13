@@ -95,3 +95,20 @@ def test_unknown_output_key_is_not_echoed():
     with pytest.raises(V5Error) as error:
         validate_perception_output_v5(out, SCOPE)
     assert error.value.code == "UNKNOWN_FIELD" and secret not in str(error.value)
+
+
+def test_the_array_hash_does_not_depend_on_how_the_array_is_laid_out():
+    """2026-11-12: array_sha256 hashes the array's bytes without an extra copy; the digest is the earlier one."""
+    import hashlib
+
+    from anatobind.v41.contracts_v5 import array_sha256
+
+    def earlier(array):
+        header = f"{array.dtype.str}|{list(array.shape)}|".encode()
+        return hashlib.sha256(header + np.ascontiguousarray(array).tobytes()).hexdigest()
+
+    generator = np.random.default_rng(3)
+    base = generator.random((6, 5, 4))
+    for array in (base, base > 0.5, base.astype(np.float32), base.T, base[::2, 1:, ::-1], (base > 0.5)[:, :, 1],
+                  np.zeros((0, 3), dtype=np.int16), np.asfortranarray(base), np.array(3.0)):
+        assert array_sha256(array) == earlier(array)
