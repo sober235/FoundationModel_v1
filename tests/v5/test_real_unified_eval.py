@@ -17,7 +17,7 @@ from anatobind.v41.contracts_v5 import V5Error
 from anatobind.v41.real_unified_eval_v5 import (
     render_unified_evaluation_md_v5, render_unified_replay_md_v5, run_unified_evaluation_v5, run_unified_replay_v5)
 from anatobind.v41.real_unified_v5 import run_unified_training_v5
-from tests.v5.test_real_unified import env  # noqa: F401  (the synthetic two-member world)
+from tests.v5.test_real_unified import _world, env, pilot  # noqa: F401  (the synthetic two-member worlds)
 
 
 def _raises(error_code, error_path, fn, *args, **kwargs):
@@ -31,18 +31,29 @@ def _tree(root) -> dict:
             for path in sorted(root.rglob("*")) if path.is_file()}
 
 
-@pytest.fixture
-def finished(env, tmp_path):  # noqa: F811
-    """A completed synthetic training run (2 train scans, 1 development scan per member) and evaluation inputs."""
-    summary = run_unified_training_v5(**env.train_kwargs)
+def _finished(world, out):
+    summary = run_unified_training_v5(**world.train_kwargs)
     assert summary["status"] == "COMPLETED"
-    root = env.train_kwargs["private_root"]
-    common = {key: value for key, value in env.train_kwargs.items() if key != "private_root"}
+    root = world.train_kwargs["private_root"]
+    common = {key: value for key, value in world.train_kwargs.items() if key != "private_root"}
     common.update(run_root=root, created_at="2026-11-12T00:00:00Z", max_wall_hours=0.5)
     return SimpleNamespace(
         summary=summary, root=root, before=_tree(root),
-        eval_kwargs=dict(common, private_root=tmp_path / "evaluation", roles=["train", "development_val"]),
-        replay_kwargs=dict(common, private_root=tmp_path / "replay", loss_steps=2))
+        eval_kwargs=dict(common, private_root=out / "evaluation", roles=["train", "development_val"]),
+        replay_kwargs=dict(common, private_root=out / "replay", loss_steps=2),
+        probe_kwargs=dict(common, private_root=out / "probe", loss_steps=2))
+
+
+@pytest.fixture
+def finished(env, tmp_path):  # noqa: F811
+    """A completed synthetic training run (2 train scans, 1 development scan per member) and evaluation inputs."""
+    return _finished(env, tmp_path)
+
+
+@pytest.fixture
+def finished_pilot(pilot, tmp_path):  # noqa: F811
+    """The same for a pilot plan: top quarter of the negatives, stopped after step 4 of an 8-step schedule."""
+    return _finished(pilot, tmp_path)
 
 
 def test_the_development_split_is_reproduced_from_the_outputs_the_run_saved(finished):
@@ -165,8 +176,10 @@ def test_the_sampling_replay_matches_the_log_and_recovers_the_loss_parts_at_chec
     result = run_unified_replay_v5(**finished.replay_kwargs)
     assert result["status"] == "COMPLETED", result
     knee = result["members"]["knee"]
-    assert knee["verification"] == {"steps": 4, "support_compared": 8, "support_mismatches": 0,
-                                    "sampler_state_equal": True}
+    check = knee["verification"]
+    assert (check["steps"], check["support_compared"], check["support_mismatches"], check["sampler_state_equal"]) == (
+        4, 8, 0, True)
+    assert check["terms_compared"] > 0 and check["terms_mismatches"] == 0     # counts of the logged terms, every step
     # the weights are known at the seeded initialisation and at the step-2 checkpoint: steps 1 and 3 are recovered
     assert [(item["step"], item["weights_step"]) for item in knee["history"]] == [(1, 0), (3, 2)]
     log = [json.loads(line) for line in
@@ -183,7 +196,10 @@ def test_the_sampling_replay_matches_the_log_and_recovers_the_loss_parts_at_chec
     assert result["checkpoint"]["weights_unchanged"] is True
     assert _tree(finished.root) == finished.before
     text = render_unified_replay_md_v5(result)
-    assert "knee-0" not in text and "逐步核对" in text and "没有记录" in text and "NOT_EVALUATED" in text
+    assert "knee-0" not in text and "逐步核对" in text and "逐步记录" in text and "NOT_EVALUATED" in text
+    assert "没有记录" not in text
+    for item in knee["history"]:                               # the logged terms are the recomputed ones
+        assert item["logged_terms"] is not None and item["logged_terms_abs_diff"] <= 1e-5
     assert "各检查点" in text
 
 
@@ -275,6 +291,18 @@ def test_the_evaluate_and_replay_commands_hand_their_arguments_to_the_driver_and
                                   "--max-wall-hours", "1", "--checkpoint-step", "6000"])
     assert (err.value.code, err.value.path) == ("EVAL_CHECKPOINT_INVALID", "$.checkpoint")
     assert not calls and not (tmp_path / "half").exists()
+
+    monkeypatch.setattr(eval_module, "run_unified_probe_v5", fake("COMPLETED"))
+    monkeypatch.setattr(eval_module, "render_unified_probe_md_v5", lambda summary: "probe report\n")
+    out = tmp_path / "probe"
+    assert real_unified_module.main(["probe", *shared, "--out", str(out), "--max-wall-hours", "0.5", "--loss-steps",
+                                     "200", "--checkpoint", f"2000:{digest}", "--checkpoint", f"4000:{digest}",
+                                     "--negative-topk-fraction", "0.01"]) == 0
+    given = calls.pop()
+    assert given["checkpoints"] == [(2000, digest), (4000, digest)] and given["negative_topk_fraction"] == 0.01
+    assert (given["loss_steps"], given["max_wall_hours"], given["run_root"]) == (200, 0.5, tmp_path / "finished")
+    assert (out / "unified_probe.md").read_text() == "probe report\n"
+    capsys.readouterr()
 
     monkeypatch.setattr(eval_module, "run_unified_replay_v5", fake("FAILED"))
     monkeypatch.setattr(eval_module, "render_unified_replay_md_v5", lambda summary: "replay report\n")
@@ -402,3 +430,281 @@ def test_the_voxel_supervised_member_is_scored_on_development_val_with_the_modul
     result = run_unified_evaluation_v5(**other, checkpoint=(2, earlier), module_development=True)
     brain = result["members"]["brain"]["development_val"]
     assert brain["module"]["checkpoint_sha256"] == earlier and brain["reproduces_original"] is None
+
+
+# ---------------------------------------------------------------------------
+# Probe: the terms of the box objective and the reach of the hard-negative selection under given checkpoints, on
+# the first training batches of the run. Replay of a stopped run. Comparability of two runs.
+
+from anatobind.v41.real_unified_eval_v5 import (  # noqa: E402
+    compare_unified_runs_v5, render_unified_comparison_md_v5, render_unified_probe_md_v5, run_unified_probe_v5)
+
+
+def test_the_probe_reads_the_given_checkpoints_on_the_same_training_batches(finished, monkeypatch):
+    seen = []
+    original = real_unified_module.load_member_samples_v5
+
+    def recording(**kwargs):
+        seen.append((kwargs["protocol_id"], list(kwargs["roles"])))
+        return original(**kwargs)
+
+    monkeypatch.setattr(real_unified_module, "load_member_samples_v5", recording)
+    final = finished.summary["training"]["checkpoint_sha256"]
+    checkpoints = [(2, _sidecar(finished.root, 2)["sha256"]), (4, final)]
+    result = run_unified_probe_v5(**finished.probe_kwargs, checkpoints=checkpoints, negative_topk_fraction=0.25)
+    assert result["status"] == "COMPLETED", result
+    assert seen == [("knee", ["train"])]                               # training batches of the box member only
+    assert result["run"]["finished"] is True and result["probe"]["roles"] == ["train"]
+    knee = result["members"]["knee"]
+    assert (knee["batches"], knee["negative_topk_fraction"], knee["plan_negative_topk_fraction"]) == (2, 0.25, None)
+    assert knee["thresholds"] == {"target_a": 0.5, "target_b": 0.5}
+    rows = knee["checkpoints"]
+    assert [(row["weights_step"], row["sha256"]) for row in rows] == checkpoints
+    for row in rows:
+        assert row["weights_unchanged"] is True and row["batches"] == 2 and len(row["state_sha256"]) == 64
+        assert row["negative"]["mean"] >= row["negative_all"]["mean"]         # top quarter against all
+        for item in row["classes"].values():
+            assert 0 < item["negative_selected"] < item["negative_eligible"]
+            assert item["high_selected"] == min(item["negative_selected"], item["high"])
+            assert item["batches_all_high_selected"] <= item["batches"] == 2
+            assert item["coverage_pooled"] == (item["high_selected"] / item["high"] if item["high"] else None)
+            assert item["cutoff_probability"]["n"] == 2
+    # the same batches under other weights: the same voxels are eligible, the values differ
+    assert [item["negative_eligible"] for item in rows[0]["classes"].values()] == [
+        item["negative_eligible"] for item in rows[1]["classes"].values()]
+    assert rows[0]["negative_all"]["mean"] != rows[1]["negative_all"]["mean"]
+    assert _tree(finished.root) == finished.before
+    out = finished.probe_kwargs["private_root"]
+    assert json.loads((out / "summary.json").read_text())["status"] == "COMPLETED"
+    text = render_unified_probe_md_v5(result)
+    assert "knee-0" not in text and str(finished.root) not in text and "NOT_EVALUATED" in text
+    for phrase in ("权重未被修改", "覆盖", "0.25", checkpoints[0][1], "locked_test 未读", "不更新权重"):
+        assert phrase in text
+    # without a fraction nothing is selected away, and the final weights give the replay's own diagnostic
+    plain = run_unified_probe_v5(**dict(finished.probe_kwargs, private_root=out.with_name("plain")),
+                                 checkpoints=[(4, final)])
+    row = plain["members"]["knee"]["checkpoints"][0]
+    assert plain["members"]["knee"]["negative_topk_fraction"] is None and row["negative"] == row["negative_all"]
+    replay = run_unified_replay_v5(**finished.replay_kwargs)
+    current = replay["members"]["knee"]["current"]["train"]
+    assert row["negative_all"] == current["negative"] and row["positive"] == current["positive"]
+
+
+def test_the_probe_of_a_pilot_run_uses_the_fraction_of_its_plan(finished_pilot):
+    final = finished_pilot.summary["training"]["checkpoint_sha256"]
+    result = run_unified_probe_v5(**finished_pilot.probe_kwargs, checkpoints=[(4, final)])
+    knee = result["members"]["knee"]
+    assert (knee["negative_topk_fraction"], knee["plan_negative_topk_fraction"]) == (0.25, 0.25)
+    _raises("PROBE_FRACTION_MISMATCH", "$.negative_topk_fraction", run_unified_probe_v5,
+            **dict(finished_pilot.probe_kwargs, private_root=finished_pilot.probe_kwargs["private_root"].with_name("x")),
+            checkpoints=[(4, final)], negative_topk_fraction=0.5)
+
+
+def test_a_checkpoint_of_a_run_that_has_not_finished_can_be_probed_but_not_evaluated(env, tmp_path, monkeypatch):  # noqa: F811
+    original = real_unified_module.train_unified_v5
+
+    def killed_after_step_2(*args, **kwargs):
+        original(*args, **kwargs, pause_at=2)
+        raise RuntimeError("killed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(real_unified_module, "train_unified_v5", killed_after_step_2)
+        with pytest.raises(RuntimeError):
+            run_unified_training_v5(**env.train_kwargs)
+    root = env.train_kwargs["private_root"]
+    assert not (root / "summary.json").exists()
+    common = {key: value for key, value in env.train_kwargs.items() if key != "private_root"}
+    common.update(run_root=root, created_at="2026-11-12T00:00:00Z", max_wall_hours=0.5)
+    selected = (2, _sidecar(root, 2)["sha256"])
+    before = _tree(root)
+    result = run_unified_probe_v5(**common, private_root=tmp_path / "probe", loss_steps=1, checkpoints=[selected],
+                                  negative_topk_fraction=0.25)
+    assert result["status"] == "COMPLETED" and result["run"]["finished"] is False
+    assert result["members"]["knee"]["checkpoints"][0]["weights_step"] == 2 and _tree(root) == before
+    _raises("EVAL_RUN_NOT_COMPLETED", "$.run", run_unified_evaluation_v5, **common,
+            private_root=tmp_path / "evaluation", roles=["train"], checkpoint=selected)
+
+
+def test_the_probe_refuses_bad_selections_before_data_is_read(finished, monkeypatch):
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("data was read before the checks")
+
+    earlier, final = _sidecar(finished.root, 2)["sha256"], finished.summary["training"]["checkpoint_sha256"]
+    kwargs = finished.probe_kwargs
+    with monkeypatch.context() as patch:
+        patch.setattr(real_unified_module, "load_member_samples_v5", _fail_if_called)
+        for bad in ([], [(2, earlier), (2, earlier)], [(2, "x")], (2, earlier), [(0, earlier)]):
+            _raises("EVAL_CHECKPOINT_INVALID", "$.checkpoints", run_unified_probe_v5, **kwargs, checkpoints=bad)
+        _raises("EVAL_CHECKPOINT_MISMATCH", "$.checkpoint", run_unified_probe_v5, **kwargs, checkpoints=[(2, final)])
+        _raises("EVAL_CHECKPOINT_MISSING", "$.checkpoint", run_unified_probe_v5, **kwargs, checkpoints=[(3, final)])
+        for fraction in (0, 1.5, True, "0.01"):
+            _raises("PROBE_FRACTION_INVALID", "$.negative_topk_fraction", run_unified_probe_v5, **kwargs,
+                    checkpoints=[(4, final)], negative_topk_fraction=fraction)
+        for steps in (0, -1, True, 1.5):
+            _raises("INVALID_TYPE", "$.loss_steps", run_unified_probe_v5, **dict(kwargs, loss_steps=steps),
+                    checkpoints=[(4, final)])
+        _raises("EVAL_BUDGET_INVALID", "$.max_wall_hours", run_unified_probe_v5, **dict(kwargs, max_wall_hours=99),
+                checkpoints=[(4, final)])
+        _raises("EVAL_OUT_INSIDE_RUN", "$.out", run_unified_probe_v5,
+                **dict(kwargs, private_root=finished.root / "probe"), checkpoints=[(4, final)])
+    assert not kwargs["private_root"].exists()
+
+
+def test_the_probe_detects_a_changed_weight(finished, monkeypatch):
+    original = eval_module._parts
+
+    def nudging(view, *args, **kwargs):
+        next(iter(view.parameters())).data.add_(1.0)
+        return original(view, *args, **kwargs)
+
+    monkeypatch.setattr(eval_module, "_parts", nudging)
+    final = finished.summary["training"]["checkpoint_sha256"]
+    _raises("EVAL_WEIGHTS_CHANGED", "$.checkpoint", run_unified_probe_v5, **finished.probe_kwargs,
+            checkpoints=[(4, final)])
+    assert not (finished.probe_kwargs["private_root"] / "summary.json").exists()
+
+
+def test_the_replay_of_a_stopped_run_ends_at_its_stop_step_and_checks_the_logged_terms(finished_pilot):
+    result = run_unified_replay_v5(**finished_pilot.replay_kwargs)
+    assert result["status"] == "COMPLETED", result
+    knee = result["members"]["knee"]
+    check = knee["verification"]
+    assert (check["steps"], check["schedule_steps"], check["support_mismatches"], check["sampler_state_equal"]) == (
+        4, 8, 0, True)
+    assert check["terms_compared"] > 0 and check["terms_mismatches"] == 0
+    assert [(item["step"], item["weights_step"]) for item in knee["history"]] == [(1, 0), (3, 2)]
+    for item in knee["history"]:
+        assert item["logged_terms_abs_diff"] <= 1e-5 and item["abs_diff"] <= 1e-5
+        assert item["negative"] >= item["negative_all"]
+    assert [row["weights_step"] for row in knee["trajectory"]] == [0, 2, 4]
+    assert knee["weights"]["negative_topk_fraction"] == 0.25 and knee["exposure"]["steps"] == 4
+    text = render_unified_replay_md_v5(result)
+    assert "逐步记录" in text and "没有记录" not in text and "前 0.25 比例" in text and "8 步" in text
+
+
+def test_a_log_without_the_terms_is_still_replayed(finished, tmp_path):
+    """A run of the code before 2026-11-12 logged one number per task; its replay recovers the terms as before."""
+    import shutil
+
+    copy_root = tmp_path / "copy"
+    shutil.copytree(finished.root, copy_root)
+    log = copy_root / "runs" / "train-u" / "metrics.jsonl"
+    lines = [json.loads(line) for line in log.read_text().splitlines()]
+    for line in lines:
+        for member in line.get("members", {}).values():
+            for task in member["tasks"].values():
+                task.pop("box", None)
+    log.chmod(0o600)
+    log.write_text("".join(json.dumps(line, sort_keys=True) + "\n" for line in lines))
+    result = run_unified_replay_v5(**dict(finished.replay_kwargs, run_root=copy_root))
+    knee = result["members"]["knee"]
+    assert knee["verification"]["terms_compared"] == 0 and knee["verification"]["support_mismatches"] == 0
+    assert all(item["logged_terms"] is None and item["abs_diff"] <= 1e-5 for item in knee["history"])
+    assert knee["weights"]["negative_topk_fraction"] is None
+    text = render_unified_replay_md_v5(result)
+    assert "没有记录" in text and "逐步记录" not in text
+
+
+def _pair(tmp_path, **control_overrides):
+    """Two finished runs on the same synthetic data: a control over an 8-step schedule and a pilot stopped at 4."""
+    schedule = {"budget": {"max_steps": 8}}
+    worlds = {}
+    for name, overrides in (("control", {"shared": {**schedule, **control_overrides}}),
+                            ("trial", {"shared": dict(schedule, stop_at_step=4),
+                                       "members": {"knee": {"box_supervision": {"negative_topk_fraction": 0.25}}}})):
+        (tmp_path / name).mkdir()
+        worlds[name] = _world(tmp_path / name, **overrides)
+        assert run_unified_training_v5(**worlds[name].train_kwargs)["status"] == "COMPLETED"
+    return {"plan": worlds["trial"].plan, "control_plan": worlds["control"].plan,
+            "protocols": worlds["trial"].train_kwargs["protocols"],
+            "run_root": worlds["trial"].train_kwargs["private_root"], "run_id": "train-u",
+            "control_run_root": worlds["control"].train_kwargs["private_root"], "control_run_id": "train-u",
+            "steps": 4, "checkpoint_steps": [2, 4], "code": {"git_commit": "0" * 40, "dirty": False},
+            "created_at": "2026-11-12T00:00:00Z"}
+
+
+def test_two_runs_are_compared_on_initialisation_sampling_and_learning_rate(tmp_path):
+    kwargs = _pair(tmp_path)
+    before = {name: _tree(kwargs[name]) for name in ("run_root", "control_run_root")}
+    result = compare_unified_runs_v5(**kwargs, private_root=tmp_path / "comparison")
+    assert result["status"] == "COMPLETED" and result["steps"] == 4
+    assert result["plan_differences"] == {
+        "members.knee.box_supervision.negative_topk_fraction": [None, 0.25], "shared.stop_at_step": [None, 4]}
+    assert result["initialisation"]["equal"] is True
+    assert result["initialisation"]["control_state_sha256"] == result["initialisation"]["trial_state_sha256"]
+    assert result["learning_rate"] == {"steps_compared": 4, "mismatches": 0, "first": 0.001,
+                                       "last": pytest.approx(0.001 * (1 - 3 / 8) ** 0.9, rel=1e-9)}
+    assert result["support"]["compared"] == 4 * 3 and result["support"]["mismatches"] == 0     # knee A, knee U, brain U
+    assert [(item["step"], item["sampler_equal"], item["scheduler_equal"], item["data_sha256_equal"],
+             item["rng_equal"]) for item in result["checkpoints"]] == [(2, True, True, True, True),
+                                                                        (4, True, True, True, True)]
+    assert all(item["control_sha256"] != item["trial_sha256"] for item in result["checkpoints"])
+    first = result["first_step_losses"]
+    # the same weights and the same first batch: every loss that does not depend on the changed term is equal
+    assert first["brain"]["U"]["abs_diff"] == 0.0 and first["knee"]["A"]["abs_diff"] == 0.0
+    assert first["knee"]["U"]["abs_diff"] > 0.0                         # the objective that was changed
+    assert result["runs"]["control"]["finished_step"] == 8 and result["runs"]["trial"]["finished_step"] == 4
+    assert {name: _tree(kwargs[name]) for name in ("run_root", "control_run_root")} == before
+    assert json.loads((tmp_path / "comparison" / "summary.json").read_text())["status"] == "COMPLETED"
+    text = render_unified_comparison_md_v5(result)
+    assert "knee-0" not in text and str(tmp_path) not in text and "NOT_EVALUATED" in text
+    for phrase in ("初始化", "采样", "学习率", "negative_topk_fraction", "stop_at_step"):
+        assert phrase in text
+
+
+def test_a_comparison_shows_where_two_runs_were_not_run_alike(tmp_path):
+    kwargs = _pair(tmp_path, seeds={"sampler": 5})                      # the control drew other patches
+    result = compare_unified_runs_v5(**kwargs, private_root=tmp_path / "comparison")
+    assert result["plan_differences"]["shared.seeds.sampler"] == [5, 1]
+    assert [item["sampler_equal"] for item in result["checkpoints"]] == [False, False]
+    assert result["initialisation"]["equal"] is True and result["learning_rate"]["mismatches"] == 0
+    _raises("COMPARE_LOG_MISSING", "$.steps", compare_unified_runs_v5, **dict(kwargs, steps=6),
+            private_root=tmp_path / "too_long")
+    _raises("EVAL_CHECKPOINT_MISSING", "$.checkpoint", compare_unified_runs_v5,
+            **dict(kwargs, checkpoint_steps=[3]), private_root=tmp_path / "no_checkpoint")
+    _raises("EVAL_OUT_EXISTS", "$.out", compare_unified_runs_v5, **kwargs, private_root=tmp_path / "comparison")
+
+
+def test_the_compare_command_reads_both_plans_and_keeps_the_report(tmp_path, monkeypatch, capsys):
+    import yaml
+
+    config = Path(__file__).resolve().parents[2] / "configs" / "v5"
+    calls = []
+
+    def run(**kwargs):
+        assert not kwargs["private_root"].exists()                     # the driver decides about the destination
+        kwargs["private_root"].mkdir(mode=0o700)
+        calls.append(kwargs)
+        return {"status": "COMPLETED"}
+
+    monkeypatch.setattr(eval_module, "compare_unified_runs_v5", run)
+    monkeypatch.setattr(eval_module, "render_unified_comparison_md_v5", lambda summary: "comparison report\n")
+    out = tmp_path / "comparison"
+    control = config / "proposals" / "unified_knee_brain.yaml"
+    argv = ["compare", "--plan", str(config / "proposals" / "unified_knee_brain_negtopk_pilot.yaml"), "--protocols",
+            str(config / "protocols_v5.yaml"), "--policies", str(config / "sources_v5.yaml"), "--run-root",
+            str(tmp_path / "trial"), "--run-id", "run-trial", "--control-run-root", str(tmp_path / "control"),
+            "--control-run-id", "run-control", "--steps", "6000", "--checkpoint-step", "2000", "--checkpoint-step",
+            "4000", "--checkpoint-step", "6000"]
+    assert real_unified_module.main([*argv, "--control-plan", str(control), "--out", str(out)]) == 0
+    given = calls.pop()
+    assert set(given) == {"plan", "control_plan", "protocols", "run_root", "run_id", "control_run_root",
+                          "control_run_id", "steps", "checkpoint_steps", "private_root", "code", "created_at"}
+    assert (given["plan"]["plan_id"], given["control_plan"]["plan_id"]) == (
+        "unified_knee_brain_negtopk_pilot_v1", "unified_knee_brain_v1")
+    assert (given["run_root"], given["run_id"], given["control_run_root"], given["control_run_id"]) == (
+        tmp_path / "trial", "run-trial", tmp_path / "control", "run-control")
+    assert (given["steps"], given["checkpoint_steps"], given["private_root"]) == (6000, [2000, 4000, 6000], out)
+    assert set(given["protocols"]) == set(given["plan"]["members"])
+    report = out / "unified_comparison.md"
+    assert report.read_text() == "comparison report\n" and stat.S_IMODE(report.stat().st_mode) == 0o600
+    assert capsys.readouterr().out == "comparison report\n"
+
+    broken = yaml.safe_load(control.read_text(encoding="utf-8"))       # the control plan is validated like the plan
+    broken["shared"]["stop_at_step"] = 0
+    (tmp_path / "broken.yaml").write_text(yaml.safe_dump(broken))
+    with pytest.raises(V5Error) as err:
+        real_unified_module.main([*argv, "--control-plan", str(tmp_path / "broken.yaml"), "--out",
+                                  str(tmp_path / "refused")])
+    assert (err.value.code, err.value.path) == ("UNIFIED_PLAN_INVALID", "$.shared.stop_at_step")
+    assert not calls and not (tmp_path / "refused").exists()

@@ -12,9 +12,12 @@ weights. Nothing here updates a model.
 """
 from __future__ import annotations
 
+import math
+
 import torch
 
-from ..losses import box_mil_terms_v5, box_terms_record_v5
+from ..contracts_v5 import V5Error
+from ..losses import box_mil_terms_v5, box_terms_record_v5, negative_top_count_v5
 from .box_data_v5 import box_positive_centers_v5
 from .data_v5 import PatchSamplerV5, positive_centers_v5
 from .train_unified_v5 import _bag_count
@@ -33,6 +36,56 @@ def box_objective_parts_v5(logits: torch.Tensor, bags: torch.Tensor, e_pos: torc
     part without support is None."""
     record = box_terms_record_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, spec))
     return {**record, "negative_voxels": sum(entry["negative_eligible"] for entry in record["classes"])}
+
+
+def negative_reach_v5(logits: torch.Tensor, e_neg: torch.Tensor, fraction: float | None, thresholds: list) -> list:
+    """What a hard-negative selection reaches under the given logits, per class (a diagnostic; nothing is trained).
+
+    For each class: the eligible negative voxels (e_neg, pooled over the batch), the number the selection keeps
+    (all of them without a fraction, else negative_top_count_v5), `high` = the eligible negatives whose probability
+    reaches the class's threshold, `high_selected` = how many of those the selection keeps (it takes the highest
+    logits, so min(selected, high)), the probability of the lowest kept voxel, and the mean probability of the kept
+    and of all eligible negatives. A class without an eligible negative has zero counts and None values."""
+    if logits.shape != e_neg.shape or logits.ndim < 3 or len(thresholds) != logits.shape[1]:
+        raise V5Error("GRID_MISMATCH", "$.logits")
+    e_neg, reach = e_neg.to(torch.bool), []
+    for c, threshold in enumerate(thresholds):
+        if not (isinstance(threshold, (int, float)) and not isinstance(threshold, bool) and 0 < threshold < 1):
+            raise V5Error("INVALID_TYPE", f"$.thresholds[{c}]")
+        values = logits[:, c][e_neg[:, c]].float()
+        eligible = int(values.numel())
+        if not eligible:
+            reach.append({"negative_eligible": 0, "negative_selected": 0, "high": 0, "high_selected": 0,
+                          "cutoff_probability": None, "selected_mean_probability": None,
+                          "eligible_mean_probability": None})
+            continue
+        kept = eligible if fraction is None else negative_top_count_v5(fraction, eligible)
+        top = values if kept == eligible else torch.topk(values, kept, sorted=False).values
+        high = int((values >= math.log(threshold / (1.0 - threshold))).sum())
+        reach.append({"negative_eligible": eligible, "negative_selected": kept, "high": high,
+                      "high_selected": min(kept, high), "cutoff_probability": float(torch.sigmoid(top.min())),
+                      "selected_mean_probability": float(torch.sigmoid(top).mean()),
+                      "eligible_mean_probability": float(torch.sigmoid(values).mean())})
+    return reach
+
+
+def box_counts_v5(bags: torch.Tensor, e_pos: torch.Tensor, e_neg: torch.Tensor, spec: dict) -> list:
+    """The counts of box_mil_terms_v5 that do not depend on the weights, per class: the bags with a supervised
+    voxel, the eligible negative voxels and the number of them the plan keeps. A replayed batch gives them without
+    a forward pass, so they can be compared with a training log at every step."""
+    if not (bags.shape == e_pos.shape == e_neg.shape) or bags.ndim < 3:
+        raise V5Error("GRID_MISMATCH", "$.bags")
+    e_pos, e_neg, keep = e_pos.to(torch.bool), e_neg.to(torch.bool), spec.get("negative_topk_fraction")
+    counts = []
+    for c in range(bags.shape[1]):
+        eligible = int(e_neg[:, c].sum())
+        found = 0
+        for b in range(bags.shape[0]):
+            supported = bags[b, c][e_pos[b, c]]
+            found += int(torch.unique(supported[supported > 0]).numel())
+        counts.append({"bags": found, "negative_eligible": eligible,
+                       "negative_selected": eligible if keep is None else negative_top_count_v5(keep, eligible)})
+    return counts
 
 
 class RecordingSamplerV5(PatchSamplerV5):

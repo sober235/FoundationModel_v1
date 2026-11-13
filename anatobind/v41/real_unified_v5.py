@@ -543,7 +543,11 @@ def main(argv: list | None = None) -> int:
     gbase-gate: one member's five G-BASE evidence items and its G-BASE-A / G-BASE-U decisions.
     evaluate / replay: read the finished run --run-id under --run-root with its final checkpoint, never train,
     and write into a new --out (real_unified_eval_v5); the members are given exactly as they were for train.
-    evaluate takes another checkpoint of the run with --checkpoint-step and --checkpoint-sha256 (both)."""
+    evaluate takes another checkpoint of the run with --checkpoint-step and --checkpoint-sha256 (both).
+    probe: the box objective's terms and the reach of the hard-negative selection under the given checkpoints
+    (--checkpoint STEP:SHA256, repeatable) of the registered run, on its first --loss-steps training batches; the
+    run need not have finished. compare: whether the run of --plan and the run of --control-plan were run alike
+    over their first --steps steps (plans, seeded initialisation, logs, checkpoint states); reads no sample."""
     import argparse
     import os
 
@@ -561,18 +565,31 @@ def main(argv: list | None = None) -> int:
     repo = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(prog="anatobind.v41.real_unified_v5")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("plan-hash", "smoke", "gbase-gate", "train", "evaluate", "replay"):
+    for name in ("plan-hash", "smoke", "gbase-gate", "train", "evaluate", "replay", "probe", "compare"):
         command = sub.add_parser(name)
         for key in ("--plan", "--protocols", "--policies"):
             command.add_argument(key, required=True)
-        if name in ("smoke", "train", "evaluate", "replay"):
+        if name in ("smoke", "train", "evaluate", "replay", "probe"):
             for key in ("--raw", "--approvals", "--run-id", "--device", "--out"):
                 command.add_argument(key, required=True)
             command.add_argument("--member", action="append", required=True)
-        if name in ("evaluate", "replay"):
-            command.add_argument("--run-root", required=True, help="the private root of the finished training run")
+        if name in ("evaluate", "replay", "probe"):
+            command.add_argument("--run-root", required=True, help="the private root of the training run")
             command.add_argument("--max-wall-hours", required=True, type=float,
                                  help="wall budget of this command; must fit in what the plan's budget has left")
+        if name == "probe":
+            command.add_argument("--checkpoint", action="append", required=True, metavar="STEP:SHA256",
+                                 help="a checkpoint of the run, by step and hash; repeat for several")
+            command.add_argument("--loss-steps", required=True, type=int,
+                                 help="the run's first training batches on which every checkpoint is read")
+            command.add_argument("--negative-topk-fraction", type=float,
+                                 help="try this hard-negative fraction on a run whose plan sets none")
+        if name == "compare":
+            for key in ("--control-plan", "--run-root", "--run-id", "--control-run-root", "--control-run-id", "--out"):
+                command.add_argument(key, required=True)
+            command.add_argument("--steps", required=True, type=int, help="the first steps of both runs to compare")
+            command.add_argument("--checkpoint-step", action="append", type=int, default=[],
+                                 help="a step at which both runs kept a checkpoint; repeat for several")
         if name == "evaluate":
             command.add_argument("--role", action="append", required=True, choices=["train", "development_val"])
             command.add_argument("--checkpoint-step", type=int,
@@ -612,6 +629,26 @@ def main(argv: list | None = None) -> int:
     if args.command == "plan-hash":
         print(digest)
         return 0
+    if args.command == "compare":
+        from . import real_unified_eval_v5 as finished
+
+        control = load_yaml(args.control_plan)
+        if not isinstance(control, dict) or not isinstance(control.get("members"), dict) \
+                or set(control["members"]) != set(protocols):
+            raise V5Error("UNIFIED_MEMBER_MISMATCH", "$.control_plan.members")
+        validate_unified_plan_v5(control, {pid: protocol["scope"] for pid, protocol in protocols.items()}, sources)
+        out = Path(args.out)
+        summary = finished.compare_unified_runs_v5(
+            plan=plan, control_plan=control, protocols=protocols, run_root=Path(args.run_root), run_id=args.run_id,
+            control_run_root=Path(args.control_run_root), control_run_id=args.control_run_id, steps=args.steps,
+            checkpoint_steps=list(args.checkpoint_step), private_root=out, code=capture_code_v5(repo),
+            created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        markdown = finished.render_unified_comparison_md_v5(summary)
+        fd = os.open(out / "unified_comparison.md", os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        with os.fdopen(fd, "w") as handle:
+            handle.write(markdown)
+        print(markdown, end="")
+        return 0 if summary["status"] == "COMPLETED" else 1
     approvals_file = load_yaml(args.approvals) or {}
 
     if args.command == "gbase-gate":
@@ -666,7 +703,7 @@ def main(argv: list | None = None) -> int:
             "smoke_evidence": load_json(paths["smoke-evidence"]) if "smoke-evidence" in paths else None,
             "box_references": Path(paths["box-references"]) if "box-references" in paths else None}
     out = Path(args.out)
-    reading = args.command in ("evaluate", "replay")                    # their driver refuses an existing --out
+    reading = args.command in ("evaluate", "replay", "probe")           # their driver refuses an existing --out
     resuming = args.command == "train" and args.resume
     if not resuming and not reading:
         out.mkdir(mode=0o700)                                           # never overwritten
@@ -699,6 +736,17 @@ def main(argv: list | None = None) -> int:
                 reuse_inference=None if args.fresh_predictions else "inference",
                 module_development=args.module_development)
             markdown, name = finished.render_unified_evaluation_md_v5(summary), "unified_evaluation.md"
+        elif args.command == "probe":
+            selected = []
+            for value in args.checkpoint:
+                step, _, sha = value.partition(":")
+                if not step.isdigit() or not sha:
+                    raise V5Error("EVAL_CHECKPOINT_INVALID", "$.checkpoints")
+                selected.append((int(step), sha))
+            summary = finished.run_unified_probe_v5(
+                **common, checkpoints=selected, loss_steps=args.loss_steps,
+                negative_topk_fraction=args.negative_topk_fraction)
+            markdown, name = finished.render_unified_probe_md_v5(summary), "unified_probe.md"
         else:
             summary = finished.run_unified_replay_v5(**common, loss_steps=args.loss_steps)
             markdown, name = finished.render_unified_replay_md_v5(summary), "unified_replay.md"
