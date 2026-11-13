@@ -348,3 +348,48 @@ def test_a_probe_sees_the_restored_probabilities_and_leaves_the_output_unchanged
     for name in ("anatomy_map", "abnormality_map", "tissue_state_map"):
         assert np.array_equal(getattr(probed, name), getattr(plain, name))
     assert probed.abnormal_instances[0]["candidate_set_hash"] == plain.abnormal_instances[0]["candidate_set_hash"]
+
+
+def test_an_explicit_mask_budget_replaces_the_default_without_changing_the_instances(monkeypatch):
+    """2026-11-12: an early checkpoint of the unified run kept more components on one knee volume than the default
+    budget of the masks allows. The budget is a memory bound, not an evaluation rule: a caller may name a larger
+    one, and the instances are the same as under any budget that admits them."""
+    from anatobind.v41 import perception
+
+    scope = _joint()
+    positive = np.zeros((2, *SHAPE), dtype=bool)
+    positive[0, 0, 0, 0] = positive[0, 2, 2, 2] = positive[1, 4, 4, 4] = True
+    positive[0, 4:6, 4:6, 0] = True
+    accepted = np.ones_like(positive)
+    policy = make_acceptance_policy(scope, instances={"connectivity": 26})
+    volume = int(np.prod(SHAPE))
+    reference = extract_instances_v5(positive, accepted, scope, policy)              # the default admits all four
+    monkeypatch.setattr(perception, "INSTANCE_MASK_BYTES_LIMIT", 3 * volume)
+    _raises("INSTANCE_LIMIT_EXCEEDED", "$.abnormal_instances", extract_instances_v5, positive, accepted, scope, policy)
+    _raises("INSTANCE_LIMIT_EXCEEDED", "$.abnormal_instances", extract_instances_v5, positive, accepted, scope, policy,
+            mask_bytes_limit=3 * volume)
+    found = extract_instances_v5(positive, accepted, scope, policy, mask_bytes_limit=4 * volume)
+    assert [(i["instance_uid"], i["bbox"], i["candidate_set_hash"]) for i in found] == [
+        (i["instance_uid"], i["bbox"], i["candidate_set_hash"]) for i in reference]
+    assert all(np.array_equal(a["mask"], b["mask"]) for a, b in zip(found, reference))
+    for bad in (0, -1, True, 1.5, "1"):
+        _raises("INVALID_TYPE", "$.mask_bytes_limit", extract_instances_v5, positive, accepted, scope, policy,
+                mask_bytes_limit=bad)
+
+
+def test_the_chain_hands_an_explicit_mask_budget_to_the_instances(monkeypatch):
+    from anatobind.v41 import perception
+
+    scope = _joint()
+    model = StubPerceptionModel(scope, ("A", "U"), anatomy_fn=_tissue_logits, abnormality_fn=_lesion_logits)
+    batch = make_model_input_v5(scope, SHAPE, channels=_channels())
+    policy = make_acceptance_policy(scope, instances={"min_voxels": 2})
+    reference = run_perception_v5(model, batch, scope, relation_fn=_host_relations,
+                                  **_kwargs(scope, acceptance_policy=policy))
+    monkeypatch.setattr(perception, "INSTANCE_MASK_BYTES_LIMIT", 0)                   # nothing fits by default
+    _raises("INSTANCE_LIMIT_EXCEEDED", "$.abnormal_instances", run_perception_v5, model, batch, scope,
+            relation_fn=_host_relations, **_kwargs(scope, acceptance_policy=policy))
+    output = run_perception_v5(model, batch, scope, relation_fn=_host_relations,
+                               instance_mask_bytes_limit=int(np.prod(SHAPE)), **_kwargs(scope, acceptance_policy=policy))
+    assert [(i["bbox"], i["candidate_set_hash"]) for i in output.abnormal_instances] == [
+        (i["bbox"], i["candidate_set_hash"]) for i in reference.abnormal_instances]

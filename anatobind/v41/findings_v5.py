@@ -54,16 +54,31 @@ def _group_ids(scope: ActiveScope, groups: dict) -> dict:
     return {group: [scope.anatomy_classes.index(name) + 1 for name in names] for group, names in groups.items()}
 
 
+def _region(instance: dict, mask: np.ndarray) -> tuple:
+    """The instance's bounding box as slices when its mask lies inside it (as extract_instances_v5 builds it),
+    else the whole volume. Reading only the box gives the same voxels in the same order."""
+    bbox, ndim = instance.get("bbox"), mask.ndim
+    if isinstance(bbox, list) and len(bbox) == 2 * ndim:
+        region = tuple(slice(int(a), int(b)) for a, b in zip(bbox[:ndim], bbox[ndim:]))
+        if np.count_nonzero(mask[region]) == np.count_nonzero(mask):
+            return region
+    return tuple(slice(None) for _ in range(ndim))
+
+
 def host_relation_fn_v5(groups: dict, groups_by_class: dict):
     """A relation_fn for run_perception_v5: each instance is bound to the allowed tissue group that holds most of
-    its accepted predicted-anatomy voxels (ties: the first group name); none of them gives status unknown."""
+    its accepted predicted-anatomy voxels (ties: the first group name); none of them gives status unknown.
+    Each instance is read inside its own bounding box (2026-11-12; same result, cost of the instance's size)."""
 
     def relation_fn(instances: list, anatomy_map: np.ndarray, anatomy_accepted: np.ndarray, scope: ActiveScope):
         ids = _group_ids(scope, groups)
         contract = scope.relation_contract
         relations, reasons = [], {}
+        anatomy_map, anatomy_accepted = np.asarray(anatomy_map), np.asarray(anatomy_accepted, dtype=bool)
         for instance in instances:
-            voxels = np.asarray(anatomy_map)[instance["mask"] & np.asarray(anatomy_accepted, dtype=bool)]
+            mask = np.asarray(instance["mask"], dtype=bool)
+            region = _region(instance, mask)
+            voxels = anatomy_map[region][mask[region] & anatomy_accepted[region]]
             best, best_count = None, 0
             for group in sorted(groups_by_class.get(instance["class_name"], [])):
                 count = int(np.isin(voxels, ids[group]).sum())
@@ -88,8 +103,12 @@ def host_of_relation_v5(relation: dict | None, ids: dict) -> tuple:
     return None, "undetermined"
 
 
-def _anchor(mask: np.ndarray) -> list:
-    coordinates = np.argwhere(mask)                       # lexicographic order, so the first minimum is the lowest
+def _anchor(mask: np.ndarray, bbox: list | None = None) -> list:
+    """The voxel of the mask closest to its centroid (ties: the first in index order). With the instance's bbox
+    the coordinates are found inside the box; they are the same integers in the same order."""
+    region = _region({"bbox": bbox}, mask)
+    start = np.array([0 if part.start is None else part.start for part in region], dtype=np.int64)
+    coordinates = np.argwhere(mask[region]) + start      # lexicographic order, so the first minimum is the lowest
     distance = ((coordinates - coordinates.mean(axis=0)) ** 2).sum(axis=1)
     return [int(v) for v in coordinates[int(np.argmin(distance))]]
 
@@ -113,7 +132,7 @@ def findings_from_output_v5(output, scope: ActiveScope, acceptance_policy: dict,
             host_group, host_status = host_of_relation_v5(relations.get(instance["instance_uid"]), ids)
         findings.append({"finding_uid": instance["instance_uid"], "abnormality_class": instance["class_name"],
                          "box": {"start": [int(v) for v in start], "size": [int(b - a) for a, b in zip(start, stop)]},
-                         "anchor": _anchor(np.asarray(instance["mask"], dtype=bool)),
+                         "anchor": _anchor(np.asarray(instance["mask"], dtype=bool), instance["bbox"]),
                          "voxels": int(np.count_nonzero(instance["mask"])), "host_group": host_group,
                          "host_status": host_status})
     return findings

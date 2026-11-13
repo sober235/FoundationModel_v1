@@ -35,7 +35,9 @@ def canonical_sha256(value: object) -> str:
 
 def array_sha256(array: np.ndarray) -> str:
     header = f"{array.dtype.str}|{list(array.shape)}|".encode()
-    return hashlib.sha256(header + np.ascontiguousarray(array).tobytes()).hexdigest()
+    digest = hashlib.sha256(header)
+    digest.update(np.ascontiguousarray(array).reshape(-1).view(np.uint8))   # the bytes in C order, without a copy
+    return digest.hexdigest()
 
 
 UNKNOWN_KEY = "<unknown>"

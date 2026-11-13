@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import time
 from collections import Counter
 from pathlib import Path
@@ -69,6 +70,7 @@ from .findings_v5 import findings_from_output_v5, host_relation_fn_v5, render_fi
 from .models.interface_v5 import build_model_input_v5
 from .models.unified_v5 import build_unified_model_v5
 from .paths import resolve_private_output, write_private_json
+from . import perception
 from .perception import run_perception_v5
 from .perception_io import load_output_v5, output_prefix_v5
 
@@ -254,12 +256,19 @@ def run_unified_evaluation_v5(*, plan: dict, plan_sha256: str, protocols: dict, 
                               device: str, run_id: str, roles: list, max_wall_hours: float, created_at: str,
                               environment: dict, code: dict, fixture_mode: bool, protocol_ids: list | None = None,
                               reuse_inference: str | None = "inference", checkpoint: tuple | None = None,
-                              module_development: bool = False) -> dict:
+                              module_development: bool = False, instance_mask_limit_gib: float | None = None) -> dict:
     """Score the finished run `run_id` (under `run_root`) on `roles` with its final checkpoint, or with the
     checkpoint `(step, sha256)` of that run; summary.json and private rows go to the new directory `private_root`.
-    `module_development` adds every voxel-supervised member on development_val. Returns the summary."""
+    `module_development` adds every voxel-supervised member on development_val. `instance_mask_limit_gib` names the
+    memory bound of the instance masks for every inference of this evaluation (perception's default otherwise); it
+    is an engineering bound, no evaluation rule depends on it. Returns the summary."""
     started = time.monotonic()
     roles = _check_roles(roles)
+    if instance_mask_limit_gib is not None and not (
+            isinstance(instance_mask_limit_gib, (int, float)) and not isinstance(instance_mask_limit_gib, bool)
+            and math.isfinite(instance_mask_limit_gib) and instance_mask_limit_gib > 0):
+        raise V5Error("INVALID_TYPE", "$.instance_mask_limit_gib")
+    mask_limit = None if instance_mask_limit_gib is None else int(instance_mask_limit_gib * 2 ** 30)
     opened = _open_finished_run(plan=plan, plan_sha256=plan_sha256, protocols=protocols, members=members,
                                 approvals=approvals, run_root=run_root, run_id=run_id, private_root=private_root,
                                 max_wall_hours=max_wall_hours, code=code, fixture_mode=fixture_mode,
@@ -277,7 +286,9 @@ def run_unified_evaluation_v5(*, plan: dict, plan_sha256: str, protocols: dict, 
     summary = _header(plan, plan_sha256, opened, scopes, "unified_evaluation", device_t, before, max_wall_hours,
                       {"roles": roles, "code": dict(code), "environment": dict(environment),
                        "created_at": created_at, "reuse_inference": reuse_inference, "reuse_refused": refused,
-                       "module_development": bool(module_development)})
+                       "module_development": bool(module_development),
+                       "instance_mask_bytes_limit": perception.INSTANCE_MASK_BYTES_LIMIT if mask_limit is None
+                       else mask_limit, "instance_mask_limit_explicit": mask_limit is not None})
 
     def finish(stop_code: str | None, phase: str | None) -> dict:
         summary["stop_code"], summary["stop_phase"] = stop_code, phase
@@ -311,7 +322,8 @@ def run_unified_evaluation_v5(*, plan: dict, plan_sha256: str, protocols: dict, 
                 model.view(pid), batch, scope, observation_uid=uid, checkpoint_sha256=digest,
                 original_geometry=original_geometry_v5(observation, by_uid[uid]),
                 acceptance_policy=member["acceptance_policy"], window=tuple(member["inference"]["window"]),
-                stride=tuple(member["inference"]["stride"]), precision=plan["shared"]["precision"])
+                stride=tuple(member["inference"]["stride"]), precision=plan["shared"]["precision"],
+                instance_mask_bytes_limit=mask_limit)
             findings = findings_from_output_v5(output, scope, member["acceptance_policy"], protocol["groups"])
             sentences.update(render_findings_zh_v5(findings, scope, protocol["display"]))
             row = module_metrics_v5(output, frozen, member["metric_policy"], member["acceptance_policy"], member_run)
@@ -354,7 +366,8 @@ def run_unified_evaluation_v5(*, plan: dict, plan_sha256: str, protocols: dict, 
                     original_geometry=original_geometry_v5(observation, record),
                     acceptance_policy=member["acceptance_policy"], window=tuple(member["inference"]["window"]),
                     stride=tuple(member["inference"]["stride"]), precision=plan["shared"]["precision"],
-                    relation_fn=relation_fn, probe=lambda restored: seen.update(abnormality=restored["abnormality"]))
+                    relation_fn=relation_fn, probe=lambda restored: seen.update(abnormality=restored["abnormality"]),
+                    instance_mask_bytes_limit=mask_limit)
                 reuse["scans"] += 1
                 reused = identical = False
                 saved = None if reuse_dir is None else reuse_dir / f"{output_prefix_v5(uid)}.record.json"
@@ -426,6 +439,10 @@ def _intro(summary: dict, title: str) -> list:
         selected = [f"- 检查点是按步数与哈希指定的：第 {checkpoint['step']} 步。该运行的最后一个检查点是第 {last['step']} 步"
                     f"（sha256 `{last['sha256']}`），" + ("就是本次读取的这一个。" if checkpoint["is_final"] else
                                                       "本次没有读取它，也没有使用它保存的任何输出；原运行的文件未被改动。")]
+    if evaluation.get("instance_mask_limit_explicit"):
+        selected.append(f"- 实例掩膜的内存上限 {evaluation['instance_mask_bytes_limit'] / 2 ** 30:g} GiB（本次评价显式指定；"
+                        f"默认 {perception.INSTANCE_MASK_BYTES_LIMIT / 2 ** 30:g} GiB）。这是实现上的内存保护，不是评价规则："
+                        "阈值、体素数下限、定位点、所在组织与匹配规则都不变；默认上限容得下的扫描，结果与默认设置相同。")
     return [f"# {title}：{summary['plan_id']}", "",
             "本报告只含配置、计数、指标与哈希；不含样本或患者 ID、路径或文件名。", "",
             f"- 计划 sha256 `{summary['plan_sha256']}`；被评价的运行 run_sha256 `{run['run_sha256']}`",

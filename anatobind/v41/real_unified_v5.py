@@ -599,6 +599,9 @@ def main(argv: list | None = None) -> int:
                                  help="reuse no saved output of the run: every prediction is computed anew")
             command.add_argument("--module-development", action="store_true",
                                  help="also score every voxel-supervised member on development_val")
+            command.add_argument("--instance-mask-limit-gib", type=float,
+                                 help="memory bound of the instance masks (GiB) instead of perception's default; "
+                                      "an engineering bound, no evaluation rule depends on it")
         if name == "replay":
             command.add_argument("--loss-steps", required=True, type=int,
                                  help="patches per split on which the final weights' loss parts are recomputed")
@@ -734,7 +737,7 @@ def main(argv: list | None = None) -> int:
             summary = finished.run_unified_evaluation_v5(
                 **common, roles=list(args.role), checkpoint=selected,
                 reuse_inference=None if args.fresh_predictions else "inference",
-                module_development=args.module_development)
+                module_development=args.module_development, instance_mask_limit_gib=args.instance_mask_limit_gib)
             markdown, name = finished.render_unified_evaluation_md_v5(summary), "unified_evaluation.md"
         elif args.command == "probe":
             selected = []

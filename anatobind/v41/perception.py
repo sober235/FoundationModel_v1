@@ -29,6 +29,8 @@ POLICY_ROLES = ("engineering", "calibrated")
 CONNECTIVITY = {6: 1, 26: 3}     # instance connectivity -> scipy structuring-element rank
 # Every instance carries a full-volume bool mask (and is saved as one file), so the kept components times the
 # volume is bounded before any mask is allocated. An engineering bound on memory and disk, not a formal threshold.
+# A caller may name another bound (mask_bytes_limit / instance_mask_bytes_limit, 2026-11-12); the instances do not
+# depend on it, only whether they are built.
 INSTANCE_MASK_BYTES_LIMIT = 16 * 2 ** 30
 _FOV_TOLERANCE = 1e-6
 _POLICY_KEYS = {"policy_id": None, "policy_role": None, "anatomy": ("min_confidence",),
@@ -141,8 +143,13 @@ def apply_acceptance_v5(probabilities: dict, represented: np.ndarray, valid_fov:
 
 
 def extract_instances_v5(abnormality_map: np.ndarray, abnormality_accepted: np.ndarray, scope: ActiveScope,
-                         policy: dict) -> list[dict]:
-    """Connected components of accepted positives per class, sorted by class then bbox; uids follow that order."""
+                         policy: dict, mask_bytes_limit: int | None = None) -> list[dict]:
+    """Connected components of accepted positives per class, sorted by class then bbox; uids follow that order.
+    `mask_bytes_limit` (bytes; default INSTANCE_MASK_BYTES_LIMIT) bounds the kept components times the volume."""
+    if mask_bytes_limit is None:
+        mask_bytes_limit = INSTANCE_MASK_BYTES_LIMIT
+    elif not (isinstance(mask_bytes_limit, int) and not isinstance(mask_bytes_limit, bool) and mask_bytes_limit > 0):
+        raise V5Error("INVALID_TYPE", "$.mask_bytes_limit")
     validate_acceptance_policy_v5(policy, scope)
     if scope.observation_mode != "3d":
         raise V5Error("MODE_NOT_SUPPORTED", "$.observation_mode")
@@ -156,7 +163,7 @@ def extract_instances_v5(abnormality_map: np.ndarray, abnormality_accepted: np.n
         labels, count = ndimage.label(positive[c] & accepted[c], structure=structure)
         labelled.append((labels, np.bincount(labels.ravel(), minlength=count + 1)))
     kept = sum(int((sizes[1:] >= policy["instances"]["min_voxels"]).sum()) for _, sizes in labelled)
-    if kept * int(np.prod(positive.shape[1:])) > INSTANCE_MASK_BYTES_LIMIT:
+    if kept * int(np.prod(positive.shape[1:])) > mask_bytes_limit:
         raise V5Error("INSTANCE_LIMIT_EXCEEDED", "$.abnormal_instances")
     found = []
     for c, name in enumerate(scope.abnormality_classes):
@@ -188,11 +195,13 @@ def state_policy_hash_v5(scope: ActiveScope, acceptance_policy: dict) -> str:
 
 def run_perception_v5(model: PerceptionModelV5, batch, scope: ActiveScope, *, observation_uid: str,
                       checkpoint_sha256: str, original_geometry: dict, acceptance_policy: dict, window: tuple,
-                      stride: tuple, precision: str, relation_fn=None, probe=None):
+                      stride: tuple, precision: str, relation_fn=None, probe=None,
+                      instance_mask_bytes_limit: int | None = None):
     """predict → restore → accept, then a validated ModuleOutput (module scope) or PerceptionOutput (joint).
 
     `probe`, when given, is called once with the restored probabilities {"anatomy": ..., "abnormality": ...} that
-    the acceptance step reads (original grid). It is for diagnostics: the output does not depend on it."""
+    the acceptance step reads (original grid). It is for diagnostics: the output does not depend on it.
+    `instance_mask_bytes_limit` is handed to extract_instances_v5 (None: its default bound)."""
     if not isinstance(scope, ActiveScope):
         raise V5Error("INVALID_TYPE", "$.scope")
     if not isinstance(model, PerceptionModelV5):
@@ -244,7 +253,8 @@ def run_perception_v5(model: PerceptionModelV5, batch, scope: ActiveScope, *, ob
     a, u = decided["anatomy"], decided["abnormality"]
     state, state_reason = derive_state_map_v5(a["map"], a["accepted"], a["reason"], u["map"], u["accepted"],
                                               u["reason"], scope.state_tissue_ids)
-    instances = extract_instances_v5(u["map"], u["accepted"], scope, acceptance_policy)
+    instances = extract_instances_v5(u["map"], u["accepted"], scope, acceptance_policy,
+                                     mask_bytes_limit=instance_mask_bytes_limit)
     result = relation_fn(instances, a["map"], a["accepted"], scope)
     if not (isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], list)
             and isinstance(result[1], dict)

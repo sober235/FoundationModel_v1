@@ -285,6 +285,11 @@ def test_the_evaluate_and_replay_commands_hand_their_arguments_to_the_driver_and
                                      digest, "--fresh-predictions", "--module-development"]) == 0
     given = calls.pop()
     assert (given["checkpoint"], given["reuse_inference"], given["module_development"]) == ((6000, digest), None, True)
+    assert given["instance_mask_limit_gib"] is None
+    capsys.readouterr()
+    assert real_unified_module.main(["evaluate", *shared, "--out", str(tmp_path / "evaluation_budget"), "--role",
+                                     "train", "--max-wall-hours", "1", "--instance-mask-limit-gib", "256"]) == 0
+    assert calls.pop()["instance_mask_limit_gib"] == 256.0
     capsys.readouterr()
     with pytest.raises(V5Error) as err:                                # a step without its hash selects nothing
         real_unified_module.main(["evaluate", *shared, "--out", str(tmp_path / "half"), "--role", "train",
@@ -708,3 +713,42 @@ def test_the_compare_command_reads_both_plans_and_keeps_the_report(tmp_path, mon
                                   str(tmp_path / "refused")])
     assert (err.value.code, err.value.path) == ("UNIFIED_PLAN_INVALID", "$.shared.stop_at_step")
     assert not calls and not (tmp_path / "refused").exists()
+
+
+def test_an_explicit_mask_budget_reaches_every_joint_inference_and_is_recorded(finished, monkeypatch):
+    """2026-11-12: the memory bound of the instance masks may be named for one evaluation (GiB); it is handed to
+    every joint inference, recorded, and changes no result."""
+    from anatobind.v41 import perception
+
+    seen = []
+    original = eval_module.run_perception_v5
+
+    def recording(*args, **kwargs):
+        seen.append(kwargs.get("instance_mask_bytes_limit"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(eval_module, "run_perception_v5", recording)
+    reference = run_unified_evaluation_v5(**dict(finished.eval_kwargs, reuse_inference=None))
+    assert set(seen) == {None}
+    assert reference["evaluation"]["instance_mask_bytes_limit"] == perception.INSTANCE_MASK_BYTES_LIMIT
+    seen.clear()
+    larger = dict(finished.eval_kwargs, reuse_inference=None,
+                  private_root=finished.eval_kwargs["private_root"].with_name("larger"))
+    result = run_unified_evaluation_v5(**larger, instance_mask_limit_gib=64)
+    assert seen and set(seen) == {64 * 2 ** 30}
+    assert result["evaluation"]["instance_mask_bytes_limit"] == 64 * 2 ** 30
+    for role in ("train", "development_val"):
+        assert result["members"]["knee"][role]["findings"] == reference["members"]["knee"][role]["findings"]
+    text = render_unified_evaluation_md_v5(result)
+    assert "实例掩膜的内存上限 64 GiB" in text and "不是评价规则" in text
+    assert "实例掩膜的内存上限" not in render_unified_evaluation_md_v5(reference)       # the default is not announced
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("data was read")
+
+    monkeypatch.setattr(real_unified_module, "load_member_samples_v5", _fail_if_called)
+    for bad in (0, -1, True, "64", float("inf")):
+        _raises("INVALID_TYPE", "$.instance_mask_limit_gib", run_unified_evaluation_v5,
+                **dict(finished.eval_kwargs, private_root=finished.eval_kwargs["private_root"].with_name("bad")),
+                instance_mask_limit_gib=bad)
+    assert not finished.eval_kwargs["private_root"].with_name("bad").exists()

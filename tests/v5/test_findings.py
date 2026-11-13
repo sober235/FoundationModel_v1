@@ -100,3 +100,64 @@ def test_a_module_output_gives_findings_without_a_host():
     assert findings[0]["box"] == {"start": [2, 0, 0], "size": [2, 2, 2]}
     assert render_findings_zh_v5(findings, scope, BRAIN["display"]) == ["疑似缺血性梗死"]
     assert render_findings_zh_v5([], scope, BRAIN["display"]) == ["未见所列异常（仅限：缺血性梗死）。医生没有标注不等于正常。"]
+
+
+def _old_relation(instances, anatomy_map, anatomy_accepted, scope):
+    """The full-volume formulation of host_relation_fn_v5 before 2026-11-12, kept here as the reference."""
+    from anatobind.v41.findings_v5 import _group_ids
+
+    ids, contract, relations = _group_ids(scope, GROUPS), scope.relation_contract, []
+    for instance in instances:
+        voxels = np.asarray(anatomy_map)[instance["mask"] & np.asarray(anatomy_accepted, dtype=bool)]
+        best, best_count = None, 0
+        for group in sorted(GROUPS_BY_CLASS.get(instance["class_name"], [])):
+            count = int(np.isin(voxels, ids[group]).sum())
+            if count > best_count:
+                best, best_count = group, count
+        tissue_ids = [] if best is None else sorted(int(t) for t in np.unique(voxels) if int(t) in ids[best])
+        relations.append({"instance_uid": instance["instance_uid"], "predicate": contract["predicate"],
+                          "tissue_ids": tissue_ids, "status": "bound" if tissue_ids else "unknown",
+                          "accepted": True, "completion_role": contract["completion_role"]})
+    return relations
+
+
+def _old_anchor(mask):
+    coordinates = np.argwhere(mask)
+    distance = ((coordinates - coordinates.mean(axis=0)) ** 2).sum(axis=1)
+    return [int(v) for v in coordinates[int(np.argmin(distance))]]
+
+
+def test_host_and_anchor_read_only_the_box_of_the_instance_and_give_the_same_result():
+    """2026-11-12: relation and anchor work inside the instance's bounding box (the mask is empty outside it), so
+    their cost follows the instance, not the volume; the results equal the full-volume formulation."""
+    from anatobind.v41.findings_v5 import _anchor
+    from scipy import ndimage
+
+    generator = np.random.default_rng(7)
+    shape = (24, 20, 16)
+    for trial in range(6):
+        anatomy_map = generator.integers(0, len(SCOPE.anatomy_classes) + 1, size=shape)
+        accepted = generator.random(shape) > 0.2
+        positive = ndimage.binary_dilation(generator.random(shape) > 0.985, iterations=1 + trial % 2)
+        labels, count = ndimage.label(positive)
+        instances = []
+        for k, box in enumerate(ndimage.find_objects(labels), start=1):
+            mask = labels == k
+            instances.append(_instance(mask, ("cartilage_lesion", "meniscal_tear")[k % 2], f"inst-{k:04d}"))
+            assert _anchor(mask, instances[-1]["bbox"]) == _old_anchor(mask)
+            assert _anchor(mask) == _old_anchor(mask)
+        assert count > 3
+        relations, _ = host_relation_fn_v5(GROUPS, GROUPS_BY_CLASS)(instances, anatomy_map, accepted, SCOPE)
+        assert relations == _old_relation(instances, anatomy_map, accepted, SCOPE)
+    # symmetric shapes: several voxels at the same distance from the centre; the first in index order is chosen
+    mask = np.zeros(shape, dtype=bool)
+    mask[5:9, 6:10, 3:7] = True
+    mask[6:8, 7:9, 4:6] = False
+    assert _anchor(mask, _instance(mask)["bbox"]) == _old_anchor(mask)
+    # a mask that reaches outside its declared box is read over the whole volume, as before
+    stray = _instance(mask)
+    stray["bbox"] = [5, 6, 3, 7, 8, 5]
+    anatomy_map = generator.integers(0, len(SCOPE.anatomy_classes) + 1, size=shape)
+    relations, _ = host_relation_fn_v5(GROUPS, GROUPS_BY_CLASS)([stray], anatomy_map, np.ones(shape, bool), SCOPE)
+    assert relations == _old_relation([stray], anatomy_map, np.ones(shape, bool), SCOPE)
+    assert _anchor(mask, stray["bbox"]) == _old_anchor(mask)
