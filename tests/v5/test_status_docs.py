@@ -477,3 +477,146 @@ def test_status_carries_no_clock_of_the_server():
     status = Path("reports/v5/status.md").read_text(encoding="utf-8")
     assert "CST" not in status and "amax 时间" not in status
     assert not re.search(r"amax\s*20\d\d-\d\d-\d\d", status)
+
+
+# ---------------------------------------------------------------------------
+# Negative top-k pilot (researcher's option B, 2026-11-12)
+
+PILOT_PLAN_SHA256 = "b7e9524156d61e8df3ab58c0f4e91ed429cd181ca5d914c0eb1ad3a2cc105c69"
+PILOT_FOLDER = Path("reports/v5/negtopk_pilot_20261112")
+PILOT_REPORT = Path("reports/v5/negtopk_pilot_20261112.md")
+PILOT_CHECKPOINTS = {
+    "old": ("1a2566d377b71707f0843f940a91f86e107bf347f6c0cb8fb30db0c6622b99a3",
+            "c2efa91781cde65e5693ba26bec5613bf35523a682708e988b9e88da1ba52f5d",
+            "f992c12d3560a2cc2d1dd119d0af75cae717ea269ea71dc4c0d8849ad436649f"),
+    "new": ("d1aaae75bc8d1697ed66cc4242fb570abee1388e21fd4071b5477070f1a9a3be",
+            "ada6a284656a231fd9297e2df61764362f771aaa01eedda47007ec8ddfde6c65",
+            "972cfcbde182bfdfb806f5b2dee403f0d7bbce6ffee5ede0480dc4d4a8e406a3")}
+PILOT_APPROVALS = ("92ee8558a91f420067448af9fe7b97eb18419ce5ffda17e079215a326861735e",
+                   "7b676a8e590c5d038e67c7c8dc180c50def24412b15b25bb2895ea46fe3f7bab")
+# name: (sha256 of the copy in the repository, sha256 of the untouched server file, figures of the server's timing
+# replaced before the copy left the server)
+PILOT_ARCHIVE = {
+    "smoke.md": ("6accba44a78303d78381b33f1427b6ed03e955d76d000e1ab0fef0c8fb3460b3",
+                 "3d3f3c19575a2e717e541eea93d6f14b5835e853380933e5da1f8e13503e2754", 2),
+    "probe_before_training.md": ("cc67eae7fb01e2022df257b957b74c2840dc080c4a4176846e159c430b053039",
+                                 "cc67eae7fb01e2022df257b957b74c2840dc080c4a4176846e159c430b053039", 0),
+    "probe_new_2000.md": ("d2502d6fef599562a346e8e271ff360cb329ccbfecb762fa602d768ac4f70a6b",
+                          "d2502d6fef599562a346e8e271ff360cb329ccbfecb762fa602d768ac4f70a6b", 0),
+    "probe_new_4000.md": ("10a51ab0677fcf12c32c072eccb6795121867b1b1e53c113fdc7a35d4f62539d",
+                          "10a51ab0677fcf12c32c072eccb6795121867b1b1e53c113fdc7a35d4f62539d", 0),
+    "probe_new_6000.md": ("b29ee0468e7f79e86146ea5b26652b2f57f147f3e845bea186fc8efdc3a663c0",
+                          "b29ee0468e7f79e86146ea5b26652b2f57f147f3e845bea186fc8efdc3a663c0", 0),
+    "comparison.md": ("06c8df71c5a8334e8d970703ac78ab0e722e3c5b2b8cf154614eb639ba30dc04",
+                      "06c8df71c5a8334e8d970703ac78ab0e722e3c5b2b8cf154614eb639ba30dc04", 0),
+    "training.md": ("94e1120b9357b15152e464af14551665c5fd25c3eda113940759d2a1b534eca9",
+                    "90c6f545322fa1fcb866ebb84e17c88eda15840435f3b85dccde7ebc0ef5d83d", 1),
+    "evaluation_old_6000.md": ("c13731b3b98567aa22eda930b535aebbc4fa0d2cc1b15b9bfc60239963866cd1",
+                               "8623568d5fc1093c751c0df02c1e1c109c662f1961d23a3a72a3bf01cd4b9110", 2),
+    "evaluation_new_6000.md": ("a6b78ea094132f15f79a58704a9b0cf89b5c01629ebdbedc4add28f805922e3d",
+                               "b963e0bf016a415bde14ed0eb5410c6a8f4eba88211a71e7b2454246f2b98c91", 2),
+    "replay.md": ("092720bb94ad4659c135e8c02ad9797951a9e2838370cbeddcd603f4886350df",
+                  "a671bed1611527332940bb2a436a718a10f0cc41c5a5c8f41619b43c47361f08", 2),
+}
+_SERVER_TIMING = r"用时 [0-9]|剩余 [0-9]|单步耗时：[0-9]"
+
+
+def _pilot_section() -> str:
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    heading = "## 负项短程试验（2026-11-12 至 11-13）"
+    assert heading in status
+    return status.split(heading, 1)[1].split("\n## ", 1)[0]
+
+
+def test_pilot_reports_are_archived_with_only_the_server_timing_replaced():
+    report = PILOT_REPORT.read_text(encoding="utf-8")
+    for name, (copy, server, replaced) in PILOT_ARCHIVE.items():
+        data = (PILOT_FOLDER / name).read_bytes()
+        assert hashlib.sha256(data).hexdigest() == copy, name
+        assert (copy == server) == (replaced == 0), name
+        text = data.decode("utf-8")
+        assert text.count("[服务器端计时，未取回]") == replaced and not re.search(_SERVER_TIMING, text), name
+        assert not any(re.search(pattern, text) for pattern in _REDACTED), name
+        assert "NOT_EVALUATED" in text, name
+        assert copy in report and server in report, name                   # the report names both files
+
+
+def test_pilot_report_is_a_record_of_a_short_pilot_not_a_performance_result():
+    text = PILOT_REPORT.read_text(encoding="utf-8")
+    for phrase in (PILOT_PLAN_SHA256, UNIFIED_PLAN_SHA256, UNIFIED_CHECKPOINT_SHA256, *PILOT_CHECKPOINTS["old"],
+                   *PILOT_CHECKPOINTS["new"], *PILOT_APPROVALS, "NOT_EVALUATED", "core_target_validated",
+                   "locked_test 未读", "不能代替泛化评价", "不是误报", "没有推送", "本机墙钟时间"):
+        assert phrase in text, phrase
+    for heading in ("已确定的事实", "证据支持的解释", "仍待检验的假设", "建议", "预算"):
+        assert re.search(rf"^#+ .*{heading}", text, flags=re.M), heading
+    assert "（待" not in text and "待填写" not in text                      # no section is left open
+    assert not any(re.search(pattern, text) for pattern in _REDACTED)
+    assert "CST" not in text and "amax 时间" not in text
+
+
+def test_both_step_6000_evaluations_read_fresh_predictions_of_the_named_checkpoints():
+    for name, plan, checkpoint in (("evaluation_old_6000.md", UNIFIED_PLAN_SHA256, PILOT_CHECKPOINTS["old"][2]),
+                                   ("evaluation_new_6000.md", PILOT_PLAN_SHA256, PILOT_CHECKPOINTS["new"][2])):
+        text = (PILOT_FOLDER / name).read_text(encoding="utf-8")
+        for phrase in (plan, checkpoint, "（第 6000 步）", "权重未被修改", "结果：COMPLETED", "locked_test 未读",
+                       "没有复用任何已保存的输出", "实例掩膜的内存上限 256 GiB", "不是评价规则", "不能代替泛化评价"):
+            assert phrase in text, (name, phrase)
+
+
+def test_the_step_6000_tables_are_derived_from_the_two_evaluations():
+    import json
+
+    values = json.loads((PILOT_FOLDER / "comparison_6000.json").read_text(encoding="utf-8"))
+    assert values["checkpoints"]["old"]["sha256"] == PILOT_CHECKPOINTS["old"][2]
+    assert values["checkpoints"]["new"]["sha256"] == PILOT_CHECKPOINTS["new"][2]
+    tables = (PILOT_FOLDER / "comparison_6000_tables.md").read_text(encoding="utf-8")
+    report = PILOT_REPORT.read_text(encoding="utf-8")
+    for name in ("comparison_6000.json", "comparison_6000_tables.md", "compare_pilot.py", "rows_by_boxes_6000.json"):
+        assert hashlib.sha256((PILOT_FOLDER / name).read_bytes()).hexdigest() in report, name
+    for row in ("| 命中的框（计数） | 67 | 0 |", "| 命中的框（计数） | 28 | 0 |",
+                "| 合计：有响应，但连通块都小于体素数下限 | 0 | 101 |", "| 合计：有响应，但连通块都小于体素数下限 | 0 | 49 |",
+                "| 所见总数 | 54750 | 0 |", "| 所见总数 | 20391 | 0 |"):
+        assert row in tables, row
+    by_boxes = json.loads((PILOT_FOLDER / "rows_by_boxes_6000.json").read_text(encoding="utf-8"))
+    assert set(by_boxes) == {"old_6000", "new_6000"}
+    for side in by_boxes.values():
+        assert set(side) == {"train", "development_val"}                       # locked_test is not in it
+        assert side["train"]["n_scans"] == 86 and side["development_val"]["n_scans"] == 33
+        assert side["train"]["scans_without_any_box"]["n"] == 18
+    text = json.dumps(by_boxes)
+    assert "uid" not in text and not any(re.search(pattern, text) for pattern in _REDACTED)
+
+
+def test_the_replay_of_the_pilot_matches_its_log_step_by_step():
+    text = (PILOT_FOLDER / "replay.md").read_text(encoding="utf-8")
+    for phrase in (PILOT_PLAN_SHA256, PILOT_CHECKPOINTS["new"][2], "权重未被修改", "结果：COMPLETED",
+                   "共 12000 项，不一致 0 项", "共 36000 项，不一致 0 项", "从未出现的袋 0 个", "locked_test 未读"):
+        assert phrase in text, phrase
+    report = PILOT_REPORT.read_text(encoding="utf-8")
+    assert "比较 12000 项，不一致 0 项" in report and "比较 36000 项，不一致 0 项" in report
+    assert "**13.004**" in report                                                  # the budget, all jobs added
+
+
+def test_pilot_log_terms_carry_counts_and_means_only():
+    import json
+
+    data = (PILOT_FOLDER / "log_terms.json").read_bytes()
+    report = PILOT_REPORT.read_text(encoding="utf-8")
+    assert hashlib.sha256(data).hexdigest() in report
+    assert hashlib.sha256((PILOT_FOLDER / "log_terms.py").read_bytes()).hexdigest() in report
+    body = json.loads(data)
+    assert body["steps"] == 6000 and body["window"] == 500 and len(body["windows"]) == 12
+    assert body["windows"][0]["steps"] == [1, 500] and body["windows"][-1]["steps"] == [5501, 6000]
+    text = data.decode("utf-8")
+    assert "uid" not in text and not any(re.search(pattern, text) for pattern in _REDACTED)
+
+
+def test_status_records_the_pilot_as_a_completed_run_not_as_validated_performance():
+    section = _pilot_section()
+    for phrase in ("negtopk_pilot_20261112.md", PILOT_PLAN_SHA256, PILOT_CHECKPOINTS["new"][2], *PILOT_APPROVALS,
+                   "代码核对", "实验完成", "性能结论", "NOT_EVALUATED", "locked_test 未读", "没有推送",
+                   "没有接着跑 30000 步", "INSTANCE_LIMIT_EXCEEDED"):
+        assert phrase in section, phrase
+    meta = _front_matter()
+    assert meta["scientific_conclusion"] == "NOT_EVALUATED" and meta["core_target_validated"] is None
+    assert "CST" not in section and "amax 时间" not in section
