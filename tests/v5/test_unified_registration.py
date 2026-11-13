@@ -104,3 +104,76 @@ def test_a_member_run_of_another_recipe_is_refused():
     _raises("UNIFIED_MEMBER_MISMATCH", "$.member_runs.brain", register_unified_run_v5, run_id="run-u",
             run_kind="baseline", plan=other, plan_sha256=unified_plan_sha256_v5(other), member_runs=member_runs,
             environment=dict(SYNTH_ENVIRONMENT), code=dict(SYNTH_CODE), created_at=SYNTH_CREATED_AT, fixture_mode=True)
+
+
+# ---------------------------------------------------------------------------
+# Pilot of 2026-11-12: an optional hard-negative fraction and an optional stop step, both absent from earlier plans
+
+ORIGINAL_PLAN = Path("configs/v5/proposals/unified_knee_brain.yaml")
+PILOT_PLAN = Path("configs/v5/proposals/unified_knee_brain_negtopk_pilot.yaml")
+ORIGINAL_PLAN_SHA256 = "2f43a97185292644b2ab2f1c91a8a9eeb7dba4dbec274200758bac910d3aa71c"
+
+
+def _flat(node, prefix=""):
+    if isinstance(node, dict):
+        return {key: value for name, child in node.items() for key, value in _flat(child, f"{prefix}.{name}").items()}
+    return {prefix.lstrip("."): node}
+
+
+def test_the_plan_of_the_finished_run_keeps_its_hash():
+    plan = yaml.safe_load(ORIGINAL_PLAN.read_text())
+    assert unified_plan_sha256_v5(plan) == ORIGINAL_PLAN_SHA256
+    assert "negative_topk_fraction" not in plan["members"]["knee_qdess"]["box_supervision"]
+    assert "stop_at_step" not in plan["shared"]
+
+
+def test_a_plan_may_keep_only_the_top_fraction_of_the_negatives():
+    plan = make_unified_plan(SCOPES)
+    plan["members"]["knee"]["box_supervision"]["negative_topk_fraction"] = 0.01
+    assert validate_unified_plan_v5(plan, SCOPES, SOURCES) is plan
+    for value in (0, 0.0, 1.5, -0.01, True, "0.01", None):
+        plan["members"]["knee"]["box_supervision"]["negative_topk_fraction"] = value
+        _raises("UNIFIED_PLAN_INVALID", "$.members.knee.box_supervision", validate_unified_plan_v5, plan, SCOPES,
+                SOURCES)
+    plan["members"]["knee"]["box_supervision"]["negative_topk_fraction"] = 1.0
+    plan["members"]["knee"]["box_supervision"]["another_key"] = 1
+    _raises("UNIFIED_PLAN_INVALID", "$.members.knee.box_supervision", validate_unified_plan_v5, plan, SCOPES, SOURCES)
+
+
+def test_a_plan_may_stop_before_the_end_of_its_schedule_without_changing_a_member_recipe():
+    plan = make_unified_plan(SCOPES)
+    recipes = {pid: member_recipe_v5(plan, pid, kind) for pid in SCOPES for kind in ("baseline", "smoke")}
+    plan["shared"]["stop_at_step"] = 2                              # the schedule (budget.max_steps) stays 4
+    assert validate_unified_plan_v5(plan, SCOPES, SOURCES) is plan
+    assert {pid: member_recipe_v5(plan, pid, kind) for pid in SCOPES for kind in ("baseline", "smoke")} == recipes
+    assert plan["shared"]["budget"]["max_steps"] == 4
+    for value in (0, 4, 5, -2, 2.0, True, "2", None):               # a stop at the end of the schedule is no stop
+        plan["shared"]["stop_at_step"] = value
+        _raises("UNIFIED_PLAN_INVALID", "$.shared.stop_at_step", validate_unified_plan_v5, plan, SCOPES, SOURCES)
+    plan["shared"]["stop_at_step"] = 3
+    plan["shared"]["another_key"] = 1
+    _raises("UNIFIED_PLAN_INVALID", "$.shared", validate_unified_plan_v5, plan, SCOPES, SOURCES)
+
+
+def test_the_pilot_plan_differs_from_the_finished_run_only_where_the_researcher_approved():
+    """Approval of 2026-11-12: top 1 % of the negatives, stop at step 6000 of the 30000-step schedule, 16 h in all.
+    Seeds, model, optimiser, schedule, splits (scope, source, lineage), sampling and every other value are equal."""
+    original, pilot = (yaml.safe_load(path.read_text()) for path in (ORIGINAL_PLAN, PILOT_PLAN))
+    before, after = _flat(original), _flat(pilot)
+    changed = {key: (before.get(key), after.get(key)) for key in sorted(set(before) | set(after))
+               if before.get(key) != after.get(key)}
+    assert changed == {
+        "plan_id": ("unified_knee_brain_v1", "unified_knee_brain_negtopk_pilot_v1"),
+        "shared.stop_at_step": (None, 6000),
+        "members.knee_qdess.box_supervision.negative_topk_fraction": (None, 0.01),
+        "budget.max_wall_hours": (20.0, 16.0)}
+    assert pilot["shared"]["budget"] == {"max_steps": 30000, "max_wall_hours": 16.0}
+    assert pilot["shared"]["checkpoint_every"] == 2000              # checkpoints at 2000, 4000 and 6000
+    box = pilot["members"]["knee_qdess"]["box_supervision"]
+    assert (box["topk_fraction"], box["positive_weight"], box["negative_weight"]) == (0.1, 1.0, 1.0)
+    scopes = {"knee_qdess": _scope("skm_joint_early"), "brain_dwi_adc": _scope("isles_u")}
+    policies = load_source_policies_v5(Path("configs/v5/sources_v5.yaml"))
+    sources = {"knee_qdess": source_binding_v5(policies["skm_tea_joint_early"]),
+               "brain_dwi_adc": source_binding_v5(policies["isles_2022"])}
+    assert validate_unified_plan_v5(pilot, scopes, sources) is pilot
+    assert unified_plan_sha256_v5(pilot) != ORIGINAL_PLAN_SHA256

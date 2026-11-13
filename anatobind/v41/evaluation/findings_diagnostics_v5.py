@@ -12,6 +12,14 @@ One row per scan. For every primary box of the readers, in the order of the chai
 5. host        whether the hit finding names the box's tissue group — with the PREDICTED anatomy (the official
                reading) and, for diagnosis only, with the REFERENCE anatomy on the same predicted instance.
 
+Two further counts per class (2026-11-12), both on the REFERENCE anatomy where it is eligible:
+`zones`       the accepted positive voxels on the class's host tissues (the groups the class may sit on), apart for
+              the three zones of the supervision: inside a primary box of the class, else inside an ignore region,
+              else the rest. The rest is the class's negative support in training; it holds the primary boxes of
+              the other class. A voxel in both a primary box of the class and an ignore region belongs to the box;
+`off_tissue`  the connected components (before the size filter) without a single voxel on a host tissue of their
+              class, with their sizes.
+
 `stage` names the first step a box fails. Every finding also gets its place (finding_location_v5), both host
 readings and the share of its voxels that lie on a tissue its class may sit on. Components are counted before and
 after the size filter. Official results keep using the predicted anatomy; the reference-anatomy reading only tells
@@ -37,6 +45,7 @@ SIZE_BINS = ((1, "1"), (2, "2-9"), (10, "10-49"), (50, "50-99"), (100, "100-999"
              (10000, ">=10000"))
 RESPONSE_LEVELS = (0.1, 0.25, 0.5, 0.75, 0.9)
 HOST_PAIRS = ("bound_bound", "bound_undetermined", "undetermined_bound", "undetermined_undetermined")
+ZONES = ("same_class_primary", "ignored", "outside")
 _FUNNEL_KEYS = ("responded", "kept_touching", "hit", "host_correct", "host_correct_reference_anatomy")
 
 
@@ -175,8 +184,35 @@ def diagnose_scan_v5(*, findings: list, instances: list, reference: dict, scope:
     components = {name: {"positive_voxels": int(sizes[c][1:].sum()), "count": int(len(sizes[c]) - 1),
                          "kept": int((sizes[c][1:] >= min_voxels).sum()), "size_histogram": _histogram(sizes[c][1:])}
                   for c, name in enumerate(classes)}
+
+    # positives on the host tissues by zone of the supervision, and the components off every host tissue
+    eligible_anatomy = np.asarray(anatomy_eligible, dtype=bool)
+    in_primary, in_ignored = np.zeros((len(classes), *shape), dtype=bool), np.zeros(shape, dtype=bool)
+    for box in reference["boxes"]:
+        window = _window(box["box"], shape)
+        if window is None:
+            continue
+        if _is_primary(box):
+            in_primary[(classes.index(box["abnormality_class"]), *window)] = True
+        else:
+            in_ignored[window] = True
+    zones, off_tissue = {}, {}
+    for c, name in enumerate(classes):
+        allowed = sorted({i for group in groups_by_class.get(name, []) for i in ids[group]})
+        host = np.isin(np.asarray(anatomy_reference), allowed) & eligible_anatomy
+        marked = labels[c] > 0
+        masks = {"same_class_primary": in_primary[c], "ignored": in_ignored & ~in_primary[c],
+                 "outside": ~(in_primary[c] | in_ignored)}
+        zones[name] = {zone: {"voxels": int(masks[zone].sum()), "host_voxels": int((host & masks[zone]).sum()),
+                              "positive_voxels": int((marked & masks[zone]).sum()),
+                              "positive_on_host": int((marked & host & masks[zone]).sum())} for zone in ZONES}
+        on_host = np.bincount(labels[c][host], minlength=len(sizes[c]))
+        off = sizes[c][1:][on_host[1:] == 0]
+        kept = off[off >= min_voxels]
+        off_tissue[name] = {"count": int(len(off)), "kept": int(len(kept)), "voxels": int(off.sum()),
+                            "kept_voxels": int(kept.sum()), "size_histogram": _histogram(off)}
     return {"patient_uid": patient_uid, "classes": classes, "boxes": box_rows, "findings": finding_rows,
-            "components": components}
+            "components": components, "zones": zones, "off_tissue": off_tissue}
 
 
 # ---------------------------------------------------------------------------
@@ -259,21 +295,45 @@ def _instance_sizes(findings: list) -> dict:
                for key in ("probability_mean", "probability_max")}}
 
 
+def _ratio(numerator: float, denominator: float):
+    return None if denominator == 0 else float(numerator) / float(denominator)
+
+
+def _zone(items: list) -> dict:
+    """One zone of one class over a split: pooled counts, and the fraction of host tissue that is positive."""
+    total = {key: sum(item[key] for item in items)
+             for key in ("voxels", "host_voxels", "positive_voxels", "positive_on_host")}
+    with_host = [item for item in items if item["host_voxels"]]
+    return {**total, "positive_off_host": total["positive_voxels"] - total["positive_on_host"],
+            "fraction_pooled": _ratio(total["positive_on_host"], total["host_voxels"]),
+            "fraction_per_scan": _distribution([item["positive_on_host"] / item["host_voxels"] for item in with_host]),
+            "scans_with_host": len(with_host)}
+
+
 def summarize_diagnostics_v5(rows: list) -> dict:
     """Counts and distributions over a split's rows; no patient, sample or finding identifier."""
     classes = list(rows[0]["classes"]) if rows else []
-    components = {}
+    components, zones, off_tissue = {}, {}, {}
     for name in classes:
         items = [row["components"][name] for row in rows]
         components[name] = {
             **{key: sum(item[key] for item in items) for key in ("positive_voxels", "count", "kept")},
             "kept_per_scan": _distribution([item["kept"] for item in items]),
             "size_histogram": {label: sum(item["size_histogram"][label] for item in items) for _, label in SIZE_BINS}}
+        zones[name] = {zone: _zone([row["zones"][name][zone] for row in rows]) for zone in ZONES}
+        off = [row["off_tissue"][name] for row in rows]
+        off_tissue[name] = {
+            **{key: sum(item[key] for item in off) for key in ("count", "kept", "voxels", "kept_voxels")},
+            "size_histogram": {label: sum(item["size_histogram"][label] for item in off) for _, label in SIZE_BINS}}
+        off_tissue[name]["share_of_components"] = _ratio(off_tissue[name]["count"], components[name]["count"])
+        off_tissue[name]["share_of_positive_voxels"] = _ratio(off_tissue[name]["voxels"],
+                                                              components[name]["positive_voxels"])
     return {"n_scans": len(rows), "classes": classes,
             "funnel": _per_class(rows, "boxes", _funnel), "response": _per_class(rows, "boxes", _response),
             "supervision_sizes": _per_class(rows, "boxes", _supervision), "chain": _per_class(rows, "boxes", _chain),
             "locations": _per_class(rows, "findings", _locations), "hosts": _per_class(rows, "findings", _hosts),
-            "instance_sizes": _per_class(rows, "findings", _instance_sizes), "components": components}
+            "instance_sizes": _per_class(rows, "findings", _instance_sizes), "components": components,
+            "zones": zones, "off_tissue": off_tissue}
 
 
 # ---------------------------------------------------------------------------
@@ -390,6 +450,41 @@ def render_diagnostics_md_v5(by_role: dict) -> str:
             ("保留的连通块（即所见）", lambda s: s["components"][name]["kept"]),
             ("每次扫描保留的连通块：中位数", lambda s: s["components"][name]["kept_per_scan"]["p50"]),
             *[(f"体素数 {label} 的连通块", lambda s, label=label: s["components"][name]["size_histogram"][label])
+              for _, label in SIZE_BINS]])
+        lines.append("")
+    zone_labels = {"same_class_primary": "同类主分析框内", "ignored": "忽略区内",
+                   "outside": "所有框之外（该类别的负监督区）"}
+    for name in classes:
+        lines += [f"## 宿主组织上的阳性体素（按区域）：{name}", "",
+                  "宿主组织指该类别可以归属的组织，取参照解剖（仅诊断）。区域按训练时的监督划分，互不重叠：同类主分析框内 → "
+                  "忽略区内 → 其余。“其余”就是该类别在训练中的负监督区，其中包含另一类别的主分析框。"
+                  "框外没有标注不等于正常：框外的阳性体素只作描述，不是误报。", ""]
+        rows = []
+        for zone in ZONES:
+            label = zone_labels[zone]
+            rows += [(f"{label}：宿主组织体素", lambda s, zone=zone: s["zones"][name][zone]["host_voxels"]),
+                     (f"{label}：其中达到阈值的体素", lambda s, zone=zone: s["zones"][name][zone]["positive_on_host"]),
+                     (f"{label}：宿主组织上达到阈值的体素比例（合并）",
+                      lambda s, zone=zone: s["zones"][name][zone]["fraction_pooled"]),
+                     (f"{label}：宿主组织上达到阈值的体素比例（每次扫描，中位数）",
+                      lambda s, zone=zone: s["zones"][name][zone]["fraction_per_scan"]["p50"]),
+                     (f"{label}：有宿主组织的扫描数", lambda s, zone=zone: s["zones"][name][zone]["scans_with_host"]),
+                     (f"{label}：不在宿主组织上的达到阈值的体素",
+                      lambda s, zone=zone: s["zones"][name][zone]["positive_off_host"])]
+        lines += table("项", rows)
+        lines.append("")
+    for name in classes:
+        lines += [f"## 不在可归属组织上的连通块：{name}", "",
+                  "连通块在体素数过滤之前统计；“不在可归属组织上”指它没有任何一个体素落在该类别可以归属的组织上"
+                  "（参照解剖，仅诊断）。", ""]
+        lines += table("项", [
+            ("连通块总数", lambda s: s["components"][name]["count"]),
+            ("不在可归属组织上的连通块", lambda s: s["off_tissue"][name]["count"]),
+            ("占全部连通块的比例", lambda s: s["off_tissue"][name]["share_of_components"]),
+            ("其中通过体素数过滤的（成为所见）", lambda s: s["off_tissue"][name]["kept"]),
+            ("它们的体素总数", lambda s: s["off_tissue"][name]["voxels"]),
+            ("占达到阈值的体素的比例", lambda s: s["off_tissue"][name]["share_of_positive_voxels"]),
+            *[(f"其中体素数 {label} 的", lambda s, label=label: s["off_tissue"][name]["size_histogram"][label])
               for _, label in SIZE_BINS]])
         lines.append("")
     return "\n".join(lines).rstrip("\n") + "\n"

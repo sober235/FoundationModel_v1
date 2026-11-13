@@ -5,18 +5,16 @@ same patches again: a member's sampler is a seeded PCG64 stream that depends onl
 the weights, so the batches of a finished run can be rebuilt step by step. The replay is checked against the
 run's own log (the support of every task at every step) and against the sampler state kept in a checkpoint.
 
-`box_objective_parts_v5` gives the positive and the negative mean that box_mil_objective_v5 adds. Training never
-logged them apart; they can be recomputed only where the weights are known (a checkpoint, or the seeded
-initialisation) and are then diagnostics of those weights. Nothing here updates a model.
+`box_objective_parts_v5` gives the terms that box_mil_objective_v5 adds, through the function training itself
+uses (losses.box_mil_terms_v5). Runs before 2026-11-12 never logged them apart; for those they can be recomputed
+only where the weights are known (a checkpoint, or the seeded initialisation) and are then diagnostics of those
+weights. Nothing here updates a model.
 """
 from __future__ import annotations
 
-import math
-
 import torch
-import torch.nn.functional as F
 
-from ..contracts_v5 import V5Error
+from ..losses import box_mil_terms_v5, box_terms_record_v5
 from .box_data_v5 import box_positive_centers_v5
 from .data_v5 import PatchSamplerV5, positive_centers_v5
 from .train_unified_v5 import _bag_count
@@ -25,30 +23,16 @@ from .train_v5 import _support
 
 def box_objective_parts_v5(logits: torch.Tensor, bags: torch.Tensor, e_pos: torch.Tensor, e_neg: torch.Tensor,
                            spec: dict) -> dict:
-    """The two means of box_mil_objective_v5: {"positive", "negative", "bags", "negative_voxels"}.
+    """The terms of box_mil_objective_v5 as numbers: box_terms_record_v5 of box_mil_terms_v5, plus
+    "negative_voxels" (the e_neg voxels of all classes). The same record a training log line keeps.
 
     positive: mean over bags of the mean softplus(-logit) of each bag's top ceil(topk_fraction·n) logits;
-    negative: mean over the classes with support of the mean softplus(logit) on that class's e_neg voxels.
-    The objective is positive_weight·positive + negative_weight·negative; a part without support is None."""
-    if not isinstance(spec, dict) or spec.get("kind") != "box_mil":
-        raise V5Error("UNKNOWN_LOSS_KIND", "$.spec.kind")
-    if not (logits.shape == bags.shape == e_pos.shape == e_neg.shape) or logits.ndim < 3:
-        raise V5Error("GRID_MISMATCH", "$.logits")
-    fraction = spec["topk_fraction"]
-    e_pos, e_neg = e_pos.to(torch.bool), e_neg.to(torch.bool)
-    positive, negative = [], []
-    for c in range(logits.shape[1]):
-        if bool(e_neg[:, c].any()):
-            negative.append(F.softplus(logits[:, c][e_neg[:, c]]).mean())
-        for b in range(logits.shape[0]):
-            supported = bags[b, c][e_pos[b, c]]
-            for bag_id in torch.unique(supported[supported > 0]).tolist():
-                selected = logits[b, c][(bags[b, c] == bag_id) & e_pos[b, c]]
-                top = torch.topk(selected, max(1, math.ceil(fraction * selected.numel()))).values
-                positive.append(F.softplus(-top).mean())
-    return {"positive": float(torch.stack(positive).mean()) if positive else None,
-            "negative": float(torch.stack(negative).mean()) if negative else None,
-            "bags": len(positive), "negative_voxels": int(e_neg.sum())}
+    negative: the optimised negative term (every e_neg voxel of a class, or its top negative_topk_fraction);
+    negative_all: the mean over every e_neg voxel whatever the plan keeps; classes: the same per class with the
+    eligible and selected voxel counts. The objective is positive_weight·positive + negative_weight·negative; a
+    part without support is None."""
+    record = box_terms_record_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, spec))
+    return {**record, "negative_voxels": sum(entry["negative_eligible"] for entry in record["classes"])}
 
 
 class RecordingSamplerV5(PatchSamplerV5):

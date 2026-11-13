@@ -2,7 +2,10 @@
 
 Both read a completed run of real_unified_v5 and never train: no optimizer is built, every forward pass runs in
 inference mode, and the weights' hash is compared before and after (a difference is an error and nothing is
-reported). The checkpoint is the run's final one, loaded by the hash the run's own summary recorded.
+reported). The checkpoint is the run's final one, loaded by the hash the run's own summary recorded — or, for the
+evaluation, a checkpoint of the run selected by step AND hash (2026-11-12): its sidecar must name that step, that
+hash and this run, the file must hash to it and hold that step. Nothing of the run is rewritten for it; the
+summary of the evaluation says which checkpoint was read and which one is the run's final one.
 
 What must hold before any data is read: the roles asked for are train / development_val (locked_test is refused),
 the code is clean, the plan and the approvals are those of the run, the inputs register exactly the run stored on
@@ -14,7 +17,11 @@ own registered member run: the same samples the run already recorded as exposed,
 (run_perception_v5 → findings_from_output_v5 → score_findings_v5 / anatomy_dice_v5), each role against all of its
 own primary boxes, and adds the diagnostics of evaluation.findings_diagnostics_v5. For development_val the outputs
 the run saved are loaded and used as the official ones; the new inference only supplies the probabilities the
-saved outputs do not hold, and is compared with them array by array.
+saved outputs do not hold, and is compared with them array by array. A saved output is reused only when it
+records the hash of the checkpoint being evaluated: for a checkpoint other than the run's final one reuse is
+switched off, and `reuse_inference=None` asks for new predictions throughout. With `module_development` every
+voxel-supervised member is scored on development_val with the training driver's own steps (run_perception_v5 →
+module_metrics_v5 → summarize_module_metrics_v5).
 
 `run_unified_replay_v5` redraws the member's training patches (engine.replay_v5), checks every step against the
 run's log and the final sampler state, reports how often the boxes were shown, and recomputes the two parts of the
@@ -40,7 +47,8 @@ import torch
 from . import real_unified_v5 as driver
 from .contracts_v5 import V5Error
 from .engine.data_v5 import make_batch_v5, original_geometry_v5
-from .engine.registration_v5 import READABLE_ROLES, readable_role_v5, run_sha256_v5
+from .engine.module_eval_v5 import freeze_module_reference_v5, module_metrics_v5, summarize_module_metrics_v5
+from .engine.registration_v5 import READABLE_ROLES, _is_sha256, _positive_int, readable_role_v5, run_sha256_v5
 from .engine.replay_v5 import batch_exposure_v5, box_objective_parts_v5, full_bag_voxels_v5, member_sampler_v5
 from .engine.train_v5 import _append_jsonl, _to_device, autocast_v5, load_checkpoint_v5
 from .engine.unified_registration_v5 import member_recipe_v5
@@ -80,10 +88,16 @@ def _check_roles(roles: object) -> list:
 
 def _open_finished_run(*, plan: dict, plan_sha256: str, protocols: dict, members: dict, approvals: dict,
                        run_root: Path, run_id: str, private_root: Path, max_wall_hours: float, code: dict,
-                       fixture_mode: bool) -> dict:
-    """Everything that must hold before any data is read; returns the run, its checkpoint and the budget left."""
+                       fixture_mode: bool, checkpoint: tuple | None = None) -> dict:
+    """Everything that must hold before any data is read; returns the run, its checkpoint and the budget left.
+
+    `checkpoint` is None for the run's final checkpoint, or (step, sha256) for a checkpoint of the run: its sidecar
+    must name that step, that hash and this run."""
     if not (isinstance(code, dict) and set(code) == {"git_commit", "dirty"} and isinstance(code["dirty"], bool)):
         raise V5Error("INVALID_TYPE", "$.code")
+    if checkpoint is not None and not (isinstance(checkpoint, tuple) and len(checkpoint) == 2
+                                       and _positive_int(checkpoint[0]) and _is_sha256(checkpoint[1])):
+        raise V5Error("EVAL_CHECKPOINT_INVALID", "$.checkpoint")
     if code["dirty"] and not fixture_mode:
         raise V5Error("CODE_DIRTY", "$.code.dirty")
     pids = driver._precheck(plan, plan_sha256, protocols, members, approvals, fixture_mode)
@@ -117,11 +131,30 @@ def _open_finished_run(*, plan: dict, plan_sha256: str, protocols: dict, members
     if not (isinstance(max_wall_hours, (int, float)) and not isinstance(max_wall_hours, bool)
             and 0 < max_wall_hours <= remaining):
         raise V5Error("EVAL_BUDGET_INVALID", "$.max_wall_hours")
-    step = int(training["step"])
+    final = (int(training["step"]), training["checkpoint_sha256"])
+    step, digest = final if checkpoint is None else checkpoint
+    directory = run_root / "runs" / run_id / "checkpoints"
+    if checkpoint is not None:
+        try:
+            sidecar = json.loads((directory / f"step_{step:08d}.pt.json").read_text())
+        except (OSError, ValueError):
+            raise V5Error("EVAL_CHECKPOINT_MISSING", "$.checkpoint") from None
+        if not isinstance(sidecar, dict) or sidecar.get("step") != step or sidecar.get("sha256") != digest \
+                or sidecar.get("run_sha256") != run_sha256_v5(unified):
+            raise V5Error("EVAL_CHECKPOINT_MISMATCH", "$.checkpoint")
     return {"pids": pids, "unified": unified, "member_runs": member_runs, "summary": summary, "run_root": run_root,
-            "checkpoint": (run_root / "runs" / run_id / "checkpoints" / f"step_{step:08d}.pt",
-                           training["checkpoint_sha256"], step),
+            "checkpoint": (directory / f"step_{step:08d}.pt", digest, step),
+            "selection": "final" if checkpoint is None else "explicit", "final_checkpoint": final,
             "remaining_hours": remaining}
+
+
+def _load_selected(opened: dict, device: str) -> dict:
+    """The state of the opened checkpoint: the file hashes to the selected hash, belongs to the run, holds the step."""
+    path, digest, step = opened["checkpoint"]
+    state = load_checkpoint_v5(path, opened["unified"], digest, device)
+    if state["step"] != step:
+        raise V5Error("EVAL_CHECKPOINT_MISMATCH", "$.checkpoint.step")
+    return state
 
 
 def _box_members(plan: dict, protocols: dict, pids: list, protocol_ids: list | None) -> list:
@@ -156,7 +189,11 @@ def _header(plan: dict, plan_sha256: str, opened: dict, scopes: dict, kind: str,
                                       "run_sha256": unified["members"][pid]["run_sha256"],
                                       "split_sha256": unified["members"][pid]["split_sha256"]} for pid in pids}},
             "checkpoint": {"sha256": opened["checkpoint"][1], "step": opened["checkpoint"][2],
-                           "state_sha256": state_sha256, "weights_unchanged": None},
+                           "state_sha256": state_sha256, "weights_unchanged": None,
+                           "selection": opened["selection"],
+                           "is_final": opened["checkpoint"][1] == opened["final_checkpoint"][1],
+                           "run_final": {"step": opened["final_checkpoint"][0],
+                                         "sha256": opened["final_checkpoint"][1]}},
             "evaluation": details, "status": "FAILED", "stop_code": None, "stop_phase": None, "members": None,
             "elapsed_hours": None, "budget_hours": float(max_wall_hours),
             "plan_budget_remaining_hours": opened["remaining_hours"], "scientific_conclusion": CONCLUSION}
@@ -183,23 +220,31 @@ def run_unified_evaluation_v5(*, plan: dict, plan_sha256: str, protocols: dict, 
                               raw: Path, label_maps: dict, run_root: Path, private_root: Path, repo: Path,
                               device: str, run_id: str, roles: list, max_wall_hours: float, created_at: str,
                               environment: dict, code: dict, fixture_mode: bool, protocol_ids: list | None = None,
-                              reuse_inference: str | None = "inference") -> dict:
-    """Score the finished run `run_id` (under `run_root`) on `roles` with its final checkpoint; summary.json and
-    private rows go to the new directory `private_root`. Returns the summary."""
+                              reuse_inference: str | None = "inference", checkpoint: tuple | None = None,
+                              module_development: bool = False) -> dict:
+    """Score the finished run `run_id` (under `run_root`) on `roles` with its final checkpoint, or with the
+    checkpoint `(step, sha256)` of that run; summary.json and private rows go to the new directory `private_root`.
+    `module_development` adds every voxel-supervised member on development_val. Returns the summary."""
     started = time.monotonic()
     roles = _check_roles(roles)
     opened = _open_finished_run(plan=plan, plan_sha256=plan_sha256, protocols=protocols, members=members,
                                 approvals=approvals, run_root=run_root, run_id=run_id, private_root=private_root,
-                                max_wall_hours=max_wall_hours, code=code, fixture_mode=fixture_mode)
+                                max_wall_hours=max_wall_hours, code=code, fixture_mode=fixture_mode,
+                                checkpoint=checkpoint)
     private_root, device_t, pids = Path(private_root), torch.device(device), opened["pids"]
     scopes = {pid: protocols[pid]["scope"] for pid in pids}
     wanted = _box_members(plan, protocols, pids, protocol_ids)
-    path, digest, _ = opened["checkpoint"]
-    model = _frozen_model(plan, scopes, load_checkpoint_v5(path, opened["unified"], digest, device_t.type), device_t)
+    digest = opened["checkpoint"][1]
+    final = digest == opened["final_checkpoint"][1]
+    refused = None
+    if reuse_inference is not None and not final:      # what the run saved are outputs of its final checkpoint
+        reuse_inference, refused = None, "NOT_THE_FINAL_CHECKPOINT"
+    model = _frozen_model(plan, scopes, _load_selected(opened, device_t.type), device_t)
     before = state_sha256_v5(model)
     summary = _header(plan, plan_sha256, opened, scopes, "unified_evaluation", device_t, before, max_wall_hours,
                       {"roles": roles, "code": dict(code), "environment": dict(environment),
-                       "created_at": created_at, "reuse_inference": reuse_inference})
+                       "created_at": created_at, "reuse_inference": reuse_inference, "reuse_refused": refused,
+                       "module_development": bool(module_development)})
 
     def finish(stop_code: str | None, phase: str | None) -> dict:
         summary["stop_code"], summary["stop_phase"] = stop_code, phase
@@ -207,7 +252,45 @@ def run_unified_evaluation_v5(*, plan: dict, plan_sha256: str, protocols: dict, 
         write_private_json(resolve_private_output(private_root / "summary.json", private_root, repo), summary)
         return summary
 
-    results = {pid: {} for pid in wanted}
+    originals = opened["summary"].get("members") or {}
+    results = {}
+    # voxel-supervised members first (development_val only: the module metrics are defined on that split)
+    for pid in [pid for pid in pids if module_development and plan["members"][pid]["box_supervision"] is None]:
+        member, scope, protocol = plan["members"][pid], scopes[pid], protocols[pid]
+        member_run, registry = opened["member_runs"][pid], members[pid]["registry"]
+        samples, _ = driver.load_member_samples_v5(
+            plan=plan, protocol_id=pid, protocol=protocol, records=members[pid]["records"], registry=registry,
+            raw=raw, label_maps=label_maps, roles=["development_val"])
+        by_uid = {record.sample_uid: record for record in members[pid]["records"]}
+        frozen = freeze_module_reference_v5(      # references are fixed before any prediction
+            {uid: driver._reference(sample, by_uid[uid], scope) for uid, sample in samples.items()}, scope, registry)
+        rows_path = resolve_private_output(private_root / "rows" / f"development_val.{pid}.jsonl", private_root, repo)
+        rows, sentences = [], Counter()
+        for uid in sorted(samples):
+            if time.monotonic() - started > max_wall_hours * 3600.0:        # no partial result
+                return finish("EVAL_BUDGET_EXCEEDED", "development_val")
+            if readable_role_v5(uid, registry, member_run) != "development_val":
+                raise V5Error("ROLE_NOT_READABLE", "$.sample_uid")
+            observation = samples.pop(uid).observation
+            batch = build_model_input_v5(observation.channels, scope, observation.valid_fov, observation.grid,
+                                         list(observation.to_original))
+            output = run_perception_v5(
+                model.view(pid), batch, scope, observation_uid=uid, checkpoint_sha256=digest,
+                original_geometry=original_geometry_v5(observation, by_uid[uid]),
+                acceptance_policy=member["acceptance_policy"], window=tuple(member["inference"]["window"]),
+                stride=tuple(member["inference"]["stride"]), precision=plan["shared"]["precision"])
+            findings = findings_from_output_v5(output, scope, member["acceptance_policy"], protocol["groups"])
+            sentences.update(render_findings_zh_v5(findings, scope, protocol["display"]))
+            row = module_metrics_v5(output, frozen, member["metric_policy"], member["acceptance_policy"], member_run)
+            _append_jsonl(rows_path, row)
+            rows.append(row)
+        entry = {"n_scans": len(rows), "module": summarize_module_metrics_v5(rows),
+                 "sentences": dict(sorted(sentences.items())), "reproduces_original": None}
+        if final and isinstance(originals.get(pid), dict):
+            entry["reproduces_original"] = {key: entry[key] == originals[pid].get(key)
+                                            for key in ("module", "sentences")}
+        results[pid] = {"development_val": entry}
+    results.update({pid: {} for pid in wanted})
     for role in roles:
         for pid in wanted:
             member, scope, protocol = plan["members"][pid], scopes[pid], protocols[pid]
@@ -222,7 +305,7 @@ def run_unified_evaluation_v5(*, plan: dict, plan_sha256: str, protocols: dict, 
             rows_path = resolve_private_output(private_root / "rows" / f"{role}.{pid}.jsonl", private_root, repo)
             official_rows, diagnostic_rows, sentences = [], [], Counter()
             dice = {name: {} for name in scope.anatomy_classes}
-            reuse = {"scans": 0, "reused": 0, "identical": 0}
+            reuse = {"scans": 0, "reused": 0, "identical": 0, "other_checkpoint": 0}
             for uid in sorted(samples):
                 if time.monotonic() - started > max_wall_hours * 3600.0:    # no partial result
                     return finish("EVAL_BUDGET_EXCEEDED", role)
@@ -242,12 +325,15 @@ def run_unified_evaluation_v5(*, plan: dict, plan_sha256: str, protocols: dict, 
                 reuse["scans"] += 1
                 reused = identical = False
                 saved = None if reuse_dir is None else reuse_dir / f"{output_prefix_v5(uid)}.record.json"
-                if saved is not None and saved.is_file():      # the run's own output is the official one
+                if saved is not None and saved.is_file():
                     stored_output = load_output_v5(saved, scope)
-                    reused, identical = True, _same_output(output, stored_output)
-                    output = stored_output
-                    reuse["reused"] += 1
-                    reuse["identical"] += int(identical)
+                    if stored_output.checkpoint_sha256 != digest:      # written by other weights: never reused
+                        reuse["other_checkpoint"] += 1
+                    else:                                              # the run's own output is the official one
+                        reused, identical = True, _same_output(output, stored_output)
+                        output = stored_output
+                        reuse["reused"] += 1
+                        reuse["identical"] += int(identical)
                 findings = findings_from_output_v5(output, scope, member["acceptance_policy"], protocol["groups"])
                 sentences.update(render_findings_zh_v5(findings, scope, protocol["display"]))
                 truth = sample.targets["A"]
@@ -274,9 +360,9 @@ def run_unified_evaluation_v5(*, plan: dict, plan_sha256: str, protocols: dict, 
                      "findings": summarize_findings_v5(official_rows), "sentences": dict(sorted(sentences.items())),
                      "diagnostics": summarize_diagnostics_v5(diagnostic_rows), "reuse": reuse,
                      "reproduces_original": None}
-            original = (opened["summary"].get("members") or {}).get(pid)
-            if role == "development_val" and reuse["scans"] and reuse["reused"] == reuse["scans"] \
-                    and isinstance(original, dict):
+            original = originals.get(pid)       # the run's own development description is of its final checkpoint
+            if role == "development_val" and final and reuse["scans"] and isinstance(original, dict) \
+                    and reuse["reused"] in (0, reuse["scans"]):
                 entry["reproduces_original"] = {key: entry[key] == original.get(key)
                                                 for key in ("findings", "anatomy_dice", "sentences")}
             results[pid][role] = entry
@@ -301,11 +387,17 @@ def _loss(value) -> str:
 def _intro(summary: dict, title: str) -> list:
     run, checkpoint, evaluation = summary["run"], summary["checkpoint"], summary["evaluation"]
     unchanged = {True: "相同，权重未被修改", False: "不同", None: "未完成核对"}[checkpoint["weights_unchanged"]]
+    selected = []
+    if checkpoint.get("selection") == "explicit":
+        last = checkpoint["run_final"]
+        selected = [f"- 检查点是按步数与哈希指定的：第 {checkpoint['step']} 步。该运行的最后一个检查点是第 {last['step']} 步"
+                    f"（sha256 `{last['sha256']}`），" + ("就是本次读取的这一个。" if checkpoint["is_final"] else
+                                                      "本次没有读取它，也没有使用它保存的任何输出；原运行的文件未被改动。")]
     return [f"# {title}：{summary['plan_id']}", "",
             "本报告只含配置、计数、指标与哈希；不含样本或患者 ID、路径或文件名。", "",
             f"- 计划 sha256 `{summary['plan_sha256']}`；被评价的运行 run_sha256 `{run['run_sha256']}`",
             f"- 检查点 sha256 `{checkpoint['sha256']}`（第 {checkpoint['step']} 步）；评价前后的权重哈希"
-            f"{unchanged}（state sha256 `{checkpoint['state_sha256']}`）",
+            f"{unchanged}（state sha256 `{checkpoint['state_sha256']}`）", *selected,
             f"- 训练代码 `{run['code']['git_commit']}`；本次评价代码 `{evaluation['code']['git_commit']}`",
             f"- 结果：{summary['status']}" + (f"（停止：{summary['stop_code']}，阶段 {summary['stop_phase']}）"
                                              if summary["stop_code"] else ""),
@@ -321,7 +413,29 @@ def render_unified_evaluation_md_v5(summary: dict) -> str:
     roles = summary["evaluation"]["roles"]
     lines = _intro(summary, "统一模型只评价运行")
     lines.append(f"- 读取的划分角色：{'、'.join(roles)}；locked_test 未读。")
+    evaluation = summary["evaluation"]
+    if evaluation.get("reuse_inference") is None:
+        lines.append("- 全部预测都是本次用上述检查点重新推理得到的，没有复用任何已保存的输出"
+                     + ("（被评价的不是该运行的最后一个检查点，已保存的输出不属于它）。"
+                        if evaluation.get("reuse_refused") else "。"))
     for pid, by_role in (summary["members"] or {}).items():
+        if "module" in by_role.get("development_val", {}):          # a voxel-supervised member
+            entry = by_role["development_val"]
+            module = entry["module"]
+            lines += ["", f"## {pid}：development_val 的体素级评价（患者等权）", "",
+                      f"- 患者 {module['n_patients']}，扫描 {module['n_scans']}；与训练驱动相同的步骤与指标实现"
+                      "（整卷推理 → 接受策略 → 模块指标 → 患者等权汇总）；只读 development_val。", "",
+                      "| 指标 | 值 |", "| --- | --- |"]
+            lines += [f"| {label} | {driver._number(value)} |"
+                      for _, label, value, _ in driver._comparison_rows(pid, {"module": module}, None)]
+            same = entry["reproduces_original"]
+            if same is not None:
+                lines += ["", "- 与该运行自己的开发集总结（同一个检查点）比较：模块指标"
+                              + ("完全一致" if same["module"] else "不完全一致") + "，句式计数"
+                              + ("完全一致" if same["sentences"] else "不完全一致") + "。"]
+            lines += ["", f"### {pid}：所见句式计数", "", "| 句式 | 条数 |", "| --- | --- |"]
+            lines += [f"| {sentence} | {count} |" for sentence, count in entry["sentences"].items()]
+            continue
         present = [role for role in roles if role in by_role]
 
         def table(header: str, rows: list) -> list:
@@ -371,13 +485,16 @@ def render_unified_evaluation_md_v5(summary: dict) -> str:
             line = f"- {role}：扫描 {reuse['scans']}，复用原运行已保存的输出 {reuse['reused']}"
             if reuse["reused"]:
                 line += f"，其中本次重新推理与已保存输出逐数组相同的 {reuse['identical']}"
+            if reuse.get("other_checkpoint"):
+                line += f"；已保存但记录着另一个检查点哈希、因此没有复用的输出 {reuse['other_checkpoint']}"
             if same is not None:
-                line += ("；由复用输出重算的所见评价、组织 Dice 与句式计数与原始总结"
+                line += ("；由" + ("复用输出" if reuse["reused"] else "本次重新推理") + "算出的所见评价、组织 Dice 与"
+                         "句式计数与该运行自己的总结"
                          + ("完全一致" if all(same.values()) else "不完全一致：" + "、".join(
                              key for key, value in same.items() if not value)))
             lines.append(line)
-        lines += ["- 复用时，正式口径的统计与诊断里的二值图、连通块、所见都取自已保存的输出；"
-                  "本次推理只提供已保存输出里没有的概率。", ""]
+        lines += ["- 只有记录着同一个检查点哈希的已保存输出才会被复用。复用时，正式口径的统计与诊断里的二值图、连通块、"
+                  "所见都取自已保存的输出；本次推理只提供已保存输出里没有的概率。", ""]
         diagnostics = render_diagnostics_md_v5({role: by_role[role]["diagnostics"] for role in present})
         body = diagnostics.split("\n", 1)[1].lstrip("\n").replace("\n## ", "\n### ")
         lines += [f"## {pid}：所见链路诊断（对照医生的主分析框）", "", *body.rstrip("\n").splitlines()]
@@ -446,8 +563,8 @@ def run_unified_replay_v5(*, plan: dict, plan_sha256: str, protocols: dict, memb
     private_root, device_t, pids = Path(private_root), torch.device(device), opened["pids"]
     scopes = {pid: protocols[pid]["scope"] for pid in pids}
     wanted = _box_members(plan, protocols, pids, protocol_ids)
-    path, digest, final_step = opened["checkpoint"]
-    final_state = load_checkpoint_v5(path, opened["unified"], digest, device_t.type)
+    _, digest, final_step = opened["checkpoint"]
+    final_state = _load_selected(opened, device_t.type)
     model = _frozen_model(plan, scopes, final_state, device_t)
     before = state_sha256_v5(model)
     run_dir = opened["run_root"] / "runs" / run_id

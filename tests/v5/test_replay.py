@@ -34,7 +34,25 @@ def test_the_parts_are_the_two_means_the_objective_adds():
 
 def test_a_part_without_support_is_none():
     parts = box_objective_parts_v5(*_case([0.3, 1.0], [0, 0], [False, False]), SPEC)
-    assert parts == {"positive": None, "negative": None, "bags": 0, "negative_voxels": 0}
+    assert {key: parts[key] for key in ("positive", "negative", "negative_all", "bags", "negative_voxels")} == {
+        "positive": None, "negative": None, "negative_all": None, "bags": 0, "negative_voxels": 0}
+
+
+def test_the_parts_are_the_record_of_the_terms_training_logs():
+    """One decomposition for training and replay: the parts are box_terms_record_v5 of box_mil_terms_v5."""
+    from anatobind.v41.losses import box_mil_terms_v5, box_terms_record_v5
+
+    case = _case([2.0, -1.0, 0.0, 3.0, -2.0], [1, 1, 0, 0, 0], [False, False, True, True, True])
+    spec = dict(SPEC, negative_topk_fraction=0.5)                  # keeps 2 of the 3 eligible negatives
+    parts = box_objective_parts_v5(*case, spec)
+    assert parts == {**box_terms_record_v5(box_mil_terms_v5(*case, spec)), "negative_voxels": 3}
+    assert parts["negative"] == pytest.approx((math.log(2.0) + math.log1p(math.exp(3.0))) / 2, abs=1e-6)
+    assert parts["negative_all"] == pytest.approx(
+        (math.log(2.0) + math.log1p(math.exp(3.0)) + math.log1p(math.exp(-2.0))) / 3, abs=1e-6)
+    assert (parts["classes"][0]["negative_eligible"], parts["classes"][0]["negative_selected"]) == (3, 2)
+    assert parts["positive"] + parts["negative"] == pytest.approx(float(box_mil_objective_v5(*case, spec)), abs=1e-6)
+    without = box_objective_parts_v5(*case, SPEC)                   # an earlier plan: both negative terms are one
+    assert without["negative"] == without["negative_all"] == pytest.approx(parts["negative_all"], abs=1e-6)
 
 
 def test_the_exposure_of_a_batch_names_its_bags_and_the_logged_support():

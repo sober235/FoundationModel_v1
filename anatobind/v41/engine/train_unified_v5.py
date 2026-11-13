@@ -10,8 +10,15 @@ exposure marks `training`, a fresh start must be build_unified_model_v5's seeded
 checkpoint (train_v5's format, bound to the unified run) holds every state a bitwise CPU resume needs. A non-finite
 logit or loss, an OOM or an exhausted wall budget writes failure.json and stops without retrying.
 
-A member with `box_supervision` trains U with box_mil_objective_v5 (its U target is the bag map of
-box_data_v5); every other task uses masked_objective_v5 as in train_v5.
+A member with `box_supervision` trains U with the box objective of losses.box_mil_terms_v5 (its U target is the
+bag map of box_data_v5), and every step's log line keeps the terms that were added (box_terms_record_v5: positive
+term, optimised negative term, the mean over all negatives, eligible and selected negative voxels per class);
+every other task uses masked_objective_v5 as in train_v5.
+
+A baseline run of a plan with `shared.stop_at_step` ends after that step (2026-11-12): the checkpoint of the step
+is written, the log gets a `stop` event, and the result is COMPLETED with controlled_stop true. The scheduler is
+still built over budget.max_steps, so the learning rate of every step that is run is the one the full schedule has
+at that step. A smoke run never uses the stop step (its own step count is the plan's smoke.steps).
 """
 from __future__ import annotations
 
@@ -22,16 +29,17 @@ from pathlib import Path
 import torch
 
 from ..contracts_v5 import V5Error, canonical_sha256
-from ..losses import box_mil_objective_v5, masked_objective_v5
+from ..losses import box_mil_terms_v5, box_mil_total_v5, box_terms_record_v5, masked_objective_v5
 from ..models.interface_v5 import ModelOutputV5
 from ..models.unified_v5 import UnifiedModelV5, build_unified_model_v5
 from ..paths import resolve_private_output, write_private_json
 from .box_data_v5 import box_positive_centers_v5
 from .data_v5 import PatchSamplerV5, TrainingSampleV5, make_batch_v5, positive_centers_v5, training_data_sha256_v5
-from .registration_v5 import run_sha256_v5, validate_recipe_v5
+from .registration_v5 import _positive_int, run_sha256_v5, validate_recipe_v5
 from .train_v5 import (
     STOP_CODES, _append_jsonl, _checkpoint_steps, _rng_state, _set_rng_state, _support, _to_device, autocast_v5,
     build_optimizer_v5, build_scaler_v5, build_scheduler_v5, load_checkpoint_v5, save_checkpoint_v5)
+from .unified_registration_v5 import stop_step_v5
 
 _SCHEDULE_KEYS = ("budget", "checkpoint_every", "precision", "optimizer", "scheduler")
 _monotonic = time.monotonic     # read through the module so the wall budget can be driven in tests
@@ -47,7 +55,8 @@ def _bag_count(bags: torch.Tensor, e_pos: torch.Tensor) -> int:
 
 def unified_loss_v5(output: ModelOutputV5, targets: dict, eligibility: dict, supervision: dict,
                     box_supervision: dict | None) -> tuple[torch.Tensor, dict]:
-    """Σ task_weight·L_t of one member; with box_supervision the U loss is the box objective on the bag map."""
+    """Σ task_weight·L_t of one member; with box_supervision the U loss is the box objective on the bag map, and
+    its entry of the parts carries "box": the terms that were added (box_terms_record_v5)."""
     if not isinstance(output, ModelOutputV5):
         raise V5Error("INVALID_TYPE", "$.output")
     tasks = supervision.get("tasks") if isinstance(supervision, dict) else None
@@ -62,9 +71,12 @@ def unified_loss_v5(output: ModelOutputV5, targets: dict, eligibility: dict, sup
             raise V5Error("TARGET_MISSING", f"$.targets.{task}")
         e_pos = eligibility[task]["e_pos"].to(torch.bool)
         e_neg = eligibility[task]["e_neg"].to(torch.bool)
+        box = None
         if task == "U" and box_supervision is not None:
-            loss = box_mil_objective_v5(logits.float(), targets[task], e_pos, e_neg, box_supervision)
+            terms = box_mil_terms_v5(logits.float(), targets[task], e_pos, e_neg, box_supervision)
+            loss = box_mil_total_v5(terms, box_supervision, logits)
             support = _bag_count(targets[task], e_pos) + int(e_neg.sum())
+            box = box_terms_record_v5(terms)
         else:
             loss = masked_objective_v5(logits.float(), targets[task], e_pos, e_neg, tasks[task])
             support = _support(task, targets[task], e_pos, e_neg)
@@ -73,6 +85,8 @@ def unified_loss_v5(output: ModelOutputV5, targets: dict, eligibility: dict, sup
         weighted = tasks[task]["task_weight"] * loss
         total = weighted if total is None else total + weighted
         parts[task] = {"loss": float(loss.detach()), "support": support}
+        if box is not None:
+            parts[task]["box"] = box
     return total, parts
 
 
@@ -124,7 +138,9 @@ def _check_init(model: UnifiedModelV5, plan: dict) -> None:
 
 def train_unified_v5(unified_run: dict, model: UnifiedModelV5, members: dict, plan: dict, run_dir: Path,
                      private_root: Path, repo: Path, resume: tuple | None, *, pause_at: int | None = None) -> dict:
-    """Train a registered unified run to its step budget; the result has train_v5's shape and statuses."""
+    """Train a registered unified run to its last step: budget.max_steps, or for a baseline run of a plan with
+    shared.stop_at_step that earlier step. The result has train_v5's shape and statuses, plus `schedule_steps`
+    (the steps the learning-rate schedule is built over) and `controlled_stop` (ended by the stop step)."""
     if not isinstance(model, UnifiedModelV5):
         raise V5Error("INVALID_TYPE", "$.model")
     run_dir = Path(run_dir)
@@ -138,8 +154,14 @@ def train_unified_v5(unified_run: dict, model: UnifiedModelV5, members: dict, pl
     pids = _check_members(unified_run, model, members, Path(private_root), repo)
     recipe = members[pids[0]]["recipe"]                 # schedule values are equal across members (checked)
     max_steps, every = recipe["budget"]["max_steps"], recipe["checkpoint_every"]
+    last_step = max_steps                               # the scheduler below is always built over max_steps
+    if unified_run["run_kind"] == "unified_baseline" and stop_step_v5(plan) is not None:
+        last_step = stop_step_v5(plan)
+        if not (_positive_int(last_step) and last_step < max_steps):
+            raise V5Error("INVALID_STOP", "$.plan.shared.stop_at_step")
+    controlled = last_step < max_steps
     if pause_at is not None and not (isinstance(pause_at, int) and not isinstance(pause_at, bool)
-                                     and 0 < pause_at < max_steps and pause_at % every == 0):
+                                     and 0 < pause_at < last_step and pause_at % every == 0):
         raise V5Error("INVALID_PAUSE", "$.pause_at")
     if resume is None:
         _check_init(model, plan)
@@ -192,12 +214,12 @@ def train_unified_v5(unified_run: dict, model: UnifiedModelV5, members: dict, pl
         write_private_json(failure_path, {"code": code, "step": step,
                                           "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
         return {"status": "FAILED", "step": step, "last_checkpoint": last[0], "last_checkpoint_sha256": last[1],
-                "failure_code": code}
+                "failure_code": code, "schedule_steps": max_steps, "controlled_stop": False}
 
     budget_seconds = recipe["budget"]["max_wall_hours"] * 3600.0
     start = _monotonic()
     model.train()
-    while step < max_steps:
+    while step < last_step:
         if prior_wall + (_monotonic() - start) > budget_seconds:
             return stop("WALL_BUDGET_EXCEEDED")
         lr = optimizer.param_groups[0]["lr"]
@@ -229,7 +251,7 @@ def train_unified_v5(unified_run: dict, model: UnifiedModelV5, members: dict, pl
             return stop(err.code)
         step += 1
         _append_jsonl(metrics_path, {"event": "step", "step": step, "loss": total, "lr": lr, "members": parts})
-        if step % every == 0 or step == max_steps:
+        if step % every == 0 or step == last_step:
             path = checkpoint_dir / f"step_{step:08d}.pt"
             state = {"step": step, "model": model.state_dict(), "optimizer": optimizer.state_dict(),
                      "scheduler": scheduler.state_dict(), "scaler": scaler.state_dict(),
@@ -239,6 +261,10 @@ def train_unified_v5(unified_run: dict, model: UnifiedModelV5, members: dict, pl
             if step == pause_at:
                 _append_jsonl(metrics_path, {"event": "pause", "step": step, "checkpoint_sha256": last[1]})
                 return {"status": "PAUSED", "step": step, "last_checkpoint": last[0],
-                        "last_checkpoint_sha256": last[1], "failure_code": None}
+                        "last_checkpoint_sha256": last[1], "failure_code": None, "schedule_steps": max_steps,
+                        "controlled_stop": False}
+            if controlled and step == last_step:
+                _append_jsonl(metrics_path, {"event": "stop", "step": step, "schedule_steps": max_steps,
+                                             "checkpoint_sha256": last[1]})
     return {"status": "COMPLETED", "step": step, "last_checkpoint": last[0], "last_checkpoint_sha256": last[1],
-            "failure_code": None}
+            "failure_code": None, "schedule_steps": max_steps, "controlled_stop": controlled}

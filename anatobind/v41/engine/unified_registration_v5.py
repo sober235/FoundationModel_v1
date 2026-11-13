@@ -1,6 +1,7 @@
 """Unified plan and run record (Proposal_v5 §0.6; design 2026-11-10 §5.3, §5.6).
 
-A unified plan has the values every protocol shares (model, seeds, optimizer, schedule, precision, budget) and one
+A unified plan has the values every protocol shares (model, seeds, optimizer, schedule, precision, budget, and
+optionally a stop step before the end of the schedule) and one
 member per protocol (scope, source, lineage, tasks, patch, sampling, inference, supervision, policies). Each
 member gets an ordinary recipe (member_recipe_v5) and an ordinary registered run (register_run_v5), so the frozen
 split, exposure ledger, gates and inference checks of a member are the existing ones. The unified run binds the
@@ -15,7 +16,7 @@ from pathlib import Path
 
 from ..contracts_v5 import ActiveScope, V5Error, canonical_sha256
 from ..evaluation.policy import validate_metric_policy_v5
-from ..losses import BOX_SPEC_KEYS
+from ..losses import BOX_SPEC_KEYS, BOX_SPEC_OPTIONAL_KEYS
 from ..paths import PrivatePathError, resolve_private_output, write_private_json
 from ..perception import validate_acceptance_policy_v5
 from .registration_v5 import (
@@ -25,6 +26,7 @@ from .smoke_v5 import RESUME_TOLERANCE_KEYS
 
 PLAN_KEYS = ("plan_id", "shared", "members", "smoke", "budget")
 SHARED_KEYS = ("model", "seeds", "optimizer", "scheduler", "precision", "selection_rule", "checkpoint_every", "budget")
+SHARED_OPTIONAL_KEYS = ("stop_at_step",)    # absent: the run goes to budget.max_steps, the end of its schedule
 SHARED_MODEL_KEYS = ("architecture", "widths", "strides", "blocks_per_stage", "stem_channels")
 MEMBER_KEYS = ("scope_id", "scope_hash", "source", "lineage_id", "tasks", "patch_size", "batch_size",
                "downsample_factor", "grid_tolerance", "normalization", "sampling", "inference", "loss_weight",
@@ -90,9 +92,12 @@ def _check_member(plan: dict, pid: str, scope: ActiveScope, source: dict) -> Non
         raise _bad(f"{path}.loss_weight")
     box = member["box_supervision"]
     if box is not None:
-        if not (isinstance(box, dict) and set(box) == set(BOX_SPEC_KEYS) and "U" in tasks
+        if not (isinstance(box, dict) and set(box) - set(BOX_SPEC_OPTIONAL_KEYS) == set(BOX_SPEC_KEYS)
+                and "U" in tasks
                 and list(member["downsample_factor"]) == [1, 1, 1] and box["kind"] == "box_mil"
                 and _is_number(box["topk_fraction"]) and 0 < box["topk_fraction"] <= 1
+                and ("negative_topk_fraction" not in box
+                     or (_is_number(box["negative_topk_fraction"]) and 0 < box["negative_topk_fraction"] <= 1))
                 and all(_is_number(box[key]) and box[key] >= 0 for key in ("positive_weight", "negative_weight"))
                 and box["positive_weight"] + box["negative_weight"] > 0
                 and (_is_sha256(box["box_policy_sha256"]) or _non_empty_str(box["box_policy_sha256"]))):
@@ -118,7 +123,9 @@ def validate_unified_plan_v5(plan: dict, scopes: dict, sources: dict) -> dict:
     _keys(plan, PLAN_KEYS, "$")
     if not _non_empty_str(plan["plan_id"]):
         raise _bad("$.plan_id")
-    shared = _keys(plan["shared"], SHARED_KEYS, "$.shared")
+    shared = plan["shared"]
+    if not isinstance(shared, dict) or set(shared) - set(SHARED_OPTIONAL_KEYS) != set(SHARED_KEYS):
+        raise _bad("$.shared")
     model = _keys(shared["model"], SHARED_MODEL_KEYS, "$.shared.model")
     if not _positive_int(model["stem_channels"]):
         raise _bad("$.shared.model.stem_channels")
@@ -148,6 +155,10 @@ def validate_unified_plan_v5(plan: dict, scopes: dict, sources: dict) -> dict:
         raise _bad("$.smoke.max_wall_hours")
     for pid in sorted(members):
         _check_member(plan, pid, scopes[pid], sources[pid])
+    if "stop_at_step" in shared:        # after the members: their recipes have validated budget.max_steps
+        stop = shared["stop_at_step"]
+        if not (_positive_int(stop) and stop < shared["budget"]["max_steps"]):
+            raise _bad("$.shared.stop_at_step")
     budget = plan["budget"]
     if not (isinstance(budget, dict) and set(budget) == {"max_wall_hours"} and _is_number(budget["max_wall_hours"])
             and budget["max_wall_hours"] >= shared["budget"]["max_wall_hours"]):
@@ -157,6 +168,14 @@ def validate_unified_plan_v5(plan: dict, scopes: dict, sources: dict) -> dict:
 
 def unified_plan_sha256_v5(plan: dict) -> str:
     return canonical_sha256(plan)
+
+
+def stop_step_v5(plan: dict) -> int | None:
+    """The step a baseline run of the plan stops at when that is before the end of its schedule, else None.
+
+    `shared.stop_at_step` ends the run early and nothing else: the learning-rate schedule still decays over
+    budget.max_steps, so the steps that are run are the first steps of the full schedule."""
+    return plan["shared"].get("stop_at_step")
 
 
 def register_unified_run_v5(*, run_id: str, run_kind: str, plan: dict, plan_sha256: str, member_runs: dict,

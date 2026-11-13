@@ -52,10 +52,9 @@ def _approval(scope, plan_sha256):
             "unified_plan_sha256": plan_sha256}
 
 
-@pytest.fixture
-def env(tmp_path):
+def _world(tmp_path, **plan_overrides):
     raw = tmp_path / "raw"
-    plan = make_unified_plan(SCOPES)
+    plan = make_unified_plan(SCOPES, **plan_overrides)
     digest = unified_plan_sha256_v5(plan)
     boxes = tmp_path / "box_references.jsonl"
     boxes.write_text("".join(json.dumps({"sample_uid": uid, "policy_sha256": "p" * 64, "boxes": items}) + "\n"
@@ -79,6 +78,21 @@ def env(tmp_path):
         raw=raw, plan=plan, digest=digest,
         smoke_kwargs=dict(common, private_root=tmp_path / "smoke", run_id="smoke-u"),
         train_kwargs=dict(common, private_root=tmp_path / "train", run_id="train-u"))
+
+
+@pytest.fixture
+def env(tmp_path):
+    return _world(tmp_path)
+
+
+# a pilot plan: an 8-step schedule that is stopped after step 4, and the top quarter of the negatives
+PILOT = {"shared": {"budget": {"max_steps": 8}, "stop_at_step": 4},
+         "members": {"knee": {"box_supervision": {"negative_topk_fraction": 0.25}}}}
+
+
+@pytest.fixture
+def pilot(tmp_path):
+    return _world(tmp_path, **PILOT)
 
 
 def test_smoke_passes_and_gives_evidence_bound_to_each_member(env):
@@ -242,3 +256,38 @@ def test_plan_hash_command_prints_the_hash(capsys):
     assert main(["plan-hash", "--plan", "configs/v5/proposals/unified_knee_brain.yaml", "--protocols",
                  "configs/v5/protocols_v5.yaml", "--policies", "configs/v5/sources_v5.yaml"]) == 0
     assert re.fullmatch(r"[0-9a-f]{64}\n", capsys.readouterr().out)
+
+
+def test_a_plan_with_a_stop_step_trains_to_it_and_describes_that_checkpoint(pilot):
+    summary = run_unified_training_v5(**pilot.train_kwargs)
+    assert summary["status"] == "COMPLETED" and summary["stop_code"] is None, summary
+    training = summary["training"]
+    assert (training["status"], training["step"], training["schedule_steps"], training["controlled_stop"]) == (
+        "COMPLETED", 4, 8, True)
+    root = pilot.train_kwargs["private_root"]
+    checkpoints = root / "runs" / "train-u" / "checkpoints"
+    assert sorted(p.name for p in checkpoints.glob("*.pt")) == ["step_00000002.pt", "step_00000004.pt"]
+    sidecar = json.loads((checkpoints / "step_00000004.pt.json").read_text())
+    assert training["checkpoint_sha256"] == sidecar["sha256"]          # the development part read this checkpoint
+    assert set(summary["members"]) == {"brain", "knee"}
+    lines = [json.loads(x) for x in (root / "runs" / "train-u" / "metrics.jsonl").read_text().splitlines()]
+    steps = [x for x in lines if x["event"] == "step"]
+    assert len(steps) == 4 and steps[3]["lr"] == pytest.approx(0.001 * (1 - 3 / 8) ** 0.9, rel=1e-9)
+    assert steps[0]["members"]["knee"]["tasks"]["U"]["box"]["classes"][0]["negative_selected"] >= 1
+    text = render_unified_md_v5(summary)
+    assert "受控停止" in text and "第 4 步" in text and "8 步" in text and "NOT_EVALUATED" in text
+
+
+def test_a_run_to_the_end_of_its_schedule_is_not_called_a_controlled_stop(env):
+    summary = run_unified_training_v5(**env.train_kwargs)
+    assert (summary["training"]["step"], summary["training"]["schedule_steps"],
+            summary["training"]["controlled_stop"]) == (4, 4, False)
+    assert "受控停止" not in render_unified_md_v5(summary)
+
+
+def test_the_smoke_of_a_plan_with_a_stop_step_runs_its_own_steps(tmp_path):
+    world = _world(tmp_path, shared={"budget": {"max_steps": 8}, "stop_at_step": 2},
+                   members={"knee": {"box_supervision": {"negative_topk_fraction": 0.25}}})
+    summary = run_unified_smoke_v5(**world.smoke_kwargs)
+    assert summary["status"] == "PASS", summary
+    assert {name: item["step"] for name, item in summary["executions"].items()} == {"continuous": 4, "resumed": 4}

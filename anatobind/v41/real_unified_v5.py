@@ -7,7 +7,8 @@ scoring code of its own.
 
 Order of a training run: the plan hash, every member's approval naming that hash and every member's smoke evidence
 (all before any data is read) → registration and exposure → the train part of each member (a box member's box
-references are read for role train only) → training → the final checkpoint reloaded by hash → the development
+references are read for role train only) → training (to the end of the schedule, or to the plan's
+shared.stop_at_step) → the final checkpoint reloaded by hash → the development
 part (box references read again, for role development_val) with references fixed before any prediction → one
 inference and one row per development scan → summary. A failure, timeout or exhausted budget stops at that phase;
 it is recorded, never retried, and there is no partial result. locked_test is never read.
@@ -388,6 +389,7 @@ def run_unified_training_v5(*, plan: dict, plan_sha256: str, protocols: dict, me
     result = train_unified_v5(unified, model, _train_members(plan, member_runs, train, "baseline"), plan, run_dir,
                               private_root, repo, checkpoint)
     summary["training"] = {"status": result["status"], "step": result["step"],
+                           "schedule_steps": result["schedule_steps"], "controlled_stop": result["controlled_stop"],
                            "samples": {pid: len(train[pid]) for pid in pids},
                            "checkpoint_sha256": result["last_checkpoint_sha256"],
                            "failure_code": result["failure_code"]}
@@ -497,6 +499,10 @@ def render_unified_md_v5(summary: dict, baseline_summaries: dict | None = None) 
                   f"- 同一个 checkpoint；随机初始化；每步各协议一个批次；完成步数 {training['step']}；状态 "
                   f"{training['status']}；选择规则 last",
                   f"- train 样本：{counts}", f"- 最终检查点 sha256 `{training['checkpoint_sha256']}`"]
+        if training.get("controlled_stop"):
+            lines.append(f"- 受控停止：按计划在第 {training['step']} 步结束；学习率仍按 {training['schedule_steps']} 步"
+                         "的衰减期限计算，所以已训练的各步与完整训练的前同样多步学习率相同。这个检查点是本次运行"
+                         "的最后一个检查点，不是完整期限训练的终点。")
     if summary["members"] is not None:
         lines += ["", "## 与模块基线的对照（development_val，患者等权）", "",
                   "| 协议 | 指标 | 统一模型 | 基线 | 差值 |", "| --- | --- | --- | --- | --- |"]
@@ -536,7 +542,8 @@ def main(argv: list | None = None) -> int:
     """plan-hash: the unified plan's sha256 for the approvals. smoke / train: one run into a new --out.
     gbase-gate: one member's five G-BASE evidence items and its G-BASE-A / G-BASE-U decisions.
     evaluate / replay: read the finished run --run-id under --run-root with its final checkpoint, never train,
-    and write into a new --out (real_unified_eval_v5); the members are given exactly as they were for train."""
+    and write into a new --out (real_unified_eval_v5); the members are given exactly as they were for train.
+    evaluate takes another checkpoint of the run with --checkpoint-step and --checkpoint-sha256 (both)."""
     import argparse
     import os
 
@@ -568,6 +575,13 @@ def main(argv: list | None = None) -> int:
                                  help="wall budget of this command; must fit in what the plan's budget has left")
         if name == "evaluate":
             command.add_argument("--role", action="append", required=True, choices=["train", "development_val"])
+            command.add_argument("--checkpoint-step", type=int,
+                                 help="evaluate this checkpoint of the run instead of its final one (with its hash)")
+            command.add_argument("--checkpoint-sha256", help="the sha256 of the checkpoint of --checkpoint-step")
+            command.add_argument("--fresh-predictions", action="store_true",
+                                 help="reuse no saved output of the run: every prediction is computed anew")
+            command.add_argument("--module-development", action="store_true",
+                                 help="also score every voxel-supervised member on development_val")
         if name == "replay":
             command.add_argument("--loss-steps", required=True, type=int,
                                  help="patches per split on which the final weights' loss parts are recomputed")
@@ -675,7 +689,15 @@ def main(argv: list | None = None) -> int:
 
         common.update(run_root=Path(args.run_root), max_wall_hours=args.max_wall_hours)
         if args.command == "evaluate":
-            summary = finished.run_unified_evaluation_v5(**common, roles=list(args.role))
+            selected = None
+            if args.checkpoint_step is not None or args.checkpoint_sha256 is not None:
+                if args.checkpoint_step is None or args.checkpoint_sha256 is None:      # a step needs its hash
+                    raise V5Error("EVAL_CHECKPOINT_INVALID", "$.checkpoint")
+                selected = (args.checkpoint_step, args.checkpoint_sha256)
+            summary = finished.run_unified_evaluation_v5(
+                **common, roles=list(args.role), checkpoint=selected,
+                reuse_inference=None if args.fresh_predictions else "inference",
+                module_development=args.module_development)
             markdown, name = finished.render_unified_evaluation_md_v5(summary), "unified_evaluation.md"
         else:
             summary = finished.run_unified_replay_v5(**common, loss_steps=args.loss_steps)

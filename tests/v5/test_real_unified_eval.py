@@ -52,7 +52,7 @@ def test_the_development_split_is_reproduced_from_the_outputs_the_run_saved(fini
     development, original = result["members"]["knee"]["development_val"], finished.summary["members"]["knee"]
     assert development["findings"] == original["findings"]
     assert development["anatomy_dice"] == original["anatomy_dice"] and development["sentences"] == original["sentences"]
-    assert development["reuse"] == {"scans": 1, "reused": 1, "identical": 1}
+    assert development["reuse"] == {"scans": 1, "reused": 1, "identical": 1, "other_checkpoint": 0}
     assert development["reproduces_original"] == {"findings": True, "anatomy_dice": True, "sentences": True}
 
 
@@ -63,7 +63,8 @@ def test_the_training_split_is_scored_against_all_of_its_own_primary_boxes(finis
     assert (overall["n_scans"], overall["n_patients"], overall["n_boxes"]) == (2, 2, 1)     # knee-0 has the one box
     assert train["diagnostics"]["funnel"]["overall"]["n_boxes"] == 1 and train["diagnostics"]["n_scans"] == 2
     assert sum(train["diagnostics"]["funnel"]["overall"]["stages"].values()) == 1            # a missed box is counted
-    assert train["reuse"] == {"scans": 2, "reused": 0, "identical": 0} and train["reproduces_original"] is None
+    assert train["reuse"] == {"scans": 2, "reused": 0, "identical": 0, "other_checkpoint": 0}
+    assert train["reproduces_original"] is None
     assert set(train["anatomy_dice"]) == {"tissue_a", "tissue_b"}
     locations = train["diagnostics"]["locations"]["overall"]
     assert locations["total"] == overall["findings"]["total"]
@@ -254,11 +255,26 @@ def test_the_evaluate_and_replay_commands_hand_their_arguments_to_the_driver_and
                                      "development_val", "--max-wall-hours", "1.5"]) == 0
     given = calls.pop()
     assert given["roles"] == ["train", "development_val"] and given["max_wall_hours"] == 1.5
+    assert (given["checkpoint"], given["reuse_inference"], given["module_development"]) == (None, "inference", False)
     assert (given["run_root"], given["private_root"], given["run_id"]) == (tmp_path / "finished", out, "run-u")
     assert given["fixture_mode"] is False and given["device"] == "cpu" and set(given["members"]) == set(given["plan"]["members"])
     report = out / "unified_evaluation.md"
     assert report.read_text() == "evaluation report\n" and stat.S_IMODE(report.stat().st_mode) == 0o600
     assert capsys.readouterr().out == "evaluation report\n"
+
+    digest = "ab" * 32
+    out = tmp_path / "evaluation_step"
+    assert real_unified_module.main(["evaluate", *shared, "--out", str(out), "--role", "development_val",
+                                     "--max-wall-hours", "1", "--checkpoint-step", "6000", "--checkpoint-sha256",
+                                     digest, "--fresh-predictions", "--module-development"]) == 0
+    given = calls.pop()
+    assert (given["checkpoint"], given["reuse_inference"], given["module_development"]) == ((6000, digest), None, True)
+    capsys.readouterr()
+    with pytest.raises(V5Error) as err:                                # a step without its hash selects nothing
+        real_unified_module.main(["evaluate", *shared, "--out", str(tmp_path / "half"), "--role", "train",
+                                  "--max-wall-hours", "1", "--checkpoint-step", "6000"])
+    assert (err.value.code, err.value.path) == ("EVAL_CHECKPOINT_INVALID", "$.checkpoint")
+    assert not calls and not (tmp_path / "half").exists()
 
     monkeypatch.setattr(eval_module, "run_unified_replay_v5", fake("FAILED"))
     monkeypatch.setattr(eval_module, "render_unified_replay_md_v5", lambda summary: "replay report\n")
@@ -268,3 +284,121 @@ def test_the_evaluate_and_replay_commands_hand_their_arguments_to_the_driver_and
     given = calls.pop()
     assert given["loss_steps"] == 200 and given["max_wall_hours"] == 2.0 and "roles" not in given
     assert (out / "unified_replay.md").read_text() == "replay report\n"
+
+
+# ---------------------------------------------------------------------------
+# Pilot of 2026-11-12: a checkpoint selected by step and hash, saved outputs reused only for the same hash, and the
+# voxel-supervised member scored with the training driver's own module metrics
+
+
+def _sidecar(root, step: int) -> dict:
+    return json.loads((root / "runs" / "train-u" / "checkpoints" / f"step_{step:08d}.pt.json").read_text())
+
+
+def test_a_checkpoint_selected_by_step_and_hash_is_the_one_evaluated(finished):
+    earlier, final = _sidecar(finished.root, 2)["sha256"], finished.summary["training"]["checkpoint_sha256"]
+    assert earlier != final
+    result = run_unified_evaluation_v5(**finished.eval_kwargs, checkpoint=(2, earlier))
+    assert result["status"] == "COMPLETED", result
+    checkpoint = result["checkpoint"]
+    assert (checkpoint["step"], checkpoint["sha256"], checkpoint["selection"], checkpoint["is_final"]) == (
+        2, earlier, "explicit", False)
+    assert checkpoint["run_final"] == {"step": 4, "sha256": final} and checkpoint["weights_unchanged"] is True
+    assert _tree(finished.root) == finished.before                     # the run and its summary are as they were
+    development = result["members"]["knee"]["development_val"]
+    # the outputs the run saved belong to its final checkpoint: none of them enters this evaluation
+    assert development["reuse"] == {"scans": 1, "reused": 0, "identical": 0, "other_checkpoint": 0}
+    assert development["reproduces_original"] is None
+    assert (result["evaluation"]["reuse_inference"], result["evaluation"]["reuse_refused"]) == (
+        None, "NOT_THE_FINAL_CHECKPOINT")
+    other = dict(finished.eval_kwargs, private_root=finished.eval_kwargs["private_root"].with_name("final"))
+    final_result = run_unified_evaluation_v5(**other)
+    assert final_result["checkpoint"]["state_sha256"] != checkpoint["state_sha256"]          # other weights
+    assert (final_result["checkpoint"]["selection"], final_result["checkpoint"]["is_final"]) == ("final", True)
+    assert final_result["evaluation"]["reuse_refused"] is None
+    text = render_unified_evaluation_md_v5(result)
+    assert earlier in text and "按步数与哈希指定" in text and final in text and "第 2 步" in text
+
+
+def test_a_selection_that_does_not_name_a_checkpoint_of_the_run_is_refused_before_data_is_read(
+        finished, monkeypatch, tmp_path):
+    import shutil
+
+    earlier, final = _sidecar(finished.root, 2)["sha256"], finished.summary["training"]["checkpoint_sha256"]
+    kwargs = finished.eval_kwargs
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("data was read before the checkpoint was checked")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(real_unified_module, "load_member_samples_v5", _fail_if_called)
+        _raises("EVAL_CHECKPOINT_MISMATCH", "$.checkpoint", run_unified_evaluation_v5, **kwargs, checkpoint=(2, final))
+        _raises("EVAL_CHECKPOINT_MISMATCH", "$.checkpoint", run_unified_evaluation_v5, **kwargs, checkpoint=(4, earlier))
+        _raises("EVAL_CHECKPOINT_MISSING", "$.checkpoint", run_unified_evaluation_v5, **kwargs, checkpoint=(3, earlier))
+        for bad in ((2, "xyz"), (0, earlier), (True, earlier), (2.0, earlier), [2, earlier], (2,)):
+            _raises("EVAL_CHECKPOINT_INVALID", "$.checkpoint", run_unified_evaluation_v5, **kwargs, checkpoint=bad)
+        copy_root = tmp_path / "copy"
+        shutil.copytree(finished.root, copy_root)
+        with open(copy_root / "runs" / "train-u" / "checkpoints" / "step_00000002.pt", "ab") as handle:
+            handle.write(b"0")                                         # the file is no longer the hashed one
+        _raises("CHECKPOINT_HASH_MISMATCH", "$.checkpoint", run_unified_evaluation_v5,
+                **dict(kwargs, run_root=copy_root), checkpoint=(2, earlier))
+    assert not kwargs["private_root"].exists() and _tree(finished.root) == finished.before
+
+
+def test_fresh_predictions_of_the_final_checkpoint_reproduce_the_run_without_its_saved_outputs(finished):
+    final = finished.summary["training"]["checkpoint_sha256"]
+    result = run_unified_evaluation_v5(**dict(finished.eval_kwargs, reuse_inference=None), checkpoint=(4, final))
+    assert (result["checkpoint"]["selection"], result["checkpoint"]["is_final"]) == ("explicit", True)
+    development = result["members"]["knee"]["development_val"]
+    assert development["reuse"] == {"scans": 1, "reused": 0, "identical": 0, "other_checkpoint": 0}
+    assert development["reproduces_original"] == {"findings": True, "anatomy_dice": True, "sentences": True}
+    assert development["findings"] == finished.summary["members"]["knee"]["findings"]
+    assert result["evaluation"]["reuse_inference"] is None and result["evaluation"]["reuse_refused"] is None
+
+
+def test_a_saved_output_of_another_checkpoint_is_never_reused(finished, tmp_path):
+    import shutil
+
+    copy_root = tmp_path / "copy"
+    shutil.copytree(finished.root, copy_root)
+    records = sorted((copy_root / "inference" / "knee").glob("*.record.json"))
+    assert len(records) == 1
+    body = json.loads(records[0].read_text())
+    other = "c" * 64
+    body["checkpoint_sha256"], body["provenance"]["model_sha256"] = other, other     # as if other weights wrote it
+    records[0].chmod(0o600)
+    records[0].write_text(json.dumps(body))
+    result = run_unified_evaluation_v5(**dict(finished.eval_kwargs, run_root=copy_root))
+    development = result["members"]["knee"]["development_val"]
+    assert development["reuse"] == {"scans": 1, "reused": 0, "identical": 0, "other_checkpoint": 1}
+    assert development["findings"] == finished.summary["members"]["knee"]["findings"]       # from the new inference
+
+
+def test_the_voxel_supervised_member_is_scored_on_development_val_with_the_module_metrics(finished, monkeypatch):
+    seen = []
+    original = real_unified_module.load_member_samples_v5
+
+    def recording(**kwargs):
+        seen.append((kwargs["protocol_id"], list(kwargs["roles"])))
+        return original(**kwargs)
+
+    monkeypatch.setattr(real_unified_module, "load_member_samples_v5", recording)
+    result = run_unified_evaluation_v5(**dict(finished.eval_kwargs, reuse_inference=None), module_development=True)
+    assert result["status"] == "COMPLETED", result
+    assert set(result["members"]) == {"brain", "knee"} and set(result["members"]["brain"]) == {"development_val"}
+    assert ("brain", ["development_val"]) in seen and ("brain", ["train"]) not in seen
+    brain = result["members"]["brain"]["development_val"]
+    # the final checkpoint, new predictions: the module summary of the training driver, value for value
+    assert brain["module"] == finished.summary["members"]["brain"]["module"] and brain["n_scans"] == 1
+    assert brain["sentences"] == finished.summary["members"]["brain"]["sentences"]
+    assert brain["reproduces_original"] == {"module": True, "sentences": True}
+    assert _tree(finished.root) == finished.before and result["checkpoint"]["weights_unchanged"] is True
+    assert result["evaluation"]["module_development"] is True
+    text = render_unified_evaluation_md_v5(result)
+    assert "## brain：development_val 的体素级评价" in text and "dice" in text and "brain-2" not in text
+    earlier = _sidecar(finished.root, 2)["sha256"]
+    other = dict(finished.eval_kwargs, private_root=finished.eval_kwargs["private_root"].with_name("earlier"))
+    result = run_unified_evaluation_v5(**other, checkpoint=(2, earlier), module_development=True)
+    brain = result["members"]["brain"]["development_val"]
+    assert brain["module"]["checkpoint_sha256"] == earlier and brain["reproduces_original"] is None
