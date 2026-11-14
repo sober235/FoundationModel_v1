@@ -65,8 +65,10 @@ from .engine.train_v5 import _append_jsonl, _to_device, autocast_v5, load_checkp
 from .engine.unified_registration_v5 import member_recipe_v5, stop_step_v5, unified_plan_sha256_v5
 from .evaluation.findings_diagnostics_v5 import (
     _distribution, diagnose_scan_v5, render_diagnostics_md_v5, summarize_diagnostics_v5)
+from .evaluation.findings_chance_v5 import (
+    chance_hit_control_v5, relocation_rows_v5, render_chance_md_v5, summarize_relocation_v5)
 from .evaluation.findings_v5 import OUTSIDE_NOTE, anatomy_dice_v5, score_findings_v5, summarize_findings_v5
-from .findings_v5 import findings_from_output_v5, host_relation_fn_v5, render_findings_zh_v5
+from .findings_v5 import _group_ids, findings_from_output_v5, host_relation_fn_v5, render_findings_zh_v5
 from .models.interface_v5 import build_model_input_v5
 from .models.unified_v5 import build_unified_model_v5
 from .paths import resolve_private_output, write_private_json
@@ -349,6 +351,8 @@ def run_unified_evaluation_v5(*, plan: dict, plan_sha256: str, protocols: dict, 
                 else opened["run_root"] / reuse_inference / pid
             rows_path = resolve_private_output(private_root / "rows" / f"{role}.{pid}.jsonl", private_root, repo)
             official_rows, diagnostic_rows, sentences = [], [], Counter()
+            chance_scans, relocation = [], []   # per scan: findings and boxes; per box: relocation on its tissue
+            group_ids = _group_ids(scope, protocol["groups"])
             dice = {name: {} for name in scope.anatomy_classes}
             reuse = {"scans": 0, "reused": 0, "identical": 0, "other_checkpoint": 0}
             for uid in sorted(samples):
@@ -397,14 +401,23 @@ def run_unified_evaluation_v5(*, plan: dict, plan_sha256: str, protocols: dict, 
                     anatomy_eligible=eligible, groups=protocol["groups"], groups_by_class=protocol["groups_by_class"],
                     acceptance_policy=member["acceptance_policy"],
                     topk_fraction=member["box_supervision"]["topk_fraction"], patient_uid=record.patient_uid)
-                _append_jsonl(rows_path, {"official": official, "diagnostic": diagnostic, "reused": reused,
-                                          "identical": identical})
+                moved = relocation_rows_v5(findings=findings, reference=references[uid], anatomy_reference=truth,
+                                           group_ids=group_ids)
+                _append_jsonl(rows_path, {"official": official, "diagnostic": diagnostic, "relocation": moved,
+                                          "reused": reused, "identical": identical})
+                relocation.extend(moved)
                 official_rows.append(official)
+                chance_scans.append({"patient_uid": record.patient_uid, "findings": findings,
+                                     "reference": references[uid]})
                 diagnostic_rows.append(diagnostic)
             entry = {"n_scans": len(official_rows),
                      "anatomy_dice": {name: driver._patient_mean(values) for name, values in dice.items()},
                      "findings": summarize_findings_v5(official_rows), "sentences": dict(sorted(sentences.items())),
-                     "diagnostics": summarize_diagnostics_v5(diagnostic_rows), "reuse": reuse,
+                     "diagnostics": summarize_diagnostics_v5(diagnostic_rows),
+                     "chance_control": {
+                         "relocation": summarize_relocation_v5(relocation, list(scope.abnormality_classes)),
+                         "cross_patient": chance_hit_control_v5(chance_scans, list(scope.abnormality_classes))},
+                     "reuse": reuse,
                      "reproduces_original": None}
             original = originals.get(pid)       # the run's own development description is of its final checkpoint
             if role == "development_val" and final and reuse["scans"] and isinstance(original, dict) \
@@ -548,6 +561,10 @@ def render_unified_evaluation_md_v5(summary: dict) -> str:
         diagnostics = render_diagnostics_md_v5({role: by_role[role]["diagnostics"] for role in present})
         body = diagnostics.split("\n", 1)[1].lstrip("\n").replace("\n## ", "\n### ")
         lines += [f"## {pid}：所见链路诊断（对照医生的主分析框）", "", *body.rstrip("\n").splitlines()]
+        if all("chance_control" in by_role[role] for role in present):     # absent from earlier summaries
+            chance = render_chance_md_v5({role: by_role[role]["chance_control"] for role in present})
+            body = chance.split("\n", 1)[1].lstrip("\n").replace("\n## ", "\n### ")
+            lines += ["", f"## {pid}：偶然命中水平的对照（仅诊断）", "", *body.rstrip("\n").splitlines()]
     return "\n".join(lines) + "\n"
 
 

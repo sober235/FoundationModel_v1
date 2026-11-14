@@ -83,6 +83,29 @@ def test_the_training_split_is_scored_against_all_of_its_own_primary_boxes(finis
     assert locations["other_class_primary"] + locations["outside_all"] == overall["findings"]["outside"]
 
 
+def test_every_split_carries_the_chance_control_of_its_hit_rate(finished):
+    """Proposal of 2026-11-13: the findings of a scan meet the boxes of another patient's scan, rules unchanged."""
+    result = run_unified_evaluation_v5(**finished.eval_kwargs)
+    train = result["members"]["knee"]["train"]
+    control, overall = train["chance_control"]["cross_patient"], train["findings"]["overall"]
+    assert (control["n_scans"], control["n_patients"], control["n_cross_patient_pairs"]) == (2, 2, 2)
+    assert control["overall"]["n_boxes"] == overall["n_boxes"]
+    assert control["overall"]["hit"]["observed_rate"] == overall["box_sensitivity"]["pooled"]
+    assert control["overall"]["host_correct"]["observed_rate"] == overall["host_accuracy"]["pooled"]
+    assert control["overall"]["hit"]["chance_rate"] is not None
+    moved = train["chance_control"]["relocation"]["overall"]       # the control to read: within the scan
+    assert moved["n_boxes"] == overall["n_boxes"] == moved["n_usable"] + moved["excluded"]
+    if moved["n_usable"] == moved["n_boxes"]:
+        assert moved["hit"]["observed_rate"] == overall["box_sensitivity"]["pooled"]
+        assert 0.0 <= moved["hit"]["chance_rate"] <= 1.0 and 0.0 < moved["hit"]["p_at_least_observed"] <= 1.0
+    assert result["members"]["knee"]["development_val"]["chance_control"]["cross_patient"]["n_scans"] == 1
+    rows = [json.loads(line) for line in (Path(finished.eval_kwargs["private_root"]) / "rows" / "train.knee.jsonl")
+            .read_text().splitlines()]
+    assert sum(len(row["relocation"]) for row in rows) == overall["n_boxes"]
+    text = render_unified_evaluation_md_v5(result)
+    assert "偶然命中水平的对照" in text and "knee-0" not in text and "synthetic:" not in text
+
+
 def test_evaluation_changes_neither_the_weights_nor_the_finished_run(finished):
     result = run_unified_evaluation_v5(**finished.eval_kwargs)
     assert _tree(finished.root) == finished.before                     # the finished run is byte for byte as before
@@ -92,7 +115,7 @@ def test_evaluation_changes_neither_the_weights_nor_the_finished_run(finished):
     out = finished.eval_kwargs["private_root"]
     assert json.loads((out / "summary.json").read_text())["status"] == "COMPLETED"
     rows = [json.loads(line) for line in (out / "rows" / "train.knee.jsonl").read_text().splitlines()]
-    assert len(rows) == 2 and set(rows[0]) == {"official", "diagnostic", "reused", "identical"}
+    assert len(rows) == 2 and set(rows[0]) == {"official", "diagnostic", "relocation", "reused", "identical"}
     for path in out.rglob("*"):
         if path.is_file():
             assert stat.S_IMODE(path.stat().st_mode) == 0o600

@@ -177,3 +177,32 @@ def test_the_pilot_plan_differs_from_the_finished_run_only_where_the_researcher_
                "brain_dwi_adc": source_binding_v5(policies["isles_2022"])}
     assert validate_unified_plan_v5(pilot, scopes, sources) is pilot
     assert unified_plan_sha256_v5(pilot) != ORIGINAL_PLAN_SHA256
+
+
+SECOND_PILOT_PLAN = Path("configs/v5/proposals/unified_knee_brain_negtopk05_pilot.yaml")
+FIRST_PILOT_PLAN_SHA256 = "b7e9524156d61e8df3ab58c0f4e91ed429cd181ca5d914c0eb1ad3a2cc105c69"
+
+
+def test_the_second_pilot_plan_differs_from_the_first_only_in_the_negative_fraction():
+    """Draft of 2026-11-13 (option B): top 5 % of the negatives instead of the top 1 %; the same 6000-step stop on
+    the 30000-step schedule, the same seeds, splits, sampling, positive term, weights and acceptance policy."""
+    first, second = (yaml.safe_load(path.read_text()) for path in (PILOT_PLAN, SECOND_PILOT_PLAN))
+    assert unified_plan_sha256_v5(first) == FIRST_PILOT_PLAN_SHA256
+    before, after = _flat(first), _flat(second)
+    changed = {key: (before.get(key), after.get(key)) for key in sorted(set(before) | set(after))
+               if before.get(key) != after.get(key)}
+    assert changed == {
+        "plan_id": ("unified_knee_brain_negtopk_pilot_v1", "unified_knee_brain_negtopk05_pilot_v1"),
+        "members.knee_qdess.box_supervision.negative_topk_fraction": (0.01, 0.05)}
+    assert second["shared"]["stop_at_step"] == 6000 and second["shared"]["checkpoint_every"] == 2000
+    assert second["shared"]["seeds"] == {"init": 20261110, "sampler": 20261111}
+    instances = second["members"]["knee_qdess"]["acceptance_policy"]["instances"]
+    assert instances == {"connectivity": 26, "min_voxels": 50}
+    assert second["members"]["knee_qdess"]["acceptance_policy"]["abnormality"]["thresholds"] == {
+        "cartilage_lesion": 0.5, "meniscal_tear": 0.5}
+    scopes = {"knee_qdess": _scope("skm_joint_early"), "brain_dwi_adc": _scope("isles_u")}
+    policies = load_source_policies_v5(Path("configs/v5/sources_v5.yaml"))
+    sources = {"knee_qdess": source_binding_v5(policies["skm_tea_joint_early"]),
+               "brain_dwi_adc": source_binding_v5(policies["isles_2022"])}
+    assert validate_unified_plan_v5(second, scopes, sources) is second
+    assert unified_plan_sha256_v5(second) not in (FIRST_PILOT_PLAN_SHA256, ORIGINAL_PLAN_SHA256)
