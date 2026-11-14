@@ -775,3 +775,43 @@ def test_an_explicit_mask_budget_reaches_every_joint_inference_and_is_recorded(f
                 **dict(finished.eval_kwargs, private_root=finished.eval_kwargs["private_root"].with_name("bad")),
                 instance_mask_limit_gib=bad)
     assert not finished.eval_kwargs["private_root"].with_name("bad").exists()
+
+
+def test_a_run_whose_own_description_stopped_at_the_mask_bound_is_still_evaluated(env, tmp_path, monkeypatch):  # noqa: F811
+    """2026-11-13: more kept components on a development scan than the instance-mask bound allows stops the
+    driver's own description, not the training. The stop is recorded, the checkpoint stands, and the evaluate-only
+    entry reads it (never reusing the run's partly saved outputs)."""
+    real = real_unified_module._infer
+
+    def bounded(**kwargs):
+        if kwargs["pid"] == "knee":
+            raise V5Error("INSTANCE_LIMIT_EXCEEDED", "$.abnormal_instances")
+        return real(**kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(real_unified_module, "_infer", bounded)
+        summary = run_unified_training_v5(**env.train_kwargs)
+    assert (summary["status"], summary["stop_code"], summary["stop_phase"]) == (
+        "FAILED", "INSTANCE_LIMIT_EXCEEDED", "evaluation")
+    assert summary["training"]["status"] == "COMPLETED" and summary["members"] is None
+    root = env.train_kwargs["private_root"]
+    kwargs = {key: value for key, value in env.train_kwargs.items() if key != "private_root"}
+    kwargs.update(run_root=root, created_at="2026-11-12T00:00:00Z", max_wall_hours=0.5,
+                  private_root=tmp_path / "evaluation", roles=["train", "development_val"])
+    result = run_unified_evaluation_v5(**kwargs)
+    assert result["status"] == "COMPLETED"
+    assert result["checkpoint"]["sha256"] == summary["training"]["checkpoint_sha256"]
+    assert result["evaluation"]["run_description_stopped"] is True
+    assert result["evaluation"]["reuse_inference"] is None
+    assert result["evaluation"]["reuse_refused"] == "RUN_DESCRIPTION_STOPPED"
+    development = result["members"]["knee"]["development_val"]
+    assert development["reuse"]["reused"] == 0 and development["reproduces_original"] is None
+    assert "INSTANCE_LIMIT_EXCEEDED" in render_unified_evaluation_md_v5(result)
+
+
+def test_any_other_error_of_the_description_is_not_swallowed(env, monkeypatch):  # noqa: F811
+    def broken(**kwargs):
+        raise V5Error("GRID_MISMATCH", "$.abnormality_map")
+
+    monkeypatch.setattr(real_unified_module, "_infer", broken)
+    _raises("GRID_MISMATCH", "$.abnormality_map", run_unified_training_v5, **env.train_kwargs)

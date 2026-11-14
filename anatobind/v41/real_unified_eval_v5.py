@@ -107,7 +107,9 @@ def _open_run(*, plan: dict, plan_sha256: str, protocols: dict, members: dict, a
 
     The code is clean, the plan and the approvals are the run's, the inputs register exactly the run stored on
     disk, the destination is new and outside the run, and the wall budget fits. A run is `finished` when its own
-    summary says it completed; only a probe may read a run that is not (`must_be_finished=False`)."""
+    summary says it completed. A run whose training completed but whose own development description stopped at
+    the memory bound of the instance masks (`description_stopped`) is read like a finished one: its checkpoints
+    are final, only the description is missing. Only a probe may read any other run (`must_be_finished=False`)."""
     if not (isinstance(code, dict) and set(code) == {"git_commit", "dirty"} and isinstance(code["dirty"], bool)):
         raise V5Error("INVALID_TYPE", "$.code")
     if code["dirty"] and not fixture_mode:
@@ -135,18 +137,22 @@ def _open_run(*, plan: dict, plan_sha256: str, protocols: dict, members: dict, a
     except (OSError, ValueError):
         summary = None
     training = summary.get("training") if isinstance(summary, dict) else None
-    finished = isinstance(training, dict) and summary.get("status") == "COMPLETED" \
-        and training.get("status") == "COMPLETED" and summary.get("plan_sha256") == plan_sha256 \
+    trained = isinstance(training, dict) and training.get("status") == "COMPLETED" \
+        and summary.get("plan_sha256") == plan_sha256 \
         and (summary.get("run") or {}).get("run_sha256") == run_sha256_v5(unified)
-    if must_be_finished and not finished:
+    finished = trained and summary.get("status") == "COMPLETED"
+    description_stopped = trained and summary.get("status") == "FAILED" \
+        and summary.get("stop_code") == "INSTANCE_LIMIT_EXCEEDED" and summary.get("stop_phase") == "evaluation"
+    readable = finished or description_stopped
+    if must_be_finished and not readable:
         raise V5Error("EVAL_RUN_NOT_COMPLETED", "$.run")
-    remaining = float(plan["budget"]["max_wall_hours"]) - (float(summary["elapsed_hours"]) if finished else 0.0)
+    remaining = float(plan["budget"]["max_wall_hours"]) - (float(summary["elapsed_hours"]) if readable else 0.0)
     if not (isinstance(max_wall_hours, (int, float)) and not isinstance(max_wall_hours, bool)
             and 0 < max_wall_hours <= remaining):
         raise V5Error("EVAL_BUDGET_INVALID", "$.max_wall_hours")
-    return {"pids": pids, "unified": unified, "member_runs": member_runs, "summary": summary if finished else None,
-            "run_root": run_root, "run_id": run_id, "finished": finished,
-            "final_checkpoint": (int(training["step"]), training["checkpoint_sha256"]) if finished else None,
+    return {"pids": pids, "unified": unified, "member_runs": member_runs, "summary": summary if readable else None,
+            "run_root": run_root, "run_id": run_id, "finished": finished, "description_stopped": description_stopped,
+            "final_checkpoint": (int(training["step"]), training["checkpoint_sha256"]) if readable else None,
             "remaining_hours": remaining}
 
 
@@ -283,12 +289,15 @@ def run_unified_evaluation_v5(*, plan: dict, plan_sha256: str, protocols: dict, 
     refused = None
     if reuse_inference is not None and not final:      # what the run saved are outputs of its final checkpoint
         reuse_inference, refused = None, "NOT_THE_FINAL_CHECKPOINT"
+    if reuse_inference is not None and opened["description_stopped"]:      # the run saved only some of its outputs
+        reuse_inference, refused = None, "RUN_DESCRIPTION_STOPPED"
     model = _frozen_model(plan, scopes, _load_selected(opened, device_t.type), device_t)
     before = state_sha256_v5(model)
     summary = _header(plan, plan_sha256, opened, scopes, "unified_evaluation", device_t, before, max_wall_hours,
                       {"roles": roles, "code": dict(code), "environment": dict(environment),
                        "created_at": created_at, "reuse_inference": reuse_inference, "reuse_refused": refused,
                        "module_development": bool(module_development),
+                       "run_description_stopped": bool(opened["description_stopped"]),
                        "instance_mask_bytes_limit": perception.INSTANCE_MASK_BYTES_LIMIT if mask_limit is None
                        else mask_limit, "instance_mask_limit_explicit": mask_limit is not None})
 
@@ -477,6 +486,9 @@ def render_unified_evaluation_md_v5(summary: dict) -> str:
     lines = _intro(summary, "统一模型只评价运行")
     lines.append(f"- 读取的划分角色：{'、'.join(roles)}；locked_test 未读。")
     evaluation = summary["evaluation"]
+    if evaluation.get("run_description_stopped"):
+        lines.append("- 该运行的训练已完成，但它自己在训练结束时的开发集描述因实例掩膜的内存上限（工程保护，"
+                     "INSTANCE_LIMIT_EXCEEDED）而停止，没有写出；本次只评价直接读它的检查点，不复用它保存的任何输出。")
     if evaluation.get("reuse_inference") is None:
         lines.append("- 全部预测都是本次用上述检查点重新推理得到的，没有复用任何已保存的输出"
                      + ("（被评价的不是该运行的最后一个检查点，已保存的输出不属于它）。"

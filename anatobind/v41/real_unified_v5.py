@@ -427,11 +427,20 @@ def run_unified_training_v5(*, plan: dict, plan_sha256: str, protocols: dict, me
             if over_budget():                   # no partial result: every development scan of every member or none
                 return finish("UNIFIED_BUDGET_EXCEEDED", "evaluation")
             record = entry["records"][uid]
-            output, findings = _infer(model=model, pid=pid, plan=plan, protocol=protocols[pid],
-                                      observation=entry["observations"].pop(uid), record=record,
-                                      member_run=member_runs[pid], registry=members[pid]["registry"],
-                                      checkpoint_sha256=result["last_checkpoint_sha256"], private_root=private_root,
-                                      repo=repo, folder=folder)
+            try:
+                output, findings = _infer(model=model, pid=pid, plan=plan, protocol=protocols[pid],
+                                          observation=entry["observations"].pop(uid), record=record,
+                                          member_run=member_runs[pid], registry=members[pid]["registry"],
+                                          checkpoint_sha256=result["last_checkpoint_sha256"],
+                                          private_root=private_root, repo=repo, folder=folder)
+            except V5Error as error:
+                # More kept components on one scan than the memory bound of the instance masks allows (an
+                # engineering bound of perception.py; here every mask would also be saved). The training itself
+                # completed and its checkpoints stand: the stop is recorded, no partial description is written,
+                # and the evaluate-only entry can still score the checkpoint without saving outputs.
+                if error.code != "INSTANCE_LIMIT_EXCEEDED":
+                    raise
+                return finish("INSTANCE_LIMIT_EXCEEDED", "evaluation")
             sentences.update(render_findings_zh_v5(findings, scope, protocols[pid]["display"]))
             if "frozen" in entry:
                 rows.append(module_metrics_v5(output, entry["frozen"], member["metric_policy"],
