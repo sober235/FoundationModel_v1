@@ -1,0 +1,9 @@
+# Split rule for isles_u, registered by the researcher on 2026-11-08 before the real T08 run (plan_v5 §1.6 L8).
+# Groups are patients. Strata are tertiles of the patient lesion volume (mL) measured from the released
+# masks; real_t08_v5 adds the per-group strata at freeze time (the frozen registry stays private).
+kind: stratified
+seed: 20261108
+fractions: {train: 0.7, development_val: 0.15, locked_test: 0.15}
+min_stratum_groups: 5
+small_stratum_rule: merge
+exposed_groups: excluded

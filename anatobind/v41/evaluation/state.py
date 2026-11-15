@@ -24,6 +24,7 @@ STATE_ELIGIBILITY_BITS = {
     "out_of_fov": 16,
     "not_state_tissue": 32,
     "single_slice_unreadable": 64,
+    "a_not_visible": 128,
 }
 STATE_NAMES = (("target_positive", TARGET_POSITIVE), ("target_negative", TARGET_NEGATIVE))
 _SPATIAL_NDIM = {"2d": 2, "3d": 3}
@@ -72,6 +73,8 @@ def build_state_reference_v5(record: SampleV5, reference_arrays: dict, scope: Ac
     Review and visibility come from the record's qualifying annotations (regions looked up by their
     path in reference_arrays["review_regions"] / ["visibility_regions"]) under the observable_target
     rules of build_eligibility_v5, so unknown or unobservable visibility never yields evaluable normal.
+    A visibility is applied per reference tissue: a voxel of state tissue k is evaluable only where a
+    qualifying A annotation covering k is observable on the current input (a_not_visible otherwise).
     """
     if scope.scope_kind != "joint":
         raise V5Error("SCOPE_MISMATCH", "$.scope")
@@ -88,10 +91,16 @@ def build_state_reference_v5(record: SampleV5, reference_arrays: dict, scope: Ac
     review_regions = reference_arrays.get("review_regions", {})
     visibility_regions = reference_arrays.get("visibility_regions", {})
 
-    a_covered = set()
-    for _, a in _reference_annotations(record, "A"):
-        if a.completeness == "target_complete":
-            a_covered |= set(a.class_scope)
+    a_annotations = [(i, a) for i, a in _reference_annotations(record, "A") if a.completeness == "target_complete"]
+    a_covered = {name for _, a in a_annotations for name in a.class_scope}
+    a_supported = np.zeros(shape, dtype=bool)
+    for name in scope.state_anatomy_classes:
+        tissue_support = np.zeros(shape, dtype=bool)
+        for i, a in a_annotations:
+            if name in a.class_scope:
+                tissue_support |= visibility_support_v5(a, record, visibility_regions, shape, _OBSERVABLE_TRACK,
+                                                        f"$.annotation_records[{i}]")
+        a_supported |= (anatomy == scope.tissue_id(name)) & tissue_support
     reviewed = np.ones(shape, dtype=bool)
     supported = np.ones(shape, dtype=bool)
     u_annotations = [(i, a) for i, a in _reference_annotations(record, "U") if a.completeness in _U_COMPLETE]
@@ -125,7 +134,9 @@ def build_state_reference_v5(record: SampleV5, reference_arrays: dict, scope: Ac
     reason[~reviewed] |= bits["not_reviewed"]
     reason[reviewed & ~supported] |= bits["not_visible"]
     reason[~valid_fov] |= bits["out_of_fov"]
-    reason[~np.isin(anatomy, np.asarray(scope.state_tissue_ids))] |= bits["not_state_tissue"]
+    state_tissue = np.isin(anatomy, np.asarray(scope.state_tissue_ids))
+    reason[~state_tissue] |= bits["not_state_tissue"]
+    reason[state_tissue & ~a_supported] |= bits["a_not_visible"]
 
     stored = {"anatomy_truth": anatomy.copy(), "state_truth": np.any(abnormality, axis=0).astype(np.uint8),
               "eligibility_reason": reason, "state_eligible": reason == 0}

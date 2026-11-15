@@ -1,0 +1,2109 @@
+{
+ "brain": {
+  "U:ischemic_infarct:dice": [
+   0.6982300925230702,
+   0.6813712022370173,
+   0.6996775786582057
+  ],
+  "U:ischemic_infarct:hd95_mm": [
+   19.058170365498064,
+   32.74508424977849,
+   19.82355686547287
+  ],
+  "U:ischemic_infarct:nsd": [
+   0.7990857605220352,
+   0.7937363780608633,
+   0.8288865660846216
+  ],
+  "fp_per_scan": [
+   1.5789473684210527,
+   4.026315789473684,
+   1.4736842105263157
+  ],
+  "n_patients": [
+   38,
+   38,
+   38
+  ],
+  "pooled_sensitivity": [
+   0.4973133054365759,
+   0.5189785212263511,
+   0.51626752555546
+  ]
+ },
+ "checkpoints": {
+  "1% 试验": {
+   "instance_mask_bytes_limit": 274877906944,
+   "plan_id": "unified_knee_brain_negtopk_pilot_v1",
+   "plan_sha256": "b7e9524156d61e8df3ab58c0f4e91ed429cd181ca5d914c0eb1ad3a2cc105c69",
+   "run_sha256": "1573701efe0cfa6e613adcaf6702053074453e35eff9200c8634c135321f194b",
+   "sha256": "972cfcbde182bfdfb806f5b2dee403f0d7bbce6ffee5ede0480dc4d4a8e406a3",
+   "state_sha256": "d6074982f6f27a65869ea7158835c26a28bdd265660db20d1215eb612fa1af3f",
+   "step": 6000
+  },
+  "5% 试验": {
+   "instance_mask_bytes_limit": 274877906944,
+   "plan_id": "unified_knee_brain_negtopk05_pilot_v1",
+   "plan_sha256": "b4c3813a56bedd1548c0d4c8dd839cabf38cca30e694f195e0bcd2e86c6f627e",
+   "run_sha256": "e7ca6105e8396e1012e86db4fe17418a226732c88dc7986efa71f3abbeb0ff42",
+   "sha256": "d0ea7813227d300f9b038e281a26c84dada72811beb39fa323f9b629a8d2b0b3",
+   "state_sha256": "dd5b88dc0487a0d47fffd08b54d0a776a55d69f0a43975133204eb938a65dc29",
+   "step": 6000
+  },
+  "原运行（全部负体素）": {
+   "instance_mask_bytes_limit": 274877906944,
+   "plan_id": "unified_knee_brain_v1",
+   "plan_sha256": "2f43a97185292644b2ab2f1c91a8a9eeb7dba4dbec274200758bac910d3aa71c",
+   "run_sha256": "9019fb4f9d2f1450e85d455acfd2d144f50a3924f723a623cc40cd5d47b3e2e9",
+   "sha256": "f992c12d3560a2cc2d1dd119d0af75cae717ea269ea71dc4c0d8849ad436649f",
+   "state_sha256": "6b152ccb1ae1c67a64eff02be8217d446426e61e51f119438032100f0bd07c1c",
+   "step": 6000
+  }
+ },
+ "knee": {
+  "development_val": {
+   "anatomy_dice": {
+    "femoral_cartilage": [
+     0.8153935282332535,
+     0.7929047617142512,
+     0.7899678434101508
+    ],
+    "meniscus_lateral": [
+     0.7412559296809262,
+     0.709845217371191,
+     0.6538224720232371
+    ],
+    "meniscus_medial": [
+     0.7424203435291492,
+     0.6971566864806988,
+     0.6884225543197621
+    ],
+    "patellar_cartilage": [
+     0.7716863747131214,
+     0.7468167763957532,
+     0.7294185957317776
+    ],
+    "tibial_cartilage_lateral": [
+     0.7349463921120392,
+     0.7317047067896135,
+     0.7029036033002444
+    ],
+    "tibial_cartilage_medial": [
+     0.7433818019489363,
+     0.7650698605129675,
+     0.7357600722562615
+    ]
+   },
+   "bag_response": {
+    "max_bag:p10": [
+     0.9954039096832276,
+     0.496017587184906,
+     0.8869190216064453
+    ],
+    "max_bag:p50": [
+     0.9995619058609009,
+     0.8330121040344238,
+     0.976614773273468
+    ],
+    "max_box:p10": [
+     0.9959126710891724,
+     0.5766388416290283,
+     0.9327428340911865
+    ],
+    "max_box:p50": [
+     0.9996778964996338,
+     0.8330121040344238,
+     0.976614773273468
+    ],
+    "max_box_at_least:0.5": [
+     53,
+     49,
+     53
+    ],
+    "max_box_at_least:0.9": [
+     52,
+     20,
+     48
+    ],
+    "positive_fraction_bag:p10": [
+     0.15663830107688834,
+     0.00011113169105389896,
+     0.04618728236707836
+    ],
+    "positive_fraction_bag:p50": [
+     0.26079228034535296,
+     0.05894089284229778,
+     0.14022140221402213
+    ],
+    "responded": [
+     53,
+     49,
+     53
+    ],
+    "topk_mean_bag:p10": [
+     0.8517448425292968,
+     0.21277802586555483,
+     0.5141116857528687
+    ],
+    "topk_mean_bag:p50": [
+     0.9925998449325562,
+     0.5442252159118652,
+     0.8092389106750488
+    ]
+   },
+   "boxes": {
+    "IoBB ≥ 0.1 的框比例": [
+     0.49056603773584906,
+     0.0,
+     0.24528301886792453
+    ],
+    "IoBB ≥ 0.25 的框比例": [
+     0.4528301886792453,
+     0.0,
+     0.22641509433962265
+    ],
+    "IoBB ≥ 0.5 的框比例": [
+     0.4339622641509434,
+     0.0,
+     0.1509433962264151
+    ],
+    "主分析框": [
+     53,
+     53,
+     53
+    ],
+    "半月板撕裂：IoBB ≥ 0.1": [
+     0.21739130434782608,
+     0.0,
+     0.17391304347826086
+    ],
+    "半月板撕裂：IoBB ≥ 0.25": [
+     0.21739130434782608,
+     0.0,
+     0.13043478260869565
+    ],
+    "半月板撕裂：IoBB ≥ 0.5": [
+     0.21739130434782608,
+     0.0,
+     0.043478260869565216
+    ],
+    "半月板撕裂：主分析框": [
+     23,
+     23,
+     23
+    ],
+    "半月板撕裂：命中且所在组织正确（合并）": [
+     0.08695652173913043,
+     0.0,
+     0.21739130434782608
+    ],
+    "半月板撕裂：命中且所在组织正确（患者等权）": [
+     0.058823529411764705,
+     0.0,
+     0.20588235294117646
+    ],
+    "半月板撕裂：框命中率（合并）": [
+     0.2608695652173913,
+     0.0,
+     0.21739130434782608
+    ],
+    "半月板撕裂：框命中率（患者等权）": [
+     0.17647058823529413,
+     0.0,
+     0.20588235294117646
+    ],
+    "命中且所在组织正确的框（计数）": [
+     21,
+     0,
+     10
+    ],
+    "命中且所在组织正确（合并）": [
+     0.39622641509433965,
+     0.0,
+     0.18867924528301888
+    ],
+    "命中且所在组织正确（患者等权）": [
+     0.33354037267080744,
+     0.0,
+     0.16169772256728776
+    ],
+    "命中的框（计数）": [
+     28,
+     0,
+     14
+    ],
+    "扫描数": [
+     33,
+     33,
+     33
+    ],
+    "框命中率（合并）": [
+     0.5283018867924528,
+     0.0,
+     0.2641509433962264
+    ],
+    "框命中率（患者等权）": [
+     0.41159420289855075,
+     0.0,
+     0.2045548654244306
+    ],
+    "软骨病变：IoBB ≥ 0.1": [
+     0.7,
+     0.0,
+     0.3
+    ],
+    "软骨病变：IoBB ≥ 0.25": [
+     0.6333333333333333,
+     0.0,
+     0.3
+    ],
+    "软骨病变：IoBB ≥ 0.5": [
+     0.6,
+     0.0,
+     0.23333333333333334
+    ],
+    "软骨病变：主分析框": [
+     30,
+     30,
+     30
+    ],
+    "软骨病变：命中且所在组织正确（合并）": [
+     0.6333333333333333,
+     0.0,
+     0.16666666666666666
+    ],
+    "软骨病变：命中且所在组织正确（患者等权）": [
+     0.5814814814814815,
+     0.0,
+     0.10370370370370369
+    ],
+    "软骨病变：框命中率（合并）": [
+     0.7333333333333333,
+     0.0,
+     0.3
+    ],
+    "软骨病变：框命中率（患者等权）": [
+     0.6388888888888888,
+     0.0,
+     0.2
+    ]
+   },
+   "chain": {
+    "anchor_outside:inside_fraction:p10": [
+     0.002063516443399579,
+     null,
+     0.006004384137712386
+    ],
+    "anchor_outside:inside_fraction:p50": [
+     0.02420135527589545,
+     null,
+     0.050211442181500025
+    ],
+    "anchor_outside:inside_fraction:p90": [
+     0.14631127599667632,
+     null,
+     0.21220008294042364
+    ],
+    "anchor_outside:n": [
+     25,
+     0,
+     37
+    ],
+    "anchor_outside:voxels:p10": [
+     8487.400000000001,
+     null,
+     3407.8
+    ],
+    "anchor_outside:voxels:p50": [
+     21179.0,
+     null,
+     17728.0
+    ],
+    "anchor_outside:voxels:p90": [
+     39303.00000000001,
+     null,
+     34021.0
+    ],
+    "hit:inside_fraction:p10": [
+     0.28981257874842503,
+     null,
+     0.28591028610585495
+    ],
+    "hit:inside_fraction:p50": [
+     0.5879585883899593,
+     null,
+     0.7185004765434713
+    ],
+    "hit:inside_fraction:p90": [
+     0.8966199903428296,
+     null,
+     0.9317573748118751
+    ],
+    "hit:n": [
+     28,
+     0,
+     14
+    ],
+    "hit:voxels:p10": [
+     71.2,
+     null,
+     95.0
+    ],
+    "hit:voxels:p50": [
+     454.0,
+     null,
+     359.0
+    ],
+    "hit:voxels:p90": [
+     14660.400000000001,
+     null,
+     4695.4000000000015
+    ]
+   },
+   "chance_cross_patient": {
+    "半月板撕裂:hit:chance_rate": [
+     0.16168478260869565,
+     null,
+     0.059782608695652176
+    ],
+    "半月板撕裂:hit:observed_rate": [
+     0.2608695652173913,
+     null,
+     0.21739130434782608
+    ],
+    "半月板撕裂:hit:permutation.p_at_least_observed": [
+     0.15784215784215785,
+     null,
+     0.004995004995004995
+    ],
+    "半月板撕裂:hit:permutation.rate_p97_5": [
+     0.30434782608695654,
+     null,
+     0.17391304347826086
+    ],
+    "半月板撕裂:host_correct:chance_rate": [
+     0.02309782608695652,
+     null,
+     0.04076086956521739
+    ],
+    "半月板撕裂:host_correct:observed_rate": [
+     0.08695652173913043,
+     null,
+     0.21739130434782608
+    ],
+    "半月板撕裂:host_correct:permutation.p_at_least_observed": [
+     0.09290709290709291,
+     null,
+     0.000999000999000999
+    ],
+    "半月板撕裂:host_correct:permutation.rate_p97_5": [
+     0.08695652173913043,
+     null,
+     0.08695652173913043
+    ],
+    "合计:hit:chance_rate": [
+     0.30778301886792453,
+     null,
+     0.14386792452830188
+    ],
+    "合计:hit:observed_rate": [
+     0.5283018867924528,
+     null,
+     0.2641509433962264
+    ],
+    "合计:hit:permutation.p_at_least_observed": [
+     0.000999000999000999,
+     null,
+     0.012987012987012988
+    ],
+    "合计:hit:permutation.rate_p97_5": [
+     0.41509433962264153,
+     null,
+     0.24528301886792453
+    ],
+    "合计:host_correct:chance_rate": [
+     0.13443396226415094,
+     null,
+     0.06544811320754718
+    ],
+    "合计:host_correct:observed_rate": [
+     0.39622641509433965,
+     null,
+     0.18867924528301888
+    ],
+    "合计:host_correct:permutation.p_at_least_observed": [
+     0.000999000999000999,
+     null,
+     0.000999000999000999
+    ],
+    "合计:host_correct:permutation.rate_p97_5": [
+     0.20754716981132076,
+     null,
+     0.1320754716981132
+    ],
+    "软骨病变:hit:chance_rate": [
+     0.4197916666666667,
+     null,
+     0.20833333333333334
+    ],
+    "软骨病变:hit:observed_rate": [
+     0.7333333333333333,
+     null,
+     0.3
+    ],
+    "软骨病变:hit:permutation.p_at_least_observed": [
+     0.000999000999000999,
+     null,
+     0.15084915084915085
+    ],
+    "软骨病变:hit:permutation.rate_p97_5": [
+     0.5666666666666667,
+     null,
+     0.36666666666666664
+    ],
+    "软骨病变:host_correct:chance_rate": [
+     0.21979166666666666,
+     null,
+     0.084375
+    ],
+    "软骨病变:host_correct:observed_rate": [
+     0.6333333333333333,
+     null,
+     0.16666666666666666
+    ],
+    "软骨病变:host_correct:permutation.p_at_least_observed": [
+     0.000999000999000999,
+     null,
+     0.08791208791208792
+    ],
+    "软骨病变:host_correct:permutation.rate_p97_5": [
+     0.36666666666666664,
+     null,
+     0.16666666666666666
+    ]
+   },
+   "chance_relocation": {
+    "半月板撕裂:comparable_placements_median": [
+     46644.0,
+     null,
+     46644.0
+    ],
+    "半月板撕裂:excluded": [
+     "0",
+     null,
+     "0"
+    ],
+    "半月板撕裂:hit:chance_rate": [
+     0.2609791316501723,
+     null,
+     0.27287185875656605
+    ],
+    "半月板撕裂:hit:chance_rate_p2_5": [
+     0.13043478260869565,
+     null,
+     0.17391304347826086
+    ],
+    "半月板撕裂:hit:chance_rate_p97_5": [
+     0.391304347826087,
+     null,
+     0.391304347826087
+    ],
+    "半月板撕裂:hit:observed": [
+     6,
+     null,
+     5
+    ],
+    "半月板撕裂:hit:observed_rate": [
+     0.2608695652173913,
+     null,
+     0.21739130434782608
+    ],
+    "半月板撕裂:hit:p_at_least_observed": [
+     0.6195890343061973,
+     null,
+     0.8919664698966552
+    ],
+    "半月板撕裂:host_correct:chance_rate": [
+     0.10158973271034118,
+     null,
+     0.23059609276206655
+    ],
+    "半月板撕裂:host_correct:chance_rate_p2_5": [
+     0.0,
+     null,
+     0.08695652173913043
+    ],
+    "半月板撕裂:host_correct:chance_rate_p97_5": [
+     0.21739130434782608,
+     null,
+     0.34782608695652173
+    ],
+    "半月板撕裂:host_correct:observed": [
+     2,
+     null,
+     5
+    ],
+    "半月板撕裂:host_correct:observed_rate": [
+     0.08695652173913043,
+     null,
+     0.21739130434782608
+    ],
+    "半月板撕裂:host_correct:p_at_least_observed": [
+     0.7201263323018098,
+     null,
+     0.6919610136302956
+    ],
+    "半月板撕裂:n_boxes": [
+     23,
+     null,
+     23
+    ],
+    "半月板撕裂:n_usable": [
+     23,
+     null,
+     23
+    ],
+    "合计:comparable_placements_median": [
+     58897.0,
+     null,
+     58897.0
+    ],
+    "合计:excluded": [
+     "0",
+     null,
+     "0"
+    ],
+    "合计:hit:chance_rate": [
+     0.5537910549175744,
+     null,
+     0.31615231536906757
+    ],
+    "合计:hit:chance_rate_p2_5": [
+     0.4716981132075472,
+     null,
+     0.22641509433962265
+    ],
+    "合计:hit:chance_rate_p97_5": [
+     0.6415094339622641,
+     null,
+     0.41509433962264153
+    ],
+    "合计:hit:observed": [
+     28,
+     null,
+     14
+    ],
+    "合计:hit:observed_rate": [
+     0.5283018867924528,
+     null,
+     0.2641509433962264
+    ],
+    "合计:hit:p_at_least_observed": [
+     0.784345456872645,
+     null,
+     0.9095175136921644
+    ],
+    "合计:host_correct:chance_rate": [
+     0.3900343529522312,
+     null,
+     0.2239031501134725
+    ],
+    "合计:host_correct:chance_rate_p2_5": [
+     0.3018867924528302,
+     null,
+     0.1320754716981132
+    ],
+    "合计:host_correct:chance_rate_p97_5": [
+     0.49056603773584906,
+     null,
+     0.32075471698113206
+    ],
+    "合计:host_correct:observed": [
+     21,
+     null,
+     10
+    ],
+    "合计:host_correct:observed_rate": [
+     0.39622641509433965,
+     null,
+     0.18867924528301888
+    ],
+    "合计:host_correct:p_at_least_observed": [
+     0.5240459967386764,
+     null,
+     0.8356111918034089
+    ],
+    "合计:n_boxes": [
+     53,
+     null,
+     53
+    ],
+    "合计:n_usable": [
+     53,
+     null,
+     53
+    ],
+    "软骨病变:comparable_placements_median": [
+     110630.5,
+     null,
+     110630.5
+    ],
+    "软骨病变:excluded": [
+     "0",
+     null,
+     "0"
+    ],
+    "软骨病变:hit:chance_rate": [
+     0.7782801960892495,
+     null,
+     0.34933399877198557
+    ],
+    "软骨病变:hit:chance_rate_p2_5": [
+     0.6666666666666666,
+     null,
+     0.23333333333333334
+    ],
+    "软骨病变:hit:chance_rate_p97_5": [
+     0.9,
+     null,
+     0.4666666666666667
+    ],
+    "软骨病变:hit:observed": [
+     22,
+     null,
+     9
+    ],
+    "软骨病变:hit:observed_rate": [
+     0.7333333333333333,
+     null,
+     0.3
+    ],
+    "软骨病变:hit:p_at_least_observed": [
+     0.8600146057745902,
+     null,
+     0.8451544122152941
+    ],
+    "软骨病变:host_correct:chance_rate": [
+     0.6111752284710135,
+     null,
+     0.21877189408288383
+    ],
+    "软骨病变:host_correct:chance_rate_p2_5": [
+     0.4666666666666667,
+     null,
+     0.1
+    ],
+    "软骨病变:host_correct:chance_rate_p97_5": [
+     0.7666666666666667,
+     null,
+     0.3333333333333333
+    ],
+    "软骨病变:host_correct:observed": [
+     19,
+     null,
+     5
+    ],
+    "软骨病变:host_correct:observed_rate": [
+     0.6333333333333333,
+     null,
+     0.16666666666666666
+    ],
+    "软骨病变:host_correct:p_at_least_observed": [
+     0.4732112689262792,
+     null,
+     0.8681902769733798
+    ],
+    "软骨病变:n_boxes": [
+     30,
+     null,
+     30
+    ],
+    "软骨病变:n_usable": [
+     30,
+     null,
+     30
+    ]
+   },
+   "components": {
+    "cartilage_lesion:components:count": [
+     4607192,
+     79363,
+     325770
+    ],
+    "cartilage_lesion:components:kept": [
+     15756,
+     0,
+     1785
+    ],
+    "cartilage_lesion:components:positive_voxels": [
+     15570256,
+     250802,
+     2192156
+    ],
+    "cartilage_lesion:kept_per_scan:max": [
+     655.0,
+     0.0,
+     98.0
+    ],
+    "cartilage_lesion:kept_per_scan:p50": [
+     476.0,
+     0.0,
+     52.0
+    ],
+    "cartilage_lesion:off_tissue:count": [
+     4497771,
+     11873,
+     293427
+    ],
+    "cartilage_lesion:off_tissue:kept": [
+     11714,
+     0,
+     1384
+    ],
+    "cartilage_lesion:off_tissue:share_of_components": [
+     0.9762499587601298,
+     0.14960371961745397,
+     0.9007182981858366
+    ],
+    "cartilage_lesion:off_tissue:share_of_positive_voxels": [
+     0.8086614632411953,
+     0.099209735169576,
+     0.4614429812476849
+    ],
+    "cartilage_lesion:off_tissue:size:1": [
+     3232907,
+     6372,
+     139842
+    ],
+    "cartilage_lesion:off_tissue:size:10-49": [
+     216023,
+     158,
+     9241
+    ],
+    "cartilage_lesion:off_tissue:size:100-999": [
+     3399,
+     0,
+     570
+    ],
+    "cartilage_lesion:off_tissue:size:1000-9999": [
+     65,
+     0,
+     34
+    ],
+    "cartilage_lesion:off_tissue:size:10000+": [
+     null,
+     null,
+     null
+    ],
+    "cartilage_lesion:off_tissue:size:2-9": [
+     1037127,
+     5343,
+     142960
+    ],
+    "cartilage_lesion:off_tissue:size:50-99": [
+     8248,
+     0,
+     780
+    ],
+    "meniscal_tear:components:count": [
+     529092,
+     44950,
+     86822
+    ],
+    "meniscal_tear:components:kept": [
+     4635,
+     0,
+     642
+    ],
+    "meniscal_tear:components:positive_voxels": [
+     3954743,
+     197713,
+     552558
+    ],
+    "meniscal_tear:kept_per_scan:max": [
+     245.0,
+     0.0,
+     34.0
+    ],
+    "meniscal_tear:kept_per_scan:p50": [
+     137.0,
+     0.0,
+     19.0
+    ],
+    "meniscal_tear:off_tissue:count": [
+     521398,
+     23160,
+     81981
+    ],
+    "meniscal_tear:off_tissue:kept": [
+     4488,
+     0,
+     525
+    ],
+    "meniscal_tear:off_tissue:share_of_components": [
+     0.9854581055846621,
+     0.5152391546162403,
+     0.9442422427495335
+    ],
+    "meniscal_tear:off_tissue:share_of_positive_voxels": [
+     0.6840616444608411,
+     0.3099138650468103,
+     0.5139569058813735
+    ],
+    "meniscal_tear:off_tissue:size:1": [
+     325678,
+     10183,
+     42937
+    ],
+    "meniscal_tear:off_tissue:size:10-49": [
+     32866,
+     735,
+     2828
+    ],
+    "meniscal_tear:off_tissue:size:100-999": [
+     1753,
+     0,
+     233
+    ],
+    "meniscal_tear:off_tissue:size:1000-9999": [
+     193,
+     0,
+     7
+    ],
+    "meniscal_tear:off_tissue:size:10000+": [
+     null,
+     null,
+     null
+    ],
+    "meniscal_tear:off_tissue:size:2-9": [
+     158366,
+     12242,
+     35691
+    ],
+    "meniscal_tear:off_tissue:size:50-99": [
+     2541,
+     0,
+     285
+    ]
+   },
+   "locations": {
+    "in_ignored": [
+     1202,
+     0,
+     199
+    ],
+    "in_reference": [
+     216,
+     0,
+     23
+    ],
+    "outside": [
+     18973,
+     0,
+     2205
+    ],
+    "outside_per_scan": [
+     574.939393939394,
+     0.0,
+     66.81818181818181
+    ],
+    "total": [
+     20391,
+     0,
+     2427
+    ]
+   },
+   "stages": {
+    "半月板撕裂:anchor_outside": [
+     17,
+     0,
+     17
+    ],
+    "半月板撕裂:below_min_voxels": [
+     0,
+     23,
+     1
+    ],
+    "半月板撕裂:hit_host_correct": [
+     2,
+     0,
+     5
+    ],
+    "半月板撕裂:hit_host_wrong": [
+     4,
+     0,
+     0
+    ],
+    "半月板撕裂:no_response": [
+     0,
+     0,
+     0
+    ],
+    "合计:anchor_outside": [
+     25,
+     0,
+     37
+    ],
+    "合计:below_min_voxels": [
+     0,
+     49,
+     2
+    ],
+    "合计:hit_host_correct": [
+     21,
+     0,
+     10
+    ],
+    "合计:hit_host_wrong": [
+     7,
+     0,
+     4
+    ],
+    "合计:no_response": [
+     0,
+     4,
+     0
+    ],
+    "软骨病变:anchor_outside": [
+     8,
+     0,
+     20
+    ],
+    "软骨病变:below_min_voxels": [
+     0,
+     26,
+     1
+    ],
+    "软骨病变:hit_host_correct": [
+     19,
+     0,
+     5
+    ],
+    "软骨病变:hit_host_wrong": [
+     3,
+     0,
+     4
+    ],
+    "软骨病变:no_response": [
+     0,
+     4,
+     0
+    ]
+   },
+   "zones": {
+    "cartilage_lesion:ignored:fraction_pooled": [
+     0.25585542681837886,
+     0.04659523751631806,
+     0.14114230185872859
+    ],
+    "cartilage_lesion:ignored:per_scan_p50": [
+     0.2578646894807538,
+     0.04718504379838116,
+     0.1430990860039382
+    ],
+    "cartilage_lesion:ignored:positive_on_host": [
+     305158,
+     55574,
+     168340
+    ],
+    "cartilage_lesion:outside:fraction_pooled": [
+     0.23431425931491703,
+     0.024278376445658698,
+     0.1132103329270169
+    ],
+    "cartilage_lesion:outside:per_scan_p50": [
+     0.237973767022195,
+     0.02325481578134121,
+     0.11760622887493964
+    ],
+    "cartilage_lesion:outside:positive_on_host": [
+     1469571,
+     152269,
+     710032
+    ],
+    "cartilage_lesion:same_class_primary:fraction_pooled": [
+     0.25073971237795506,
+     0.032872392779678114,
+     0.13182677060106568
+    ],
+    "cartilage_lesion:same_class_primary:per_scan_p50": [
+     0.25900621816726854,
+     0.03290655387726514,
+     0.1482923358837459
+    ],
+    "cartilage_lesion:same_class_primary:positive_on_host": [
+     82539,
+     10821,
+     43395
+    ],
+    "meniscal_tear:ignored:fraction_pooled": [
+     0.21034551802675544,
+     0.05396138107096823,
+     0.07546709381921936
+    ],
+    "meniscal_tear:ignored:per_scan_p50": [
+     0.21160784934287707,
+     0.047891109054458675,
+     0.06062974804864697
+    ],
+    "meniscal_tear:ignored:positive_on_host": [
+     33617,
+     8624,
+     12061
+    ],
+    "meniscal_tear:outside:fraction_pooled": [
+     0.2273864666933211,
+     0.058592320269404925,
+     0.10297002025087683
+    ],
+    "meniscal_tear:outside:per_scan_p50": [
+     0.23419684775318578,
+     0.06363329788061947,
+     0.1045651206987182
+    ],
+    "meniscal_tear:outside:positive_on_host": [
+     349767,
+     90127,
+     158389
+    ],
+    "meniscal_tear:same_class_primary:fraction_pooled": [
+     0.26457004426783787,
+     0.11414653700024399,
+     0.14060267001289692
+    ],
+    "meniscal_tear:same_class_primary:per_scan_p50": [
+     0.2644927536231884,
+     0.12609457092819615,
+     0.13868483412322274
+    ],
+    "meniscal_tear:same_class_primary:positive_on_host": [
+     30361,
+     13099,
+     16135
+    ]
+   }
+  },
+  "train": {
+   "anatomy_dice": {
+    "femoral_cartilage": [
+     0.8203360107428495,
+     0.8077567634816358,
+     0.8033100822242569
+    ],
+    "meniscus_lateral": [
+     0.744912740713274,
+     0.7381861044266356,
+     0.6833397050417223
+    ],
+    "meniscus_medial": [
+     0.7649500030090973,
+     0.7513268950768489,
+     0.7258306737885878
+    ],
+    "patellar_cartilage": [
+     0.7789508176009384,
+     0.7386410619576173,
+     0.7487252367502947
+    ],
+    "tibial_cartilage_lateral": [
+     0.7847248116143671,
+     0.7653362745906215,
+     0.7331022853098815
+    ],
+    "tibial_cartilage_medial": [
+     0.7743993560699592,
+     0.7900344579940317,
+     0.7540222231656206
+    ]
+   },
+   "bag_response": {
+    "max_bag:p10": [
+     0.9975926876068115,
+     0.5359026193618774,
+     0.9374161064624786
+    ],
+    "max_bag:p50": [
+     0.9995763003826141,
+     0.8383560478687286,
+     0.9755666851997375
+    ],
+    "max_box:p10": [
+     0.9983248710632324,
+     0.6393126547336578,
+     0.9382126033306122
+    ],
+    "max_box:p50": [
+     0.9996558129787445,
+     0.846317708492279,
+     0.977063000202179
+    ],
+    "max_box_at_least:0.5": [
+     106,
+     101,
+     106
+    ],
+    "max_box_at_least:0.9": [
+     106,
+     34,
+     103
+    ],
+    "positive_fraction_bag:p10": [
+     0.20836537438364788,
+     0.002084602153462016,
+     0.09082680204495944
+    ],
+    "positive_fraction_bag:p50": [
+     0.27151793330169943,
+     0.07755189605941254,
+     0.1533426270885231
+    ],
+    "responded": [
+     106,
+     101,
+     106
+    ],
+    "topk_mean_bag:p10": [
+     0.9756387770175934,
+     0.28853483498096466,
+     0.7170246541500092
+    ],
+    "topk_mean_bag:p50": [
+     0.9943617284297943,
+     0.5961886942386627,
+     0.8422439396381378
+    ]
+   },
+   "boxes": {
+    "IoBB ≥ 0.1 的框比例": [
+     0.6132075471698113,
+     0.0,
+     0.32075471698113206
+    ],
+    "IoBB ≥ 0.25 的框比例": [
+     0.5943396226415094,
+     0.0,
+     0.3018867924528302
+    ],
+    "IoBB ≥ 0.5 的框比例": [
+     0.5660377358490566,
+     0.0,
+     0.2641509433962264
+    ],
+    "主分析框": [
+     106,
+     106,
+     106
+    ],
+    "半月板撕裂：IoBB ≥ 0.1": [
+     0.4117647058823529,
+     0.0,
+     0.3235294117647059
+    ],
+    "半月板撕裂：IoBB ≥ 0.25": [
+     0.4117647058823529,
+     0.0,
+     0.2647058823529412
+    ],
+    "半月板撕裂：IoBB ≥ 0.5": [
+     0.38235294117647056,
+     0.0,
+     0.23529411764705882
+    ],
+    "半月板撕裂：主分析框": [
+     34,
+     34,
+     34
+    ],
+    "半月板撕裂：命中且所在组织正确（合并）": [
+     0.20588235294117646,
+     0.0,
+     0.29411764705882354
+    ],
+    "半月板撕裂：命中且所在组织正确（患者等权）": [
+     0.1474358974358974,
+     0.0,
+     0.28846153846153844
+    ],
+    "半月板撕裂：框命中率（合并）": [
+     0.47058823529411764,
+     0.0,
+     0.3235294117647059
+    ],
+    "半月板撕裂：框命中率（患者等权）": [
+     0.47435897435897434,
+     0.0,
+     0.3269230769230769
+    ],
+    "命中且所在组织正确的框（计数）": [
+     46,
+     0,
+     25
+    ],
+    "命中且所在组织正确（合并）": [
+     0.4339622641509434,
+     0.0,
+     0.2358490566037736
+    ],
+    "命中且所在组织正确（患者等权）": [
+     0.3792443064182195,
+     0.0,
+     0.20504658385093166
+    ],
+    "命中的框（计数）": [
+     67,
+     0,
+     35
+    ],
+    "扫描数": [
+     86,
+     86,
+     86
+    ],
+    "框命中率（合并）": [
+     0.6320754716981132,
+     0.0,
+     0.330188679245283
+    ],
+    "框命中率（患者等权）": [
+     0.5459886128364388,
+     0.0,
+     0.2591356107660455
+    ],
+    "软骨病变：IoBB ≥ 0.1": [
+     0.7083333333333334,
+     0.0,
+     0.3194444444444444
+    ],
+    "软骨病变：IoBB ≥ 0.25": [
+     0.6805555555555556,
+     0.0,
+     0.3194444444444444
+    ],
+    "软骨病变：IoBB ≥ 0.5": [
+     0.6527777777777778,
+     0.0,
+     0.2777777777777778
+    ],
+    "软骨病变：主分析框": [
+     72,
+     72,
+     72
+    ],
+    "软骨病变：命中且所在组织正确（合并）": [
+     0.5416666666666666,
+     0.0,
+     0.20833333333333334
+    ],
+    "软骨病变：命中且所在组织正确（患者等权）": [
+     0.4861647361647362,
+     0.0,
+     0.22747747747747746
+    ],
+    "软骨病变：框命中率（合并）": [
+     0.7083333333333334,
+     0.0,
+     0.3333333333333333
+    ],
+    "软骨病变：框命中率（患者等权）": [
+     0.6222651222651223,
+     0.0,
+     0.30630630630630634
+    ]
+   },
+   "chain": {
+    "anchor_outside:inside_fraction:p10": [
+     0.004538702945845172,
+     null,
+     0.00518675935597738
+    ],
+    "anchor_outside:inside_fraction:p50": [
+     0.0202361736470988,
+     null,
+     0.035747838026642255
+    ],
+    "anchor_outside:inside_fraction:p90": [
+     0.10772698888888362,
+     null,
+     0.23223114956736712
+    ],
+    "anchor_outside:n": [
+     39,
+     0,
+     71
+    ],
+    "anchor_outside:voxels:p10": [
+     4631.400000000001,
+     null,
+     3983.0
+    ],
+    "anchor_outside:voxels:p50": [
+     24253.0,
+     null,
+     22892.0
+    ],
+    "anchor_outside:voxels:p90": [
+     44413.200000000026,
+     null,
+     43769.0
+    ],
+    "hit:inside_fraction:p10": [
+     0.3356586307638261,
+     null,
+     0.45218419594273224
+    ],
+    "hit:inside_fraction:p50": [
+     0.6475409836065574,
+     null,
+     0.6713286713286714
+    ],
+    "hit:inside_fraction:p90": [
+     1.0,
+     null,
+     1.0
+    ],
+    "hit:n": [
+     67,
+     0,
+     35
+    ],
+    "hit:voxels:p10": [
+     62.6,
+     null,
+     54.4
+    ],
+    "hit:voxels:p50": [
+     374.0,
+     null,
+     143.0
+    ],
+    "hit:voxels:p90": [
+     12110.799999999992,
+     null,
+     7167.200000000001
+    ]
+   },
+   "chance_cross_patient": {
+    "半月板撕裂:hit:chance_rate": [
+     0.29826989619377153,
+     null,
+     0.1366782006920415
+    ],
+    "半月板撕裂:hit:observed_rate": [
+     0.47058823529411764,
+     null,
+     0.3235294117647059
+    ],
+    "半月板撕裂:hit:permutation.p_at_least_observed": [
+     0.004995004995004995,
+     null,
+     0.003996003996003996
+    ],
+    "半月板撕裂:hit:permutation.rate_p97_5": [
+     0.4117647058823529,
+     null,
+     0.23529411764705882
+    ],
+    "半月板撕裂:host_correct:chance_rate": [
+     0.07543252595155708,
+     null,
+     0.10207612456747406
+    ],
+    "半月板撕裂:host_correct:observed_rate": [
+     0.20588235294117646,
+     null,
+     0.29411764705882354
+    ],
+    "半月板撕裂:host_correct:permutation.p_at_least_observed": [
+     0.01898101898101898,
+     null,
+     0.000999000999000999
+    ],
+    "半月板撕裂:host_correct:permutation.rate_p97_5": [
+     0.17647058823529413,
+     null,
+     0.20588235294117646
+    ],
+    "合计:hit:chance_rate": [
+     0.4304106548279689,
+     null,
+     0.21331853496115424
+    ],
+    "合计:hit:observed_rate": [
+     0.6320754716981132,
+     null,
+     0.330188679245283
+    ],
+    "合计:hit:permutation.p_at_least_observed": [
+     0.000999000999000999,
+     null,
+     0.001998001998001998
+    ],
+    "合计:hit:permutation.rate_p97_5": [
+     0.5094339622641509,
+     null,
+     0.29245283018867924
+    ],
+    "合计:host_correct:chance_rate": [
+     0.20066592674805775,
+     null,
+     0.09988901220865705
+    ],
+    "合计:host_correct:observed_rate": [
+     0.4339622641509434,
+     null,
+     0.2358490566037736
+    ],
+    "合计:host_correct:permutation.p_at_least_observed": [
+     0.000999000999000999,
+     null,
+     0.000999000999000999
+    ],
+    "合计:host_correct:permutation.rate_p97_5": [
+     0.26438679245283,
+     null,
+     0.1509433962264151
+    ],
+    "软骨病变:hit:chance_rate": [
+     0.4928104575163399,
+     null,
+     0.24950980392156863
+    ],
+    "软骨病变:hit:observed_rate": [
+     0.7083333333333334,
+     null,
+     0.3333333333333333
+    ],
+    "软骨病变:hit:permutation.p_at_least_observed": [
+     0.000999000999000999,
+     null,
+     0.06293706293706294
+    ],
+    "软骨病变:hit:permutation.rate_p97_5": [
+     0.5972222222222222,
+     null,
+     0.3472222222222222
+    ],
+    "软骨病变:host_correct:chance_rate": [
+     0.25980392156862747,
+     null,
+     0.09885620915032682
+    ],
+    "软骨病变:host_correct:observed_rate": [
+     0.5416666666666666,
+     null,
+     0.20833333333333334
+    ],
+    "软骨病变:host_correct:permutation.p_at_least_observed": [
+     0.000999000999000999,
+     null,
+     0.001998001998001998
+    ],
+    "软骨病变:host_correct:permutation.rate_p97_5": [
+     0.3472222222222222,
+     null,
+     0.16666666666666666
+    ]
+   },
+   "chance_relocation": {
+    "半月板撕裂:comparable_placements_median": [
+     26395.5,
+     null,
+     26395.5
+    ],
+    "半月板撕裂:excluded": [
+     "0",
+     null,
+     "0"
+    ],
+    "半月板撕裂:hit:chance_rate": [
+     0.3898793137005656,
+     null,
+     0.3377238156814863
+    ],
+    "半月板撕裂:hit:chance_rate_p2_5": [
+     0.2647058823529412,
+     null,
+     0.23529411764705882
+    ],
+    "半月板撕裂:hit:chance_rate_p97_5": [
+     0.5,
+     null,
+     0.4411764705882353
+    ],
+    "半月板撕裂:hit:observed": [
+     16,
+     null,
+     11
+    ],
+    "半月板撕裂:hit:observed_rate": [
+     0.47058823529411764,
+     null,
+     0.3235294117647059
+    ],
+    "半月板撕裂:hit:p_at_least_observed": [
+     0.12535124187464206,
+     null,
+     0.696700270781539
+    ],
+    "半月板撕裂:host_correct:chance_rate": [
+     0.17380599976498232,
+     null,
+     0.2966509498495732
+    ],
+    "半月板撕裂:host_correct:chance_rate_p2_5": [
+     0.08823529411764706,
+     null,
+     0.20588235294117646
+    ],
+    "半月板撕裂:host_correct:chance_rate_p97_5": [
+     0.29411764705882354,
+     null,
+     0.4117647058823529
+    ],
+    "半月板撕裂:host_correct:observed": [
+     7,
+     null,
+     10
+    ],
+    "半月板撕裂:host_correct:observed_rate": [
+     0.20588235294117646,
+     null,
+     0.29411764705882354
+    ],
+    "半月板撕裂:host_correct:p_at_least_observed": [
+     0.36318002619932543,
+     null,
+     0.6264835935862227
+    ],
+    "半月板撕裂:n_boxes": [
+     34,
+     null,
+     34
+    ],
+    "半月板撕裂:n_usable": [
+     34,
+     null,
+     34
+    ],
+    "合计:comparable_placements_median": [
+     85227.5,
+     null,
+     85227.5
+    ],
+    "合计:excluded": [
+     "0",
+     null,
+     "0"
+    ],
+    "合计:hit:chance_rate": [
+     0.6264949637349428,
+     null,
+     0.3103861023466536
+    ],
+    "合计:hit:chance_rate_p2_5": [
+     0.5566037735849056,
+     null,
+     0.24528301886792453
+    ],
+    "合计:hit:chance_rate_p97_5": [
+     0.6886792452830188,
+     null,
+     0.37735849056603776
+    ],
+    "合计:hit:observed": [
+     67,
+     null,
+     35
+    ],
+    "合计:hit:observed_rate": [
+     0.6320754716981132,
+     null,
+     0.330188679245283
+    ],
+    "合计:hit:p_at_least_observed": [
+     0.49152927072676744,
+     null,
+     0.3257570631015848
+    ],
+    "合计:host_correct:chance_rate": [
+     0.42738789802980587,
+     null,
+     0.2064171451990705
+    ],
+    "合计:host_correct:chance_rate_p2_5": [
+     0.3584905660377358,
+     null,
+     0.1509433962264151
+    ],
+    "合计:host_correct:chance_rate_p97_5": [
+     0.5,
+     null,
+     0.2641509433962264
+    ],
+    "合计:host_correct:observed": [
+     46,
+     null,
+     25
+    ],
+    "合计:host_correct:observed_rate": [
+     0.4339622641509434,
+     null,
+     0.2358490566037736
+    ],
+    "合计:host_correct:p_at_least_observed": [
+     0.47987386651251956,
+     null,
+     0.19727034632830093
+    ],
+    "合计:n_boxes": [
+     106,
+     null,
+     106
+    ],
+    "合计:n_usable": [
+     106,
+     null,
+     106
+    ],
+    "软骨病变:comparable_placements_median": [
+     169426.5,
+     null,
+     169426.5
+    ],
+    "软骨病变:excluded": [
+     "0",
+     null,
+     "0"
+    ],
+    "软骨病变:hit:chance_rate": [
+     0.7382301318067319,
+     null,
+     0.29747662660520474
+    ],
+    "软骨病变:hit:chance_rate_p2_5": [
+     0.6527777777777778,
+     null,
+     0.2222222222222222
+    ],
+    "软骨病变:hit:chance_rate_p97_5": [
+     0.8194444444444444,
+     null,
+     0.3888888888888889
+    ],
+    "软骨病变:hit:observed": [
+     51,
+     null,
+     24
+    ],
+    "软骨病变:hit:observed_rate": [
+     0.7083333333333334,
+     null,
+     0.3333333333333333
+    ],
+    "软骨病变:hit:p_at_least_observed": [
+     0.8176316577439805,
+     null,
+     0.24694407109551472
+    ],
+    "软骨病变:host_correct:chance_rate": [
+     0.5471349055437504,
+     null,
+     0.16380673744744426
+    ],
+    "软骨病变:host_correct:chance_rate_p2_5": [
+     0.4444444444444444,
+     null,
+     0.09722222222222222
+    ],
+    "软骨病变:host_correct:chance_rate_p97_5": [
+     0.6388888888888888,
+     null,
+     0.2361111111111111
+    ],
+    "软骨病变:host_correct:observed": [
+     39,
+     null,
+     15
+    ],
+    "软骨病变:host_correct:observed_rate": [
+     0.5416666666666666,
+     null,
+     0.20833333333333334
+    ],
+    "软骨病变:host_correct:p_at_least_observed": [
+     0.6000106794522404,
+     null,
+     0.14386281363818515
+    ],
+    "软骨病变:n_boxes": [
+     72,
+     null,
+     72
+    ],
+    "软骨病变:n_usable": [
+     72,
+     null,
+     72
+    ]
+   },
+   "components": {
+    "cartilage_lesion:components:count": [
+     11826435,
+     216140,
+     824222
+    ],
+    "cartilage_lesion:components:kept": [
+     42816,
+     0,
+     4515
+    ],
+    "cartilage_lesion:components:positive_voxels": [
+     40153238,
+     665789,
+     5554419
+    ],
+    "cartilage_lesion:kept_per_scan:max": [
+     945.0,
+     0.0,
+     146.0
+    ],
+    "cartilage_lesion:kept_per_scan:p50": [
+     494.0,
+     0.0,
+     48.0
+    ],
+    "cartilage_lesion:off_tissue:count": [
+     11529287,
+     36903,
+     734712
+    ],
+    "cartilage_lesion:off_tissue:kept": [
+     31990,
+     0,
+     3563
+    ],
+    "cartilage_lesion:off_tissue:share_of_components": [
+     0.9748742541602774,
+     0.17073655963727213,
+     0.8914006177947204
+    ],
+    "cartilage_lesion:off_tissue:share_of_positive_voxels": [
+     0.8102166256180884,
+     0.11576790845147637,
+     0.4573191183452311
+    ],
+    "cartilage_lesion:off_tissue:size:1": [
+     8360057,
+     19887,
+     346118
+    ],
+    "cartilage_lesion:off_tissue:size:10-49": [
+     566422,
+     569,
+     22275
+    ],
+    "cartilage_lesion:off_tissue:size:100-999": [
+     8393,
+     0,
+     1484
+    ],
+    "cartilage_lesion:off_tissue:size:1000-9999": [
+     223,
+     0,
+     77
+    ],
+    "cartilage_lesion:off_tissue:size:10000+": [
+     null,
+     null,
+     null
+    ],
+    "cartilage_lesion:off_tissue:size:2-9": [
+     2570818,
+     16447,
+     362756
+    ],
+    "cartilage_lesion:off_tissue:size:50-99": [
+     23369,
+     0,
+     2001
+    ],
+    "meniscal_tear:components:count": [
+     1303369,
+     110720,
+     220383
+    ],
+    "meniscal_tear:components:kept": [
+     11934,
+     0,
+     1778
+    ],
+    "meniscal_tear:components:positive_voxels": [
+     9947113,
+     479702,
+     1418187
+    ],
+    "meniscal_tear:kept_per_scan:max": [
+     292.0,
+     0.0,
+     46.0
+    ],
+    "meniscal_tear:kept_per_scan:p50": [
+     133.5,
+     0.0,
+     20.0
+    ],
+    "meniscal_tear:off_tissue:count": [
+     1283806,
+     56498,
+     208226
+    ],
+    "meniscal_tear:off_tissue:kept": [
+     11562,
+     0,
+     1478
+    ],
+    "meniscal_tear:off_tissue:share_of_components": [
+     0.984990436323098,
+     0.5102781791907515,
+     0.9448369429583952
+    ],
+    "meniscal_tear:off_tissue:share_of_positive_voxels": [
+     0.6946146082788041,
+     0.3019311989526831,
+     0.5230022556968862
+    ],
+    "meniscal_tear:off_tissue:size:1": [
+     797262,
+     26146,
+     109019
+    ],
+    "meniscal_tear:off_tissue:size:10-49": [
+     83733,
+     1837,
+     7510
+    ],
+    "meniscal_tear:off_tissue:size:100-999": [
+     4605,
+     0,
+     629
+    ],
+    "meniscal_tear:off_tissue:size:1000-9999": [
+     511,
+     0,
+     19
+    ],
+    "meniscal_tear:off_tissue:size:10000+": [
+     null,
+     null,
+     null
+    ],
+    "meniscal_tear:off_tissue:size:2-9": [
+     391249,
+     28515,
+     90219
+    ],
+    "meniscal_tear:off_tissue:size:50-99": [
+     6440,
+     0,
+     830
+    ]
+   },
+   "locations": {
+    "in_ignored": [
+     2491,
+     0,
+     437
+    ],
+    "in_reference": [
+     529,
+     0,
+     57
+    ],
+    "outside": [
+     51730,
+     0,
+     5799
+    ],
+    "outside_per_scan": [
+     601.5116279069767,
+     0.0,
+     67.43023255813954
+    ],
+    "total": [
+     54750,
+     0,
+     6293
+    ]
+   },
+   "stages": {
+    "半月板撕裂:anchor_outside": [
+     18,
+     0,
+     23
+    ],
+    "半月板撕裂:below_min_voxels": [
+     0,
+     34,
+     0
+    ],
+    "半月板撕裂:hit_host_correct": [
+     7,
+     0,
+     10
+    ],
+    "半月板撕裂:hit_host_wrong": [
+     9,
+     0,
+     1
+    ],
+    "半月板撕裂:no_response": [
+     0,
+     0,
+     0
+    ],
+    "合计:anchor_outside": [
+     39,
+     0,
+     71
+    ],
+    "合计:below_min_voxels": [
+     0,
+     101,
+     0
+    ],
+    "合计:hit_host_correct": [
+     46,
+     0,
+     25
+    ],
+    "合计:hit_host_wrong": [
+     21,
+     0,
+     10
+    ],
+    "合计:no_response": [
+     0,
+     5,
+     0
+    ],
+    "软骨病变:anchor_outside": [
+     21,
+     0,
+     48
+    ],
+    "软骨病变:below_min_voxels": [
+     0,
+     67,
+     0
+    ],
+    "软骨病变:hit_host_correct": [
+     39,
+     0,
+     15
+    ],
+    "软骨病变:hit_host_wrong": [
+     12,
+     0,
+     9
+    ],
+    "软骨病变:no_response": [
+     0,
+     5,
+     0
+    ]
+   },
+   "zones": {
+    "cartilage_lesion:ignored:fraction_pooled": [
+     0.2569280723051519,
+     0.050860385145025944,
+     0.14054418026307455
+    ],
+    "cartilage_lesion:ignored:per_scan_p50": [
+     0.2616457960205946,
+     0.04660834274065302,
+     0.14047063401445176
+    ],
+    "cartilage_lesion:ignored:positive_on_host": [
+     592193,
+     117228,
+     323940
+    ],
+    "cartilage_lesion:outside:fraction_pooled": [
+     0.2333820904586,
+     0.02348579320739868,
+     0.11232420150934301
+    ],
+    "cartilage_lesion:outside:per_scan_p50": [
+     0.2363332338886657,
+     0.023126265593288987,
+     0.115475887972699
+    ],
+    "cartilage_lesion:outside:positive_on_host": [
+     4142186,
+     416838,
+     1993588
+    ],
+    "cartilage_lesion:same_class_primary:fraction_pooled": [
+     0.25879266848071214,
+     0.04873760278351895,
+     0.14163804340822467
+    ],
+    "cartilage_lesion:same_class_primary:per_scan_p50": [
+     0.2647229951935239,
+     0.06281358548822848,
+     0.15028820862947004
+    ],
+    "cartilage_lesion:same_class_primary:positive_on_host": [
+     208855,
+     39333,
+     114307
+    ],
+    "meniscal_tear:ignored:fraction_pooled": [
+     0.23592054909343246,
+     0.04770214841737147,
+     0.0987227669032422
+    ],
+    "meniscal_tear:ignored:per_scan_p50": [
+     0.2224936638949883,
+     0.03158545377858708,
+     0.0847610798276548
+    ],
+    "meniscal_tear:ignored:positive_on_host": [
+     34338,
+     6943,
+     14369
+    ],
+    "meniscal_tear:outside:fraction_pooled": [
+     0.2209682279908209,
+     0.056832189562235215,
+     0.09787259299579237
+    ],
+    "meniscal_tear:outside:per_scan_p50": [
+     0.2299926184619546,
+     0.05727740335870917,
+     0.10266234598428069
+    ],
+    "meniscal_tear:outside:positive_on_host": [
+     915830,
+     235548,
+     405645
+    ],
+    "meniscal_tear:same_class_primary:fraction_pooled": [
+     0.2518738082202126,
+     0.10025865161326863,
+     0.13150074574735213
+    ],
+    "meniscal_tear:same_class_primary:per_scan_p50": [
+     0.28675389774168647,
+     0.14196308050393894,
+     0.15559341301712815
+    ],
+    "meniscal_tear:same_class_primary:positive_on_host": [
+     66705,
+     26552,
+     34826
+    ]
+   }
+  }
+ }
+}

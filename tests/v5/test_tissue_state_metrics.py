@@ -138,3 +138,43 @@ def test_tampered_state_reference_rejected():
     with pytest.raises(V5Error) as error:
         tissue_state_metrics_v5(validate_perception_output_v5(make_joint_output(SCOPE), SCOPE), reference, SCOPE)
     assert error.value.code == "REFERENCE_HASH_MISMATCH"
+
+
+@pytest.mark.parametrize("visibility", ["unknown", "unobservable", "limited_empty"])
+def test_a_not_visible_is_never_normal(visibility):
+    overrides = ({"a_visibility": "limited", "a_visibility_region": np.zeros((1, 2, 2), bool)}
+                 if visibility == "limited_empty" else {"a_visibility": visibility})
+    reference = _reference(**overrides)
+    assert not reference.state_eligible.any()
+    assert (reference.eligibility_reason & STATE_ELIGIBILITY_BITS["a_not_visible"]).all()
+
+
+def test_visible_a_keeps_eligibility():
+    reference = _reference(a_visibility="visible")
+    assert reference.state_eligible.all()
+    assert int((reference.state_truth[reference.state_eligible] == 0).sum()) == 2
+
+
+def test_limited_a_visibility_restricts_eligibility():
+    region = np.zeros((1, 2, 2), bool)
+    region[0, 0, :] = True
+    reference = _reference(a_visibility="limited", a_visibility_region=region)
+    assert np.array_equal(reference.state_eligible, region)
+
+
+def test_a_visibility_bit_only_on_state_tissue():
+    inputs = make_state_reference_inputs(SCOPE, a_visibility="unobservable")
+    inputs["arrays"]["anatomy"][0, 0, 0] = 0
+    reference = build_state_reference_v5(inputs["record"], inputs["arrays"], SCOPE, "obs-synth-1")
+    assert reference.eligibility_reason[0, 0, 0] & STATE_ELIGIBILITY_BITS["a_not_visible"] == 0
+    assert reference.eligibility_reason[0, 0, 0] & STATE_ELIGIBILITY_BITS["not_state_tissue"]
+
+
+def test_a_visibility_follows_reference_tissue():
+    inputs = make_state_reference_inputs(SCOPE, a_tissue_visibility={"tissue_a": "visible", "tissue_b": "unobservable"})
+    inputs["arrays"]["anatomy"][0, 1, :] = SCOPE.tissue_id("tissue_b")
+    reference = build_state_reference_v5(inputs["record"], inputs["arrays"], SCOPE, "obs-synth-1")
+    tissue_b = inputs["arrays"]["anatomy"] == SCOPE.tissue_id("tissue_b")
+    assert np.array_equal(reference.state_eligible, ~tissue_b)
+    a_bit = (reference.eligibility_reason & STATE_ELIGIBILITY_BITS["a_not_visible"]) != 0
+    assert np.array_equal(a_bit, tissue_b)

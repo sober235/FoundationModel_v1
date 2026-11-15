@@ -1,0 +1,39 @@
+# v5.1 run recipe template (plan_v5 T09a; Proposal_v5 §6.3). Every value is null on purpose:
+# a real recipe is a registered file whose values are chosen and approved for that run (GC7, GC11).
+# validate_recipe_v5 rejects any null leaf with RECIPE_VALUE_MISSING and any unknown key.
+recipe_id: null
+model:
+  architecture: null        # resunet3d
+  tasks: null               # non-empty subset of [A, U]
+  widths: null              # channels per stage
+  strides: null             # one [x, y, z] stride per stage
+  blocks_per_stage: null
+seeds:
+  init: null
+  sampler: null
+patch_size: null            # [x, y, z]
+batch_size: null
+precision: null             # fp32 | amp_bf16 | amp_fp16
+optimizer:
+  name: null                # adamw
+  lr: null
+  weight_decay: null
+scheduler:
+  name: null                # poly: lr * (1 - step / max_steps) ** exponent; exponent 0 keeps lr constant
+  exponent: null
+downsample_factor: null     # [x, y, z]; strided sampling, origin-aligned
+grid_tolerance:             # mm; channel-channel and image-label grids are compared with v41 audit_geometry
+  atol_affine: null
+  atol_spacing: null
+normalization: null         # zscore_volume
+sampling:
+  positive_fraction: null
+readable_roles: null        # must contain train; development_val optional; never locked_test
+selection_rule: null        # last (B2 does not select on the development split)
+inference:
+  window: null              # [x, y, z]
+  stride: null              # [x, y, z], each <= window
+checkpoint_every: null
+budget:
+  max_steps: null
+  max_wall_hours: null

@@ -1,0 +1,21 @@
+# Scan protocols the unified model accepts (design 2026-11-10 §5.1). The protocol picks the model's stem,
+# decoders and heads; it carries no private path. display gives the wording of a finding.
+knee_qdess:
+  scope: scope_skm_joint_early.yaml
+  source_id: skm_tea_joint_early
+  description: 膝关节 qDESS 双回波
+  box_policy: skm_box_policy_v1.yaml
+  display:
+    cartilage_lesion: 软骨病变
+    meniscal_tear: 半月板撕裂
+    femoral_cartilage: 股骨软骨
+    patellar_cartilage: 髌软骨
+    tibial_cartilage: 胫骨软骨
+    meniscus: 半月板
+brain_dwi_adc:
+  scope: scope_isles_u.yaml
+  source_id: isles_2022
+  description: 脑 DWI 与 ADC
+  box_policy: null
+  display:
+    ischemic_infarct: 缺血性梗死

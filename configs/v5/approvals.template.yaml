@@ -1,5 +1,6 @@
 # v5.1 gate approvals TEMPLATE (Proposal_v5 §9). Every value stays null until the responsible person
 # fills {approved_by, approved_at, scope_hash}. An approval is valid only for the scope_hash it names.
+# G-DATA approvals are per data source: they also name {source_id, source_version}.
 # The agent never fills these. G-H3-ENG has no approval keys and is not listed.
 G-DATA:
   data_use: null

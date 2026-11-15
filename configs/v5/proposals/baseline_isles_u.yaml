@@ -1,0 +1,66 @@
+# PROPOSAL — NOT APPROVED (2026-11-09). Module baseline plan for isles_u (ISLES-2022 DWI/ADC, U-only), plan_v5 §2C T10 step 4.
+# Every value below is a proposal for the researcher. The baseline runs only after the researcher signs the
+# G-BASE-U `resources` approval for isles_u (approval C) naming this file's plan sha256
+# (python -m anatobind.v41.real_baseline_v5 plan-hash) and G-BASE-U is PASS.
+# Any edit changes the hash and needs a new approval. Comments are not part of the hash.
+# The recipe is the passed smoke's (smoke_isles_u_v1) with the candidate its rule chose; only recipe_id,
+# readable_roles, checkpoint_every and budget differ. Random initialisation; every train sample; selection rule
+# `last`; development evaluation on every development_val scan, patients weighted equally. Development values are
+# engineering values for describing the baseline, never formal thresholds (Proposal §9).
+plan_id: baseline_isles_u_v1
+scope_id: isles_u
+scope_hash: 0ddcfb0347a2fd0a126393a4dc0f5227f4d3f2e58aab4e36b6d88f5074c5e5fb
+source: {source_id: isles_2022, source_version: isles2022_bids1.6.0}
+lineage_id: v51_isles_u_b2            # the frozen T08 split's lineage
+smoke:
+  plan_sha256: 02b5c2603ac78bb55ddc22d7d71a3851c517a6bd13dcdb9e60e0f6455b0933d8        # smoke_isles_u_v1
+  training_smoke_sha256: bf4ebff6cad2d0991327ca9252a2a9af53dc05de76208d27634b93b4cc507f73
+  chosen: {patch_size: [112, 112, 64], batch_size: 2, precision: fp32}               # first_ok_within_memory
+recipe:
+  recipe_id: isles_u_baseline_v1
+  model:
+    architecture: resunet3d
+    tasks: [U]
+    widths: [32, 64, 128, 256, 320]
+    strides: [[1, 1, 1], [2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 1]]   # x16, y16, z8 in total
+    blocks_per_stage: 2
+  seeds: {init: 20261109, sampler: 20261110}
+  optimizer: {name: adamw, lr: 0.001, weight_decay: 0.0001}
+  scheduler: {name: poly, exponent: 0.9}
+  patch_size: [112, 112, 64]
+  batch_size: 2
+  precision: fp32
+  downsample_factor: [1, 1, 1]        # T07 loss check: 2x2x2 loses 846 lesion components in 147 scans
+  grid_tolerance: {atol_affine: 0.001, atol_spacing: 0.001}
+  normalization: zscore_volume
+  sampling: {positive_fraction: 0.67}
+  readable_roles: [train, development_val]   # train for training; development_val for evaluation only
+  selection_rule: last
+  inference: {window: [112, 112, 64], stride: [56, 56, 32]}
+  checkpoint_every: 2000              # 15 checkpoints of about 0.33 GB
+  budget: {max_steps: 30000, max_wall_hours: 4.0}   # smoke step 0.28 s on one shared A800: about 2.3 h of steps
+supervision:
+  policy_id: isles_u_supervision_v1
+  scope_id: isles_u
+  reference_policy_id: isles_released_reference_v1
+  track: released_reference           # learn the released masks; input_visibility stays unknown (not visible)
+  allow_unknown_visibility: true
+  channel: expert
+  tasks:
+    U: {kind: sigmoid, ce_weight: 1.0, dice_weight: 1.0, task_weight: 1.0}
+acceptance_policy:
+  policy_id: isles_u_engineering_v1
+  policy_role: engineering            # never a formal threshold (Proposal §9)
+  anatomy: {min_confidence: null}
+  abnormality:
+    thresholds: {ischemic_infarct: 0.5}
+    reject_band: {ischemic_infarct: none}
+  instances: {connectivity: 26, min_voxels: 1}
+metric_policy:                        # development description only
+  metrics: [dice, hd95, nsd, lesion_detection]
+  surface_tolerance_mm: 2.0           # one median voxel: ISLES spacing median 2.0 mm per axis (p90 through-plane 4.8 mm)
+  iou_match_threshold: 0.1            # lenient one-to-one matching for small infarcts
+  fp_budget_per_scan: null            # fp_constraint not requested
+  class_aware: true                   # one class (ischemic_infarct)
+  size_strata_voxels: [10, 100, 1000] # about 0.08, 0.8 and 8 mL at 2 mm isotropic
+budget: {max_wall_hours: 5.0}         # whole baseline: loading, training, development inference and metrics

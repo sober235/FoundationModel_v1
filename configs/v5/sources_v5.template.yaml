@@ -1,0 +1,29 @@
+# v5.1 source policies TEMPLATE (Proposal_v5 §3.1-3.2; plan_v5.md T07a).
+# Keys are source_id. annotation_modalities, index_evidence, physical_units_policy and
+# physical_units_evidence stay null until the T07c read-only check on the data server provides
+# evidence; until then migrating real records fails closed (ANNOTATION_MODALITY_UNKNOWN), and
+# geometry is never marked verified. A units policy without its evidence is rejected.
+# source_release is the release string the v41 records of this source carry; migration refuses
+# records with any other string (plan_v5.md §1.6 L1). Values read from the real v41 records.
+isles_2022:
+  source_version: isles2022_bids1.6.0
+  source_release: ISLES-2022
+  source_dataset: ISLES_ltr
+  scope_id: isles_u
+  reference_policy_id: isles_released_reference_v1
+  model_modalities: [dwi, adc]
+  annotation_modalities: {U: null}
+  index_evidence: null
+  physical_units_policy: null
+  physical_units_evidence: null
+skm_tea:
+  source_version: skm_tea_annotations_v1.0.0
+  source_release: SKM-TEA v1.0.0
+  source_dataset: SKM-TEA_ltr
+  scope_id: skm_a
+  reference_policy_id: skm_a6_released_reference_v1
+  model_modalities: [qdess_e1, qdess_e2]
+  annotation_modalities: {A: null}
+  index_evidence: null
+  physical_units_policy: null
+  physical_units_evidence: null

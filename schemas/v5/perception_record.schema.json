@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "anatobind/v5/perception_record.schema.json",
+  "title": "AnatoBind-MRI v5.1 saved perception or module output",
+  "description": "A PerceptionOutput or ModuleOutput (Proposal_v5 §2.1) with every array replaced by a private ArrayRef to one .npy file (plan_v5 T09c). The exact field set of each output kind is enforced again by validate_*_output_v5 once the arrays are loaded.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["output_kind", "output_version", "observation_uid", "mode", "scope_id", "scope_hash",
+               "checkpoint_sha256", "anatomy_map", "abnormality_map", "acceptance", "reason", "geometry",
+               "provenance"],
+  "properties": {
+    "output_kind": {"type": "string", "enum": ["joint", "module"]},
+    "output_version": {"type": "string", "const": "v5.1"},
+    "observation_uid": {"type": "string"},
+    "mode": {"type": "string", "enum": ["2d", "3d"]},
+    "scope_id": {"type": "string"},
+    "scope_hash": {"type": "string"},
+    "checkpoint_sha256": {"type": "string"},
+    "state_policy_hash": {"type": "string"},
+    "enabled_tasks": {"type": "array", "items": {"type": "string", "enum": ["A", "U"]}},
+    "disabled_tasks": {"type": "array", "items": {"type": "string", "enum": ["A", "U", "S", "R"]}},
+    "anatomy_map": {"$ref": "#/definitions/array_ref", "type": ["object", "null"]},
+    "abnormality_map": {"$ref": "#/definitions/array_ref", "type": ["object", "null"]},
+    "tissue_state_map": {"$ref": "#/definitions/array_ref"},
+    "abnormal_instances": {"type": "array", "items": {"$ref": "#/definitions/instance"}},
+    "tissue_relations": {"type": "array", "items": {"$ref": "#/definitions/relation"}},
+    "acceptance": {"$ref": "#/definitions/task_arrays"},
+    "reason": {"$ref": "#/definitions/task_arrays"},
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shape", "axis_order", "spacing_mm", "affine", "units_reliable", "transform_chain"],
+      "properties": {
+        "shape": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+        "axis_order": {"type": "string"},
+        "spacing_mm": {"type": ["array", "null"], "items": {"type": "number"}},
+        "affine": {"type": ["array", "null"], "items": {"type": "array", "items": {"type": "number"}}},
+        "units_reliable": {"type": "boolean"},
+        "transform_chain": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_sha256", "model_sha256", "output_policy_version"],
+      "properties": {
+        "input_sha256": {"type": "string"},
+        "model_sha256": {"type": "string"},
+        "output_policy_version": {"type": "string"}
+      }
+    }
+  },
+  "definitions": {
+    "array_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "sha256", "dtype", "shape"],
+      "properties": {
+        "file": {"type": "string"},
+        "sha256": {"type": "string"},
+        "dtype": {"type": "string"},
+        "shape": {"type": "array", "items": {"type": "integer", "minimum": 0}}
+      }
+    },
+    "task_arrays": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "anatomy": {"$ref": "#/definitions/array_ref"},
+        "abnormality": {"$ref": "#/definitions/array_ref"},
+        "state": {"$ref": "#/definitions/array_ref"},
+        "relations": {"type": "object"}
+      }
+    },
+    "instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instance_uid", "class_name", "mask", "bbox", "candidate_set_hash", "accepted"],
+      "properties": {
+        "instance_uid": {"type": "string"},
+        "class_name": {"type": "string"},
+        "mask": {"$ref": "#/definitions/array_ref"},
+        "bbox": {"type": "array", "items": {"type": "integer"}},
+        "candidate_set_hash": {"type": "string"},
+        "accepted": {"type": "boolean"}
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instance_uid", "predicate", "tissue_ids", "status", "accepted", "completion_role"],
+      "properties": {
+        "instance_uid": {"type": "string"},
+        "predicate": {"type": "string"},
+        "tissue_ids": {"type": "array", "items": {"type": "integer"}},
+        "status": {"type": "string"},
+        "accepted": {"type": "boolean"},
+        "completion_role": {"type": "string"}
+      }
+    }
+  }
+}

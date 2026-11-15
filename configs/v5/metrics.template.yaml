@@ -4,3 +4,5 @@ metrics: null
 surface_tolerance_mm: null
 iou_match_threshold: null
 fp_budget_per_scan: null
+class_aware: null               # lesion_detection: match only same-class instances (true/false)
+size_strata_voxels: null        # lesion_detection: strictly increasing voxel-count bounds of the size strata

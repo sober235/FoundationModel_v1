@@ -1,0 +1,318 @@
+{
+ "steps": 6000,
+ "window": 500,
+ "windows": [
+  {
+   "classes": {
+    "cartilage_lesion": {
+     "negative": 0.367473,
+     "negative_all": 0.102875,
+     "positive": 0.826752,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 132
+    },
+    "meniscal_tear": {
+     "negative": 0.22552,
+     "negative_all": 0.059731,
+     "positive": 1.797733,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 74
+    }
+   },
+   "negative": 0.296496,
+   "negative_all": 0.081303,
+   "positive": 1.100173,
+   "steps": [
+    1,
+    500
+   ],
+   "steps_with_a_bag": 174
+  },
+  {
+   "classes": {
+    "cartilage_lesion": {
+     "negative": 0.235932,
+     "negative_all": 0.013743,
+     "positive": 0.584591,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 134
+    },
+    "meniscal_tear": {
+     "negative": 0.108639,
+     "negative_all": 0.00702,
+     "positive": 1.055812,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 67
+    }
+   },
+   "negative": 0.172285,
+   "negative_all": 0.010382,
+   "positive": 0.687519,
+   "steps": [
+    501,
+    1000
+   ],
+   "steps_with_a_bag": 160
+  },
+  {
+   "classes": {
+    "cartilage_lesion": {
+     "negative": 0.232611,
+     "negative_all": 0.012359,
+     "positive": 0.513584,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 141
+    },
+    "meniscal_tear": {
+     "negative": 0.10972,
+     "negative_all": 0.005991,
+     "positive": 1.141657,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 76
+    }
+   },
+   "negative": 0.171166,
+   "negative_all": 0.009175,
+   "positive": 0.68272,
+   "steps": [
+    1001,
+    1500
+   ],
+   "steps_with_a_bag": 171
+  },
+  {
+   "classes": {
+    "cartilage_lesion": {
+     "negative": 0.220196,
+     "negative_all": 0.012073,
+     "positive": 0.545873,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 130
+    },
+    "meniscal_tear": {
+     "negative": 0.168767,
+     "negative_all": 0.011357,
+     "positive": 1.779418,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 78
+    }
+   },
+   "negative": 0.194481,
+   "negative_all": 0.011715,
+   "positive": 0.840592,
+   "steps": [
+    1501,
+    2000
+   ],
+   "steps_with_a_bag": 173
+  },
+  {
+   "classes": {
+    "cartilage_lesion": {
+     "negative": 0.192532,
+     "negative_all": 0.010148,
+     "positive": 0.502767,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 128
+    },
+    "meniscal_tear": {
+     "negative": 0.106115,
+     "negative_all": 0.005866,
+     "positive": 0.61836,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 80
+    }
+   },
+   "negative": 0.149323,
+   "negative_all": 0.008007,
+   "positive": 0.527366,
+   "steps": [
+    2001,
+    2500
+   ],
+   "steps_with_a_bag": 173
+  },
+  {
+   "classes": {
+    "cartilage_lesion": {
+     "negative": 0.170717,
+     "negative_all": 0.008633,
+     "positive": 0.364054,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 132
+    },
+    "meniscal_tear": {
+     "negative": 0.10292,
+     "negative_all": 0.005508,
+     "positive": 0.716858,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 76
+    }
+   },
+   "negative": 0.136819,
+   "negative_all": 0.00707,
+   "positive": 0.470891,
+   "steps": [
+    2501,
+    3000
+   ],
+   "steps_with_a_bag": 169
+  },
+  {
+   "classes": {
+    "cartilage_lesion": {
+     "negative": 0.190222,
+     "negative_all": 0.009655,
+     "positive": 0.413253,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 130
+    },
+    "meniscal_tear": {
+     "negative": 0.103912,
+     "negative_all": 0.005578,
+     "positive": 1.3126,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 78
+    }
+   },
+   "negative": 0.147067,
+   "negative_all": 0.007616,
+   "positive": 0.635227,
+   "steps": [
+    3001,
+    3500
+   ],
+   "steps_with_a_bag": 166
+  },
+  {
+   "classes": {
+    "cartilage_lesion": {
+     "negative": 0.160326,
+     "negative_all": 0.00805,
+     "positive": 0.330164,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 124
+    },
+    "meniscal_tear": {
+     "negative": 0.100018,
+     "negative_all": 0.005198,
+     "positive": 0.540899,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 87
+    }
+   },
+   "negative": 0.130172,
+   "negative_all": 0.006624,
+   "positive": 0.408734,
+   "steps": [
+    3501,
+    4000
+   ],
+   "steps_with_a_bag": 172
+  },
+  {
+   "classes": {
+    "cartilage_lesion": {
+     "negative": 0.18686,
+     "negative_all": 0.009672,
+     "positive": 0.579198,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 137
+    },
+    "meniscal_tear": {
+     "negative": 0.079415,
+     "negative_all": 0.0041,
+     "positive": 0.531916,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 69
+    }
+   },
+   "negative": 0.133137,
+   "negative_all": 0.006886,
+   "positive": 0.579789,
+   "steps": [
+    4001,
+    4500
+   ],
+   "steps_with_a_bag": 173
+  },
+  {
+   "classes": {
+    "cartilage_lesion": {
+     "negative": 0.163047,
+     "negative_all": 0.00821,
+     "positive": 0.268182,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 142
+    },
+    "meniscal_tear": {
+     "negative": 0.076615,
+     "negative_all": 0.004069,
+     "positive": 0.573319,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 93
+    }
+   },
+   "negative": 0.119831,
+   "negative_all": 0.00614,
+   "positive": 0.333546,
+   "steps": [
+    4501,
+    5000
+   ],
+   "steps_with_a_bag": 182
+  },
+  {
+   "classes": {
+    "cartilage_lesion": {
+     "negative": 0.172943,
+     "negative_all": 0.00881,
+     "positive": 0.538784,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 145
+    },
+    "meniscal_tear": {
+     "negative": 0.071875,
+     "negative_all": 0.003713,
+     "positive": 0.468011,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 67
+    }
+   },
+   "negative": 0.122409,
+   "negative_all": 0.006262,
+   "positive": 0.508862,
+   "steps": [
+    5001,
+    5500
+   ],
+   "steps_with_a_bag": 176
+  },
+  {
+   "classes": {
+    "cartilage_lesion": {
+     "negative": 0.149463,
+     "negative_all": 0.007481,
+     "positive": 0.252734,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 135
+    },
+    "meniscal_tear": {
+     "negative": 0.066537,
+     "negative_all": 0.003346,
+     "positive": 0.418934,
+     "selected_share": 0.05,
+     "steps_with_a_bag": 86
+    }
+   },
+   "negative": 0.108,
+   "negative_all": 0.005413,
+   "positive": 0.265564,
+   "steps": [
+    5501,
+    6000
+   ],
+   "steps_with_a_bag": 177
+  }
+ ]
+}

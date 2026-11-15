@@ -1,0 +1,114 @@
+# PROPOSAL — NOT APPROVED (2026-11-10). Unified training plan: one checkpoint for knee qDESS (SKM-TEA, scope
+# skm_joint_early) and brain DWI + ADC (ISLES-2022, scope isles_u). Proposal_v5 §0.6; design
+# docs/superpowers/specs/2026-11-10-unified-lesion-finding-design.md.
+# Every value below is a proposal for the researcher. Nothing runs on real data until the researcher signs, per
+# member scope, the resources approvals naming this file's plan sha256
+# (python -m anatobind.v41.real_unified_v5 plan-hash). Any edit changes the hash and needs new approvals.
+# Comments are not part of the hash. Development values are engineering values, never formal thresholds.
+# The brain member's supervision, acceptance policy and metric policy equal baseline_isles_u.yaml field for field,
+# so its development metrics compare directly with the module baseline. Both members share the knee baseline's
+# strides (x16, y16, z8 in total); the brain baseline used another stride order.
+plan_id: unified_knee_brain_v1
+shared:
+  model:
+    architecture: resunet3d
+    widths: [32, 64, 128, 256, 320]
+    strides: [[1, 1, 1], [2, 2, 1], [2, 2, 2], [2, 2, 2], [2, 2, 2]]
+    blocks_per_stage: 2
+    stem_channels: 16
+  seeds: {init: 20261110, sampler: 20261111}
+  optimizer: {name: adamw, lr: 0.001, weight_decay: 0.0001}
+  scheduler: {name: poly, exponent: 0.9}
+  precision: fp32
+  selection_rule: last
+  checkpoint_every: 2000
+  # 16 h (2026-11-10): the passed smoke measured 1.599 s per step, so 30000 steps need about 13.3 h; 10 h would
+  # have stopped the run near step 22000.
+  budget: {max_steps: 30000, max_wall_hours: 16.0}
+members:
+  knee_qdess:
+    scope_id: skm_joint_early
+    scope_hash: f6e4b5f6e3c95a49f5f8cb45591b2a2c437b8db2d432551e1bd1e9e81935ec9f
+    source: {source_id: skm_tea_joint_early, source_version: skm_tea_annotations_v1.0.0}
+    lineage_id: v51_skm_joint_early
+    tasks: [A, U]
+    patch_size: [192, 192, 48]
+    batch_size: 2
+    downsample_factor: [1, 1, 1]
+    grid_tolerance: {atol_affine: 0.001, atol_spacing: 0.001}
+    normalization: zscore_volume
+    sampling: {positive_fraction: 0.5}
+    inference: {window: [192, 192, 48], stride: [96, 96, 24]}
+    loss_weight: 1.0
+    supervision:
+      policy_id: skm_joint_early_supervision_v1
+      scope_id: skm_joint_early
+      reference_policy_id: skm_box_reference_v1
+      track: released_reference
+      allow_unknown_visibility: false
+      channel: expert
+      tasks:
+        A: {kind: softmax, ce_weight: 1.0, dice_weight: 1.0, task_weight: 1.0}
+        U: {kind: sigmoid, ce_weight: 1.0, dice_weight: 1.0, task_weight: 1.0}   # weights unused: box_supervision replaces the U loss
+    box_supervision:
+      kind: box_mil
+      topk_fraction: 0.1
+      positive_weight: 1.0
+      negative_weight: 1.0
+      box_policy_sha256: 09b1003e63fb5e8517be7626ba7e522dba9a7397a53dcd4ef910226bc734f2a9
+    acceptance_policy:
+      policy_id: skm_joint_early_engineering_v1
+      policy_role: engineering
+      anatomy: {min_confidence: 0.0}
+      abnormality:
+        thresholds: {cartilage_lesion: 0.5, meniscal_tear: 0.5}
+        reject_band: {cartilage_lesion: none, meniscal_tear: none}
+      # min_voxels 50 (2026-11-10, after the failed first smoke): a positive component under 50 voxels (about
+      # 4 mm^3 on the qDESS grid) is not reported as a finding. The smallest primary box of the train readers is
+      # 144 voxels. With 1, a 40-step model gave about 210,000 components per scan; with 50, about 290.
+      instances: {connectivity: 26, min_voxels: 50}
+    metric_policy: {metrics: [dice], surface_tolerance_mm: null, iou_match_threshold: null, fp_budget_per_scan: null, class_aware: null, size_strata_voxels: null}
+    finding_policy: {host: majority_accepted_anatomy, iobb_thresholds: [0.1, 0.25, 0.5]}
+  brain_dwi_adc:
+    scope_id: isles_u
+    scope_hash: 0ddcfb0347a2fd0a126393a4dc0f5227f4d3f2e58aab4e36b6d88f5074c5e5fb
+    source: {source_id: isles_2022, source_version: isles2022_bids1.6.0}
+    lineage_id: v51_isles_u_b2
+    tasks: [U]
+    patch_size: [112, 112, 64]
+    batch_size: 2
+    downsample_factor: [1, 1, 1]
+    grid_tolerance: {atol_affine: 0.001, atol_spacing: 0.001}
+    normalization: zscore_volume
+    sampling: {positive_fraction: 0.67}
+    inference: {window: [112, 112, 64], stride: [56, 56, 32]}
+    loss_weight: 1.0
+    supervision:
+      policy_id: isles_u_supervision_v1
+      scope_id: isles_u
+      reference_policy_id: isles_released_reference_v1
+      track: released_reference
+      allow_unknown_visibility: true
+      channel: expert
+      tasks:
+        U: {kind: sigmoid, ce_weight: 1.0, dice_weight: 1.0, task_weight: 1.0}
+    box_supervision: null
+    acceptance_policy:
+      policy_id: isles_u_engineering_v1
+      policy_role: engineering
+      anatomy: {min_confidence: null}
+      abnormality:
+        thresholds: {ischemic_infarct: 0.5}
+        reject_band: {ischemic_infarct: none}
+      instances: {connectivity: 26, min_voxels: 1}
+    metric_policy: {metrics: [dice, hd95, nsd, lesion_detection], surface_tolerance_mm: 2.0, iou_match_threshold: 0.1, fp_budget_per_scan: null, class_aware: true, size_strata_voxels: [10, 100, 1000]}
+    finding_policy: {host: none, iobb_thresholds: null}
+smoke:
+  steps: 40
+  pause_at: 20
+  checkpoint_every: 20
+  subset_count: {knee_qdess: 2, brain_dwi_adc: 2}
+  subset_salt: v51-smoke-unified-20261110
+  tolerances: {loss_atol: 0.0001, loss_rtol: 0.001, param_rtol: 0.001}
+  max_wall_hours: 2.0
+budget: {max_wall_hours: 20.0}

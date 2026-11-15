@@ -1,0 +1,18 @@
+# v5.1 label map versions (plan_v5 T09b). An annotation's label_map_version selects one entry.
+# encoding: channels -> class name: channel index of a one-hot [x, y, z, C] label (H5 `seg`);
+# encoding: values   -> class name: voxel value of an integer label map (0 is background).
+skm_a6_h5_channels_v1:
+  # Channel order of SKM-TEA `seg` (SKM-TEA DATASET.md; early-phase scope research §2); same order as
+  # scope_skm_a.yaml. The real T07 run re-checks it with v41 channel_check.
+  encoding: channels
+  classes:
+    patellar_cartilage: 0
+    femoral_cartilage: 1
+    tibial_cartilage_medial: 2
+    tibial_cartilage_lateral: 3
+    meniscus_medial: 4
+    meniscus_lateral: 5
+isles_binary_v1:
+  encoding: values
+  classes:
+    ischemic_infarct: 1

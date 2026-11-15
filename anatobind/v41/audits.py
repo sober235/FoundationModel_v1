@@ -41,37 +41,106 @@ def _exclusive_csv(path: Path, rows: list[dict], columns: list[str]) -> None:
                              for c in columns})
 
 
-def load_skm_annotations(annotations_dir: Path) -> dict:
-    """Per-case box and subject metadata from SKM-TEA annotations v1.0.0 (read-only)."""
+SKM_RELEASE_SPLITS = ("train", "val", "test")
+
+
+def scan_skm_release(annotations_dir: Path) -> tuple[dict, dict, dict]:
+    """Read every official split file of SKM-TEA annotations v1.0.0 (read-only).
+
+    Returns (per_case, report, details). All three official files are checked and read; nothing is skipped
+    silently. `report` holds counts only: per file whether it is present and readable, its scans, the patients
+    that can be confirmed (distinct release subject_id) and its boxes, plus missing files, duplicate cases and
+    split conflicts. `details` names the cases and subjects behind each issue and is private.
+
+    A case listed in more than one official split keeps every split in `release_splits` and gets
+    `split_release` None, so it cannot be given a formal split by the official rule until the conflict is
+    resolved. Its boxes are kept from the first file only, so a conflict never doubles them.
+    """
     annotations_dir = Path(annotations_dir)
     per_case: dict[str, dict] = {}
-    for split in ("train", "val", "test"):
+    files: dict[str, dict] = {}
+    details = {"duplicate_cases_within_file": [], "cases_in_multiple_splits": [], "patients_in_multiple_splits": [],
+               "scans_without_subject": []}
+    subject_splits: dict = {}
+    orphans = 0
+    for split in SKM_RELEASE_SPLITS:
         path = annotations_dir / f"{split}.json"
-        if not path.exists():
+        entry = files[split] = {"present": path.is_file(), "readable": False, "image_entries": 0, "scans": 0,
+                                "patients": 0, "scans_without_subject": 0, "boxes": 0}
+        if not entry["present"]:
             continue
-        doc = json.loads(path.read_text())
-        categories = {c["id"]: c["supercategory"] for c in doc["categories"]}
-        images = {im["id"]: im for im in doc["images"]}
-        for image in doc["images"]:
+        try:
+            doc = json.loads(path.read_text())
+            categories = {c["id"]: c["supercategory"] for c in doc["categories"]}
+            images, annotations = list(doc["images"]), list(doc["annotations"])
+        except (ValueError, KeyError, TypeError):
+            continue
+        entry["readable"] = True
+        entry["image_entries"] = len(images)
+        case_of: dict = {}
+        cases_here: set = set()
+        subjects_here: set = set()
+        for image in images:
             case = Path(image["file_name"]).name.removesuffix(".h5")
-            entry = per_case.setdefault(case, {"subject_id": image.get("subject_id"),
-                                               "scan_id": image.get("scan_id"),
-                                               "timepoint": image.get("timepoint"),
-                                               "inspected": image.get("inspected"),
-                                               "split_release": split, "boxes": []})
-        for ann in doc["annotations"]:
-            image = images[ann["image_id"]]
-            case = Path(image["file_name"]).name.removesuffix(".h5")
-            per_case.setdefault(case, {"subject_id": image.get("subject_id"), "scan_id": image.get("scan_id"),
-                                       "timepoint": image.get("timepoint"), "inspected": image.get("inspected"),
-                                       "split_release": split, "boxes": []})
+            case_of[image["id"]] = case
+            if case in cases_here:
+                details["duplicate_cases_within_file"].append(case)
+                per_case[case]["duplicate_entries"] += 1
+                continue
+            cases_here.add(case)
+            subject = image.get("subject_id")
+            if subject is None:
+                entry["scans_without_subject"] += 1
+                details["scans_without_subject"].append(case)
+            else:
+                subjects_here.add(subject)
+                subject_splits.setdefault(subject, set()).add(split)
+            if case in per_case:
+                per_case[case]["release_splits"].append(split)
+                per_case[case]["split_release"] = None
+                continue
+            per_case[case] = {"subject_id": subject, "scan_id": image.get("scan_id"),
+                              "timepoint": image.get("timepoint"), "inspected": image.get("inspected"),
+                              "split_release": split, "release_splits": [split], "duplicate_entries": 0,
+                              "boxes": []}
+        entry["scans"], entry["patients"] = len(cases_here), len(subjects_here)
+        counted: set = set()
+        for ann in annotations:
+            case = case_of.get(ann.get("image_id"))
+            if case is None or ann.get("category_id") not in categories:
+                orphans += 1
+                continue
+            entry["boxes"] += 1
+            if per_case[case]["release_splits"][0] != split:
+                continue                                  # a conflicting case keeps the boxes of its first file
+            if (case, ann.get("id")) in counted and ann.get("id") is not None:
+                continue
+            counted.add((case, ann.get("id")))
             per_case[case]["boxes"].append({
                 "supercategory": categories[ann["category_id"]],
                 "category_id": ann["category_id"],
                 "tissue_id": ann.get("tissue_id"),
                 "confidence": ann.get("confidence"),
             })
-    return per_case
+    details["cases_in_multiple_splits"] = sorted(c for c, m in per_case.items() if len(m["release_splits"]) > 1)
+    details["patients_in_multiple_splits"] = sorted(str(s) for s, v in subject_splits.items() if len(v) > 1)
+    for key in ("duplicate_cases_within_file", "scans_without_subject"):
+        details[key] = sorted(set(details[key]))
+    report = {"files": files,
+              "missing_files": [s for s in SKM_RELEASE_SPLITS if not files[s]["present"]],
+              "unreadable_files": [s for s in SKM_RELEASE_SPLITS if files[s]["present"] and not files[s]["readable"]],
+              "scans": len(per_case), "patients": len(subject_splits),
+              "scans_without_subject": len(details["scans_without_subject"]),
+              "duplicate_cases_within_file": len(details["duplicate_cases_within_file"]),
+              "cases_in_multiple_splits": len(details["cases_in_multiple_splits"]),
+              "patients_in_multiple_splits": len(details["patients_in_multiple_splits"]),
+              "orphan_annotations": orphans}
+    return per_case, report, details
+
+
+def load_skm_annotations(annotations_dir: Path) -> dict:
+    """Per-case box and subject metadata from SKM-TEA annotations v1.0.0 (read-only); see scan_skm_release."""
+    return scan_skm_release(annotations_dir)[0]
 
 
 def build_registration_records(scope: str, assets: list[dict], skm_annotations: dict | None = None) -> list[dict]:
@@ -140,6 +209,7 @@ def build_registration_records(scope: str, assets: list[dict], skm_annotations: 
                 "provenance": {"ingest_commit": "v41_t07", "ingest_time": "2026-11-02T00:00:00Z"},
             })
     else:
+        release_given = skm_annotations is not None
         skm_annotations = skm_annotations or {}
         for pair in skm.pair_assets(assets):
             if not pair["h5_relpath"]:
@@ -177,7 +247,7 @@ def build_registration_records(scope: str, assets: list[dict], skm_annotations: 
                     "task": "U",
                     "class_scope": [box["supercategory"].lower().replace(" ", "_")],
                     "representation": "bbox",
-                    "path": f"annotations/v1.0.0/{meta.get('split_release', 'unknown')}.json",
+                    "path": f"annotations/v1.0.0/{meta.get('split_release') or 'unknown'}.json",
                     "label_map_version": "skmtea_boxes_v1",
                     "provenance_type": "manual",
                     "creator_or_model": "SKM-TEA release",
@@ -229,9 +299,62 @@ def build_registration_records(scope: str, assets: list[dict], skm_annotations: 
                 "quality_records": [],
                 "provenance": {"ingest_commit": "v41_t07", "ingest_time": "2026-11-02T00:00:00Z",
                                "inspected_release_flag": meta.get("inspected"),
-                               "release_split": meta.get("split_release")},
+                               "release_split": meta.get("split_release"),
+                               **(_release_flags(meta) if release_given else {})},
             })
     return records
+
+
+def _release_flags(meta: dict) -> dict:
+    """Provenance flags written only when something is wrong, so a clean record keeps its earlier bytes."""
+    flags = {}
+    if len(meta.get("release_splits") or []) > 1:
+        flags["release_split_conflict"] = list(meta["release_splits"])
+    if meta.get("duplicate_entries"):
+        flags["release_duplicate_entries"] = meta["duplicate_entries"]
+    if not meta:
+        flags["release_entry"] = "missing"
+    elif meta.get("subject_id") is None:
+        flags["patient_identity"] = "unconfirmed_case_fallback"
+    return flags
+
+
+def registration_summary(records: list[dict]) -> dict:
+    """Counts only. Scans and patients are counted separately: a patient is counted once however many scans,
+    echoes, tracks or follow-ups it has, and only when its identity is confirmed by the source."""
+    def confirmed(record: dict) -> bool:
+        flags = record.get("provenance") or {}
+        return flags.get("release_entry") != "missing" and "patient_identity" not in flags
+
+    uids = [r["sample_uid"] for r in records]
+    by_release: dict = {}
+    for record in records:
+        provenance = record.get("provenance") or {}
+        if "release_split" not in provenance:
+            continue
+        key = provenance["release_split"] or ("conflict" if "release_split_conflict" in provenance else "missing")
+        row = by_release.setdefault(key, {"scans": 0, "patients": set(), "scans_patient_unconfirmed": 0})
+        row["scans"] += 1
+        if confirmed(record):
+            row["patients"].add(record["patient_uid"])
+        else:
+            row["scans_patient_unconfirmed"] += 1
+    group_of: dict = {}
+    for record in records:
+        group_of.setdefault(record["patient_uid"], set()).add(record["leakage_group_uid"])
+    return {
+        "scans": len(records),
+        "duplicate_sample_uids": len(uids) - len(set(uids)),
+        "patients_confirmed": len({r["patient_uid"] for r in records if confirmed(r)}),
+        "scans_patient_unconfirmed": sum(1 for r in records if not confirmed(r)),
+        "leakage_groups": len({r["leakage_group_uid"] for r in records}),
+        "patients_in_multiple_leakage_groups": sum(1 for groups in group_of.values() if len(groups) > 1),
+        "by_release_split": {k: {**v, "patients": len(v["patients"])} for k, v in sorted(by_release.items())},
+        "formal_split": dict(sorted(Counter(r["split"] for r in records).items())),
+        "exposure_roles": dict(sorted(Counter(e["role"] for r in records for e in r["exposure_history"]).items())),
+        "scans_without_exposure_entry": sum(1 for r in records if not r["exposure_history"]),
+        "scans_without_label": sum(1 for r in records if not r["annotation_records"]),
+    }
 
 
 def provenance_rows(records: list[dict]) -> list[dict]:

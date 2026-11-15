@@ -1,0 +1,21 @@
+# v5.1 supervision policy template (plan_v5 T09a; Proposal_v5 §4.2-4.3). Every value is null on purpose:
+# a real policy is a registered file bound to one scope (GC7, GC11).
+# validate_supervision_v5 rejects any null leaf with SUPERVISION_VALUE_MISSING.
+# Keep only the tasks the run trains; each must be trainable in the scope.
+policy_id: null
+scope_id: null                  # must equal the scope's scope_id
+reference_policy_id: null       # must equal the scope's reference_policy_id
+track: null                     # observable_target | released_reference
+allow_unknown_visibility: null  # true is not allowed with observable_target
+channel: null                   # expert (B2 uses no pseudo labels)
+tasks:
+  A:
+    kind: null                  # softmax
+    ce_weight: null
+    dice_weight: null
+    task_weight: null
+  U:
+    kind: null                  # sigmoid
+    ce_weight: null
+    dice_weight: null
+    task_weight: null

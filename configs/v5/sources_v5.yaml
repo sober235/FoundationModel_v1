@@ -1,0 +1,49 @@
+# v5.1 source policies used by the real T07 run (plan_v5 §2B T07a/T07c). Same fields as
+# sources_v5.template.yaml; the null facts are filled only from real-run evidence, cited inline.
+isles_2022:
+  source_version: isles2022_bids1.6.0
+  source_release: ISLES-2022
+  source_dataset: ISLES_ltr
+  scope_id: isles_u
+  reference_policy_id: isles_released_reference_v1
+  model_modalities: [dwi, adc]
+  # ISLES 2022 protocol (doi:10.1038/s41597-022-01875-5; v41 audits ISLES_PROTOCOL_EVIDENCE): the DWI-defined
+  # infarct mask was edited by trained raters who also read FLAIR, which is not a model input; input
+  # visibility therefore stays unknown (Proposal_v5 §2.3).
+  annotation_modalities: {U: [dwi, adc, flair]}
+  index_evidence: "reports/v5/source_check_isles_2022.md (sha256 dc7658e36bee1e18cab42b3010504a4c42408f48e18c7757bff2c94fe1e62734): DWI and ADC vs mask shape, spacing, affine and axis codes agree in 500/500 pairs; 250/250 paired"
+  physical_units_policy: trust_header
+  physical_units_evidence: "real T07 run 2026-11-08: all 250 DWI headers declare mm, and image and mask spacing and affine agree within 1e-3 in 500/500 pairs (reports/v5/source_check_isles_2022.md, sha256 dc7658e36bee1e18cab42b3010504a4c42408f48e18c7757bff2c94fe1e62734)"
+skm_tea:
+  source_version: skm_tea_annotations_v1.0.0
+  source_release: SKM-TEA v1.0.0
+  source_dataset: SKM-TEA_ltr
+  scope_id: skm_a
+  reference_policy_id: skm_a6_released_reference_v1
+  model_modalities: [qdess_e1, qdess_e2]
+  # SKM-TEA DATASET.md: the qDESS DICOM images were manually segmented; which echo (or combination) the
+  # annotators viewed is not stated, so both echoes of that one acquisition are registered.
+  annotation_modalities: {A: [qdess_e1, qdess_e2]}
+  index_evidence: "reports/v5/source_check_skm_tea.md (sha256 0eee14e3916531c332c4cbbece2af5c86358f7cad6b44307a80d0533446e1e8a): echo1, echo2 and seg share one H5 file and grid; the dicom-track reference equals the H5 seg after the registered transform (x/y swap in 137, x/y swap plus z reversal in 18) with channel order c -> c + 1 in 155/155"
+  # Physical units stay unverified: the NIfTI headers declare no unit (the v41 note records a researcher
+  # confirmation of mm, but no header supports it), so mm metrics are NA for skm_a.
+  physical_units_policy: null
+  physical_units_evidence: null
+# Binding of SKM-TEA to the early-phase joint scope (a source policy serves one scope, so the joint scope has its
+# own source_id). Proposed 2026-11-09, approved by the researcher 2026-11-10. index_evidence cites the redacted
+# source check of the joint scope's own prepare run (2026-11-10, geometry QC reused from the skm_a run); the G-DATA
+# evidence of this (source, task joint) is produced from the joint chain, never copied from skm_a.
+skm_tea_joint_early:
+  source_version: skm_tea_annotations_v1.0.0
+  source_release: SKM-TEA v1.0.0
+  source_dataset: SKM-TEA_ltr
+  scope_id: skm_joint_early
+  reference_policy_id: skm_box_reference_v1
+  model_modalities: [qdess_e1, qdess_e2]
+  # A: the released seg (as skm_a). U: box annotators read the qDESS images and radiology reports (paper
+  # appendix A.4); which echo is not stated. The G-DATA chain guard checks gate task "joint" against these keys
+  # and needs a joint rule (A and U both registered) before the real import's evidence can be judged.
+  annotation_modalities: {A: [qdess_e1, qdess_e2], U: [qdess_e1, qdess_e2]}
+  index_evidence: "reports/v5/source_check_skm_tea_joint_early.md (sha256 a9b787bf285ba68e05f0d7f9a3beafcde02faf97369f51e8632a0c0dcfd13703): 155/155 scans paired, geometry pass in 155/155, and the dicom-track reference equals the H5 seg after the registered transform in 155/155"
+  physical_units_policy: null
+  physical_units_evidence: null

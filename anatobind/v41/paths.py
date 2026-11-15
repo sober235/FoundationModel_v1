@@ -90,6 +90,25 @@ def write_private_json(path: Path, value: Any) -> None:
             tmp.unlink()
 
 
+def write_private_bytes(path: Path, data: bytes) -> None:
+    """Write bytes once with mode 600 (temp file + link), like write_private_json; never overwrite."""
+    path = Path(path)
+    _make_private_dirs(path.parent)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        with os.fdopen(os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(tmp, path)
+        except FileExistsError:
+            raise PrivatePathError("PRIVATE_FILE_EXISTS") from None
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+
 def write_task_record(path: Path, record: dict) -> None:
     if not isinstance(record, dict) or not isinstance(record.get("task_id"), str):
         raise PrivatePathError("TASK_RECORD_INVALID")

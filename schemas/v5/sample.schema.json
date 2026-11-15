@@ -100,7 +100,8 @@
     "reference_policy_id",
     "model_modalities",
     "index_alignment_status",
-    "physical_geometry_status"
+    "physical_geometry_status",
+    "geometry_evidence"
   ],
   "properties": {
     "schema_version": {
@@ -156,7 +157,9 @@
         "required": [
           "experiment_id",
           "role",
-          "recorded_at"
+          "recorded_at",
+          "lineage_id",
+          "evidence"
         ],
         "properties": {
           "experiment_id": {
@@ -165,16 +168,28 @@
           "role": {
             "type": "string",
             "enum": [
-              "train",
-              "val",
-              "test",
-              "ssl",
-              "pseudo_label",
+              "training",
+              "unlabeled_pretraining",
+              "model_selection",
+              "test_results_seen",
+              "administrative_qc",
               "unknown"
             ]
           },
           "recorded_at": {
             "type": "string"
+          },
+          "lineage_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       }
@@ -349,6 +364,28 @@
         "failed",
         "unknown"
       ]
+    },
+    "geometry_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index_alignment",
+        "physical_geometry"
+      ],
+      "properties": {
+        "index_alignment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "physical_geometry": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     }
   }
 }

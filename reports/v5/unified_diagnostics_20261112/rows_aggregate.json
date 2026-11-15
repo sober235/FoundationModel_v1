@@ -1,0 +1,1887 @@
+{
+ "development_val": {
+  "cartilage_lesion": {
+   "box_size_tertile_edges": [
+    17827.666666666664,
+    83003.99999999996
+   ],
+   "box_tissue_groups": {
+    "femoral_cartilage": 19,
+    "patellar_cartilage": 5,
+    "tibial_cartilage": 6
+   },
+   "boxes": 30,
+   "boxes_bag_voxels_sum": 302761,
+   "boxes_positive_voxels_sum": 82337,
+   "boxes_voxels_sum": 2302362,
+   "boxes_whose_largest_touching_is_at_least_1000": 29,
+   "boxes_whose_largest_touching_is_at_least_10000": 29,
+   "components_touching": {
+    "max": 671.0,
+    "mean": 162.3,
+    "min": 3.0,
+    "n": 30,
+    "p10": 13.0,
+    "p25": 23.5,
+    "p50": 78.0,
+    "p75": 205.5,
+    "p90": 502.7
+   },
+   "findings": 723,
+   "findings_by_place_on_tissue_reference_zero": {
+    "ignored": [
+     38,
+     53
+    ],
+    "other_class_primary": [
+     5,
+     5
+    ],
+    "outside_all": [
+     556,
+     661
+    ],
+    "same_class_primary": [
+     1,
+     4
+    ]
+   },
+   "findings_by_size": {
+    "100-999": {
+     "count": 345,
+     "host_groups_predicted": {
+      "None": 281,
+      "femoral_cartilage": 38,
+      "patellar_cartilage": 11,
+      "tibial_cartilage": 15
+     },
+     "host_predicted_bound": 64,
+     "host_reference_bound": 39,
+     "on_tissue_predicted": {
+      "max": 1.0,
+      "mean": 0.0804,
+      "min": 0.0,
+      "n": 345,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.1234
+     },
+     "on_tissue_predicted_zero": 281,
+     "on_tissue_reference": {
+      "max": 1.0,
+      "mean": 0.0664,
+      "min": 0.0,
+      "n": 345,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.0348
+     },
+     "on_tissue_reference_zero": 306,
+     "places": {
+      "ignored": 22,
+      "other_class_primary": 0,
+      "outside_all": 323,
+      "same_class_primary": 0
+     },
+     "probability_mean": {
+      "max": 0.9322,
+      "mean": 0.7414,
+      "min": 0.5821,
+      "n": 345,
+      "p10": 0.6538,
+      "p25": 0.6892,
+      "p50": 0.736,
+      "p75": 0.7973,
+      "p90": 0.8394
+     },
+     "share_of_kept_voxels": 0.0648,
+     "voxel_weighted_on_tissue_predicted": 0.0974,
+     "voxel_weighted_on_tissue_reference": 0.0788,
+     "voxels": 100049
+    },
+    "1000-9999": {
+     "count": 51,
+     "host_groups_predicted": {
+      "None": 31,
+      "femoral_cartilage": 16,
+      "patellar_cartilage": 3,
+      "tibial_cartilage": 1
+     },
+     "host_predicted_bound": 20,
+     "host_reference_bound": 13,
+     "on_tissue_predicted": {
+      "max": 0.9457,
+      "mean": 0.1483,
+      "min": 0.0,
+      "n": 51,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.1179,
+      "p90": 0.6792
+     },
+     "on_tissue_predicted_zero": 31,
+     "on_tissue_reference": {
+      "max": 0.9178,
+      "mean": 0.1289,
+      "min": 0.0,
+      "n": 51,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0023,
+      "p90": 0.7849
+     },
+     "on_tissue_reference_zero": 38,
+     "places": {
+      "ignored": 2,
+      "other_class_primary": 0,
+      "outside_all": 48,
+      "same_class_primary": 1
+     },
+     "probability_mean": {
+      "max": 0.8661,
+      "mean": 0.7945,
+      "min": 0.692,
+      "n": 51,
+      "p10": 0.7388,
+      "p25": 0.7596,
+      "p50": 0.8017,
+      "p75": 0.8264,
+      "p90": 0.8461
+     },
+     "share_of_kept_voxels": 0.0691,
+     "voxel_weighted_on_tissue_predicted": 0.2066,
+     "voxel_weighted_on_tissue_reference": 0.1802,
+     "voxels": 106753
+    },
+    "50-99": {
+     "count": 293,
+     "host_groups_predicted": {
+      "None": 255,
+      "femoral_cartilage": 18,
+      "patellar_cartilage": 4,
+      "tibial_cartilage": 16
+     },
+     "host_predicted_bound": 38,
+     "host_reference_bound": 37,
+     "on_tissue_predicted": {
+      "max": 1.0,
+      "mean": 0.0882,
+      "min": 0.0,
+      "n": 293,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.2915
+     },
+     "on_tissue_predicted_zero": 255,
+     "on_tissue_reference": {
+      "max": 1.0,
+      "mean": 0.0836,
+      "min": 0.0,
+      "n": 293,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.2695
+     },
+     "on_tissue_reference_zero": 256,
+     "places": {
+      "ignored": 22,
+      "other_class_primary": 5,
+      "outside_all": 263,
+      "same_class_primary": 3
+     },
+     "probability_mean": {
+      "max": 0.9397,
+      "mean": 0.7199,
+      "min": 0.5471,
+      "n": 293,
+      "p10": 0.6211,
+      "p25": 0.6538,
+      "p50": 0.7088,
+      "p75": 0.7809,
+      "p90": 0.8402
+     },
+     "share_of_kept_voxels": 0.013,
+     "voxel_weighted_on_tissue_predicted": 0.0891,
+     "voxel_weighted_on_tissue_reference": 0.0837,
+     "voxels": 20066
+    },
+    ">=10000": {
+     "count": 34,
+     "host_groups_predicted": {
+      "femoral_cartilage": 34
+     },
+     "host_predicted_bound": 34,
+     "host_reference_bound": 34,
+     "on_tissue_predicted": {
+      "max": 0.9404,
+      "mean": 0.7876,
+      "min": 0.4022,
+      "n": 34,
+      "p10": 0.6592,
+      "p25": 0.7416,
+      "p50": 0.7976,
+      "p75": 0.8852,
+      "p90": 0.9128
+     },
+     "on_tissue_predicted_zero": 0,
+     "on_tissue_reference": {
+      "max": 0.9508,
+      "mean": 0.7546,
+      "min": 0.3537,
+      "n": 34,
+      "p10": 0.5831,
+      "p25": 0.6839,
+      "p50": 0.7783,
+      "p75": 0.8514,
+      "p90": 0.8952
+     },
+     "on_tissue_reference_zero": 0,
+     "places": {
+      "ignored": 7,
+      "other_class_primary": 0,
+      "outside_all": 27,
+      "same_class_primary": 0
+     },
+     "probability_mean": {
+      "max": 0.8738,
+      "mean": 0.8456,
+      "min": 0.7973,
+      "n": 34,
+      "p10": 0.8268,
+      "p25": 0.8382,
+      "p50": 0.8457,
+      "p75": 0.8542,
+      "p90": 0.8645
+     },
+     "share_of_kept_voxels": 0.8532,
+     "voxel_weighted_on_tissue_predicted": 0.7749,
+     "voxel_weighted_on_tissue_reference": 0.7404,
+     "voxels": 1318061
+    }
+   },
+   "hit_by_box_size_tertile": {
+    "t1": [
+     0,
+     10
+    ],
+    "t2": [
+     2,
+     10
+    ],
+    "t3": [
+     2,
+     10
+    ]
+   },
+   "hit_by_tissue_group": {
+    "femoral_cartilage": [
+     3,
+     19
+    ],
+    "patellar_cartilage": [
+     0,
+     5
+    ],
+    "tibial_cartilage": [
+     1,
+     6
+    ]
+   },
+   "hit_chosen_at_least_10000": 0,
+   "hit_chosen_voxels": {
+    "max": 1181.0,
+    "mean": 347.25,
+    "min": 54.0,
+    "n": 4,
+    "p10": 60.9,
+    "p25": 71.25,
+    "p50": 77.0,
+    "p75": 353.0,
+    "p90": 849.8
+   },
+   "hit_host_groups": {
+    "femoral_cartilage->None": 1,
+    "femoral_cartilage->femoral_cartilage": 2,
+    "tibial_cartilage->femoral_cartilage": 1
+   },
+   "kept_finding_voxels_total": 1544929,
+   "kept_share_of_positive_voxels": 0.815,
+   "kept_touching": {
+    "max": 4.0,
+    "mean": 1.4667,
+    "min": 1.0,
+    "n": 30,
+    "p10": 1.0,
+    "p25": 1.0,
+    "p50": 1.0,
+    "p75": 2.0,
+    "p90": 3.0
+   },
+   "kept_voxels_by_place_of_anchor": {
+    "ignored": 298057,
+    "other_class_primary": 303,
+    "outside_all": 1245191,
+    "same_class_primary": 1378
+   },
+   "kept_voxels_on_tissue_predicted": 0.6828,
+   "kept_voxels_on_tissue_reference": 0.6504,
+   "largest_touching_voxels": {
+    "max": 67330.0,
+    "mean": 42497.7667,
+    "min": 71.0,
+    "n": 30,
+    "p10": 31163.0,
+    "p25": 32786.75,
+    "p50": 41445.0,
+    "p75": 47053.5,
+    "p90": 67330.0
+   },
+   "positive_fraction_bag": {
+    "max": 0.2368,
+    "mean": 0.1568,
+    "min": 0.0402,
+    "n": 30,
+    "p10": 0.0989,
+    "p25": 0.1318,
+    "p50": 0.1675,
+    "p75": 0.183,
+    "p90": 0.1967
+   },
+   "positive_fraction_box": {
+    "max": 0.1294,
+    "mean": 0.0526,
+    "min": 0.0125,
+    "n": 30,
+    "p10": 0.0239,
+    "p25": 0.031,
+    "p50": 0.0494,
+    "p75": 0.0706,
+    "p90": 0.0926
+   },
+   "positive_in_box_on_bag_share": {
+    "max": 0.9565,
+    "mean": 0.6337,
+    "min": 0.2686,
+    "n": 30,
+    "p10": 0.4291,
+    "p25": 0.4975,
+    "p50": 0.6134,
+    "p75": 0.7902,
+    "p90": 0.8809
+   },
+   "positive_voxels_total": 1895539,
+   "scans_with_primary_box": {
+    "kept_per_scan": {
+     "max": 47.0,
+     "mean": 23.5556,
+     "min": 13.0,
+     "n": 18,
+     "p10": 16.5,
+     "p25": 18.5,
+     "p50": 20.5,
+     "p75": 26.0,
+     "p90": 32.2
+    },
+    "largest_finding_voxels_per_scan": {
+     "max": 67330.0,
+     "mean": 39192.6667,
+     "min": 14675.0,
+     "n": 18,
+     "p10": 30953.6,
+     "p25": 32277.5,
+     "p50": 39995.0,
+     "p75": 45686.75,
+     "p90": 47675.7
+    },
+    "n": 18,
+    "positive_voxels_per_scan": {
+     "max": 84405.0,
+     "mean": 58285.3333,
+     "min": 42600.0,
+     "n": 18,
+     "p10": 46591.0,
+     "p25": 51159.0,
+     "p50": 55926.0,
+     "p75": 64022.75,
+     "p90": 70566.4
+    },
+    "scans_with_a_finding_of_at_least_1000": 18,
+    "scans_with_a_finding_of_at_least_10000": 18
+   },
+   "scans_without_primary_box": {
+    "kept_per_scan": {
+     "max": 30.0,
+     "mean": 19.9333,
+     "min": 8.0,
+     "n": 15,
+     "p10": 13.0,
+     "p25": 15.5,
+     "p50": 21.0,
+     "p75": 23.5,
+     "p90": 27.4
+    },
+    "largest_finding_voxels_per_scan": {
+     "max": 57212.0,
+     "mean": 40004.8,
+     "min": 24523.0,
+     "n": 15,
+     "p10": 29402.8,
+     "p25": 33181.0,
+     "p50": 39858.0,
+     "p75": 46537.5,
+     "p90": 48813.6
+    },
+    "n": 15,
+    "positive_voxels_per_scan": {
+     "max": 70547.0,
+     "mean": 56426.8667,
+     "min": 45852.0,
+     "n": 15,
+     "p10": 46913.6,
+     "p25": 50303.0,
+     "p50": 56172.0,
+     "p75": 60463.5,
+     "p90": 67027.2
+    },
+    "scans_with_a_finding_of_at_least_1000": 15,
+    "scans_with_a_finding_of_at_least_10000": 15
+   },
+   "stages": {
+    "anchor_outside": 26,
+    "hit_host_correct": 2,
+    "hit_host_wrong": 2
+   }
+  },
+  "meniscal_tear": {
+   "box_size_tertile_edges": [
+    2022.0,
+    24496.999999999993
+   ],
+   "box_tissue_groups": {
+    "meniscus": 23
+   },
+   "boxes": 23,
+   "boxes_bag_voxels_sum": 116657,
+   "boxes_positive_voxels_sum": 31977,
+   "boxes_voxels_sum": 589725,
+   "boxes_whose_largest_touching_is_at_least_1000": 22,
+   "boxes_whose_largest_touching_is_at_least_10000": 2,
+   "components_touching": {
+    "max": 109.0,
+    "mean": 23.1304,
+    "min": 1.0,
+    "n": 23,
+    "p10": 1.0,
+    "p25": 1.0,
+    "p50": 7.0,
+    "p75": 30.5,
+    "p90": 74.8
+   },
+   "findings": 425,
+   "findings_by_place_on_tissue_reference_zero": {
+    "ignored": [
+     34,
+     50
+    ],
+    "other_class_primary": [
+     6,
+     8
+    ],
+    "outside_all": [
+     249,
+     360
+    ],
+    "same_class_primary": [
+     0,
+     7
+    ]
+   },
+   "findings_by_size": {
+    "100-999": {
+     "count": 191,
+     "host_groups_predicted": {
+      "None": 159,
+      "meniscus": 32
+     },
+     "host_predicted_bound": 32,
+     "host_reference_bound": 33,
+     "on_tissue_predicted": {
+      "max": 0.9977,
+      "mean": 0.1314,
+      "min": 0.0,
+      "n": 191,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.9259
+     },
+     "on_tissue_predicted_zero": 159,
+     "on_tissue_reference": {
+      "max": 0.9935,
+      "mean": 0.129,
+      "min": 0.0,
+      "n": 191,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.8852
+     },
+     "on_tissue_reference_zero": 158,
+     "places": {
+      "ignored": 25,
+      "other_class_primary": 2,
+      "outside_all": 164,
+      "same_class_primary": 0
+     },
+     "probability_mean": {
+      "max": 0.821,
+      "mean": 0.7129,
+      "min": 0.5907,
+      "n": 191,
+      "p10": 0.6463,
+      "p25": 0.6797,
+      "p50": 0.7164,
+      "p75": 0.7495,
+      "p90": 0.7773
+     },
+     "share_of_kept_voxels": 0.1472,
+     "voxel_weighted_on_tissue_predicted": 0.2113,
+     "voxel_weighted_on_tissue_reference": 0.2106,
+     "voxels": 57726
+    },
+    "1000-9999": {
+     "count": 96,
+     "host_groups_predicted": {
+      "None": 5,
+      "meniscus": 91
+     },
+     "host_predicted_bound": 91,
+     "host_reference_bound": 89,
+     "on_tissue_predicted": {
+      "max": 0.9547,
+      "mean": 0.6651,
+      "min": 0.0,
+      "n": 96,
+      "p10": 0.3609,
+      "p25": 0.6042,
+      "p50": 0.7197,
+      "p75": 0.836,
+      "p90": 0.8955
+     },
+     "on_tissue_predicted_zero": 5,
+     "on_tissue_reference": {
+      "max": 0.9607,
+      "mean": 0.6481,
+      "min": 0.0,
+      "n": 96,
+      "p10": 0.3748,
+      "p25": 0.58,
+      "p50": 0.711,
+      "p75": 0.8032,
+      "p90": 0.8855
+     },
+     "on_tissue_reference_zero": 7,
+     "places": {
+      "ignored": 12,
+      "other_class_primary": 3,
+      "outside_all": 75,
+      "same_class_primary": 6
+     },
+     "probability_mean": {
+      "max": 0.8774,
+      "mean": 0.8072,
+      "min": 0.7081,
+      "n": 96,
+      "p10": 0.7655,
+      "p25": 0.7923,
+      "p50": 0.8106,
+      "p75": 0.8261,
+      "p90": 0.8417
+     },
+     "share_of_kept_voxels": 0.802,
+     "voxel_weighted_on_tissue_predicted": 0.6708,
+     "voxel_weighted_on_tissue_reference": 0.6509,
+     "voxels": 314471
+    },
+    "50-99": {
+     "count": 137,
+     "host_groups_predicted": {
+      "None": 121,
+      "meniscus": 16
+     },
+     "host_predicted_bound": 16,
+     "host_reference_bound": 13,
+     "on_tissue_predicted": {
+      "max": 1.0,
+      "mean": 0.0356,
+      "min": 0.0,
+      "n": 137,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.0172
+     },
+     "on_tissue_predicted_zero": 121,
+     "on_tissue_reference": {
+      "max": 1.0,
+      "mean": 0.0452,
+      "min": 0.0,
+      "n": 137,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.0
+     },
+     "on_tissue_reference_zero": 124,
+     "places": {
+      "ignored": 13,
+      "other_class_primary": 3,
+      "outside_all": 121,
+      "same_class_primary": 0
+     },
+     "probability_mean": {
+      "max": 0.8235,
+      "mean": 0.693,
+      "min": 0.5959,
+      "n": 137,
+      "p10": 0.6212,
+      "p25": 0.6543,
+      "p50": 0.6903,
+      "p75": 0.7306,
+      "p90": 0.76
+     },
+     "share_of_kept_voxels": 0.0241,
+     "voxel_weighted_on_tissue_predicted": 0.0361,
+     "voxel_weighted_on_tissue_reference": 0.0465,
+     "voxels": 9462
+    },
+    ">=10000": {
+     "count": 1,
+     "host_groups_predicted": {
+      "meniscus": 1
+     },
+     "host_predicted_bound": 1,
+     "host_reference_bound": 1,
+     "on_tissue_predicted": {
+      "max": 0.4582,
+      "mean": 0.4582,
+      "min": 0.4582,
+      "n": 1,
+      "p10": 0.4582,
+      "p25": 0.4582,
+      "p50": 0.4582,
+      "p75": 0.4582,
+      "p90": 0.4582
+     },
+     "on_tissue_predicted_zero": 0,
+     "on_tissue_reference": {
+      "max": 0.4405,
+      "mean": 0.4405,
+      "min": 0.4405,
+      "n": 1,
+      "p10": 0.4405,
+      "p25": 0.4405,
+      "p50": 0.4405,
+      "p75": 0.4405,
+      "p90": 0.4405
+     },
+     "on_tissue_reference_zero": 0,
+     "places": {
+      "ignored": 0,
+      "other_class_primary": 0,
+      "outside_all": 0,
+      "same_class_primary": 1
+     },
+     "probability_mean": {
+      "max": 0.8126,
+      "mean": 0.8126,
+      "min": 0.8126,
+      "n": 1,
+      "p10": 0.8126,
+      "p25": 0.8126,
+      "p50": 0.8126,
+      "p75": 0.8126,
+      "p90": 0.8126
+     },
+     "share_of_kept_voxels": 0.0267,
+     "voxel_weighted_on_tissue_predicted": 0.4582,
+     "voxel_weighted_on_tissue_reference": 0.4405,
+     "voxels": 10453
+    }
+   },
+   "hit_by_box_size_tertile": {
+    "t1": [
+     0,
+     8
+    ],
+    "t2": [
+     2,
+     7
+    ],
+    "t3": [
+     5,
+     8
+    ]
+   },
+   "hit_by_tissue_group": {
+    "meniscus": [
+     7,
+     23
+    ]
+   },
+   "hit_chosen_at_least_10000": 1,
+   "hit_chosen_voxels": {
+    "max": 10453.0,
+    "mean": 4697.5714,
+    "min": 1518.0,
+    "n": 7,
+    "p10": 2157.6,
+    "p25": 2878.0,
+    "p50": 4269.0,
+    "p75": 5443.5,
+    "p90": 7657.6
+   },
+   "hit_host_groups": {
+    "meniscus->meniscus": 7
+   },
+   "kept_finding_voxels_total": 392112,
+   "kept_share_of_positive_voxels": 0.8206,
+   "kept_touching": {
+    "max": 2.0,
+    "mean": 1.1304,
+    "min": 1.0,
+    "n": 23,
+    "p10": 1.0,
+    "p25": 1.0,
+    "p50": 1.0,
+    "p75": 1.0,
+    "p90": 1.8
+   },
+   "kept_voxels_by_place_of_anchor": {
+    "ignored": 51458,
+    "other_class_primary": 9277,
+    "outside_all": 298494,
+    "same_class_primary": 32883
+   },
+   "kept_voxels_on_tissue_predicted": 0.5822,
+   "kept_voxels_on_tissue_reference": 0.5659,
+   "largest_touching_voxels": {
+    "max": 10453.0,
+    "mean": 4894.3478,
+    "min": 589.0,
+    "n": 23,
+    "p10": 1948.2,
+    "p25": 2923.0,
+    "p50": 4305.0,
+    "p75": 6015.0,
+    "p90": 9987.0
+   },
+   "positive_fraction_bag": {
+    "max": 0.347,
+    "mean": 0.2143,
+    "min": 0.022,
+    "n": 23,
+    "p10": 0.0841,
+    "p25": 0.1882,
+    "p50": 0.2314,
+    "p75": 0.2699,
+    "p90": 0.3128
+   },
+   "positive_fraction_box": {
+    "max": 0.3476,
+    "mean": 0.1244,
+    "min": 0.0073,
+    "n": 23,
+    "p10": 0.032,
+    "p25": 0.046,
+    "p50": 0.0735,
+    "p75": 0.2266,
+    "p90": 0.2526
+   },
+   "positive_in_box_on_bag_share": {
+    "max": 1.0,
+    "mean": 0.8019,
+    "min": 0.4598,
+    "n": 23,
+    "p10": 0.564,
+    "p25": 0.6521,
+    "p50": 0.8613,
+    "p75": 0.9377,
+    "p90": 0.9938
+   },
+   "positive_voxels_total": 477858,
+   "scans_with_primary_box": {
+    "kept_per_scan": {
+     "max": 17.0,
+     "mean": 12.0,
+     "min": 6.0,
+     "n": 17,
+     "p10": 8.0,
+     "p25": 11.0,
+     "p50": 13.0,
+     "p75": 14.0,
+     "p90": 14.4
+    },
+    "largest_finding_voxels_per_scan": {
+     "max": 10453.0,
+     "mean": 5079.0588,
+     "min": 2670.0,
+     "n": 17,
+     "p10": 2945.4,
+     "p25": 3460.0,
+     "p50": 4305.0,
+     "p75": 6116.0,
+     "p90": 7894.2
+    },
+    "n": 17,
+    "positive_voxels_per_scan": {
+     "max": 25619.0,
+     "mean": 15340.0588,
+     "min": 8381.0,
+     "n": 17,
+     "p10": 10545.0,
+     "p25": 11831.0,
+     "p50": 15660.0,
+     "p75": 16635.0,
+     "p90": 21464.0
+    },
+    "scans_with_a_finding_of_at_least_1000": 17,
+    "scans_with_a_finding_of_at_least_10000": 1
+   },
+   "scans_without_primary_box": {
+    "kept_per_scan": {
+     "max": 21.0,
+     "mean": 13.8125,
+     "min": 8.0,
+     "n": 16,
+     "p10": 10.0,
+     "p25": 11.0,
+     "p50": 14.0,
+     "p75": 16.25,
+     "p90": 17.5
+    },
+    "largest_finding_voxels_per_scan": {
+     "max": 8540.0,
+     "mean": 4696.75,
+     "min": 1895.0,
+     "n": 16,
+     "p10": 2436.0,
+     "p25": 3411.75,
+     "p50": 4218.0,
+     "p75": 5988.75,
+     "p90": 7317.0
+    },
+    "n": 16,
+    "positive_voxels_per_scan": {
+     "max": 18902.0,
+     "mean": 13567.3125,
+     "min": 9328.0,
+     "n": 16,
+     "p10": 9879.5,
+     "p25": 10566.0,
+     "p50": 13403.5,
+     "p75": 16525.0,
+     "p90": 17976.0
+    },
+    "scans_with_a_finding_of_at_least_1000": 16,
+    "scans_with_a_finding_of_at_least_10000": 0
+   },
+   "stages": {
+    "anchor_outside": 16,
+    "hit_host_correct": 7
+   }
+  },
+  "n_scans": 33,
+  "reused_identical": [
+   33,
+   33
+  ],
+  "scans_with_a_primary_box": {
+   "findings_per_scan": {
+    "max": 58.0,
+    "mean": 34.5217,
+    "min": 26.0,
+    "n": 23,
+    "p10": 26.0,
+    "p25": 27.5,
+    "p50": 33.0,
+    "p75": 37.0,
+    "p90": 45.8
+   },
+   "n": 23
+  },
+  "scans_without_any_primary_box": {
+   "findings_per_scan": {
+    "max": 46.0,
+    "mean": 35.4,
+    "min": 22.0,
+    "n": 10,
+    "p10": 29.2,
+    "p25": 32.25,
+    "p50": 34.5,
+    "p75": 40.0,
+    "p90": 44.2
+   },
+   "n": 10
+  }
+ },
+ "train": {
+  "cartilage_lesion": {
+   "box_size_tertile_edges": [
+    26930.999999999993,
+    89197.33333333331
+   ],
+   "box_tissue_groups": {
+    "femoral_cartilage": 48,
+    "patellar_cartilage": 13,
+    "tibial_cartilage": 11
+   },
+   "boxes": 72,
+   "boxes_bag_voxels_sum": 688843,
+   "boxes_positive_voxels_sum": 216903,
+   "boxes_voxels_sum": 6847441,
+   "boxes_whose_largest_touching_is_at_least_1000": 72,
+   "boxes_whose_largest_touching_is_at_least_10000": 70,
+   "components_touching": {
+    "max": 798.0,
+    "mean": 122.4861,
+    "min": 1.0,
+    "n": 72,
+    "p10": 7.2,
+    "p25": 22.25,
+    "p50": 81.5,
+    "p75": 194.5,
+    "p90": 288.0
+   },
+   "findings": 1790,
+   "findings_by_place_on_tissue_reference_zero": {
+    "ignored": [
+     76,
+     102
+    ],
+    "other_class_primary": [
+     2,
+     4
+    ],
+    "outside_all": [
+     1389,
+     1669
+    ],
+    "same_class_primary": [
+     12,
+     15
+    ]
+   },
+   "findings_by_size": {
+    "100-999": {
+     "count": 851,
+     "host_groups_predicted": {
+      "None": 707,
+      "femoral_cartilage": 80,
+      "patellar_cartilage": 26,
+      "tibial_cartilage": 38
+     },
+     "host_predicted_bound": 144,
+     "host_reference_bound": 102,
+     "on_tissue_predicted": {
+      "max": 1.0,
+      "mean": 0.0939,
+      "min": 0.0,
+      "n": 851,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.4677
+     },
+     "on_tissue_predicted_zero": 707,
+     "on_tissue_reference": {
+      "max": 1.0,
+      "mean": 0.0842,
+      "min": 0.0,
+      "n": 851,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.3209
+     },
+     "on_tissue_reference_zero": 749,
+     "places": {
+      "ignored": 45,
+      "other_class_primary": 1,
+      "outside_all": 801,
+      "same_class_primary": 4
+     },
+     "probability_mean": {
+      "max": 0.9194,
+      "mean": 0.7331,
+      "min": 0.5709,
+      "n": 851,
+      "p10": 0.647,
+      "p25": 0.681,
+      "p50": 0.7299,
+      "p75": 0.7838,
+      "p90": 0.8222
+     },
+     "share_of_kept_voxels": 0.0624,
+     "voxel_weighted_on_tissue_predicted": 0.096,
+     "voxel_weighted_on_tissue_reference": 0.0858,
+     "voxels": 248106
+    },
+    "1000-9999": {
+     "count": 98,
+     "host_groups_predicted": {
+      "None": 51,
+      "femoral_cartilage": 32,
+      "patellar_cartilage": 7,
+      "tibial_cartilage": 8
+     },
+     "host_predicted_bound": 47,
+     "host_reference_bound": 25,
+     "on_tissue_predicted": {
+      "max": 0.9991,
+      "mean": 0.1966,
+      "min": 0.0,
+      "n": 98,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.3347,
+      "p90": 0.8418
+     },
+     "on_tissue_predicted_zero": 51,
+     "on_tissue_reference": {
+      "max": 0.9927,
+      "mean": 0.1665,
+      "min": 0.0,
+      "n": 98,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.013,
+      "p90": 0.8184
+     },
+     "on_tissue_reference_zero": 73,
+     "places": {
+      "ignored": 5,
+      "other_class_primary": 0,
+      "outside_all": 93,
+      "same_class_primary": 0
+     },
+     "probability_mean": {
+      "max": 0.8685,
+      "mean": 0.7963,
+      "min": 0.6612,
+      "n": 98,
+      "p10": 0.7286,
+      "p25": 0.7745,
+      "p50": 0.8027,
+      "p75": 0.8301,
+      "p90": 0.8439
+     },
+     "share_of_kept_voxels": 0.0526,
+     "voxel_weighted_on_tissue_predicted": 0.2668,
+     "voxel_weighted_on_tissue_reference": 0.2231,
+     "voxels": 209107
+    },
+    "50-99": {
+     "count": 753,
+     "host_groups_predicted": {
+      "None": 636,
+      "femoral_cartilage": 70,
+      "patellar_cartilage": 14,
+      "tibial_cartilage": 33
+     },
+     "host_predicted_bound": 117,
+     "host_reference_bound": 97,
+     "on_tissue_predicted": {
+      "max": 1.0,
+      "mean": 0.1077,
+      "min": 0.0,
+      "n": 753,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.7013
+     },
+     "on_tissue_predicted_zero": 636,
+     "on_tissue_reference": {
+      "max": 1.0,
+      "mean": 0.0952,
+      "min": 0.0,
+      "n": 753,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.5243
+     },
+     "on_tissue_reference_zero": 656,
+     "places": {
+      "ignored": 39,
+      "other_class_primary": 3,
+      "outside_all": 701,
+      "same_class_primary": 10
+     },
+     "probability_mean": {
+      "max": 0.9386,
+      "mean": 0.7159,
+      "min": 0.5588,
+      "n": 753,
+      "p10": 0.6195,
+      "p25": 0.6549,
+      "p50": 0.7045,
+      "p75": 0.7701,
+      "p90": 0.8274
+     },
+     "share_of_kept_voxels": 0.013,
+     "voxel_weighted_on_tissue_predicted": 0.1083,
+     "voxel_weighted_on_tissue_reference": 0.0947,
+     "voxels": 51631
+    },
+    ">=10000": {
+     "count": 88,
+     "host_groups_predicted": {
+      "femoral_cartilage": 88
+     },
+     "host_predicted_bound": 88,
+     "host_reference_bound": 87,
+     "on_tissue_predicted": {
+      "max": 0.9523,
+      "mean": 0.8024,
+      "min": 0.0696,
+      "n": 88,
+      "p10": 0.6437,
+      "p25": 0.7486,
+      "p50": 0.839,
+      "p75": 0.8917,
+      "p90": 0.9099
+     },
+     "on_tissue_predicted_zero": 0,
+     "on_tissue_reference": {
+      "max": 0.942,
+      "mean": 0.76,
+      "min": 0.0,
+      "n": 88,
+      "p10": 0.5751,
+      "p25": 0.6968,
+      "p50": 0.79,
+      "p75": 0.8654,
+      "p90": 0.8926
+     },
+     "on_tissue_reference_zero": 1,
+     "places": {
+      "ignored": 13,
+      "other_class_primary": 0,
+      "outside_all": 74,
+      "same_class_primary": 1
+     },
+     "probability_mean": {
+      "max": 0.8654,
+      "mean": 0.8457,
+      "min": 0.7948,
+      "n": 88,
+      "p10": 0.8292,
+      "p25": 0.8388,
+      "p50": 0.8473,
+      "p75": 0.8532,
+      "p90": 0.8607
+     },
+     "share_of_kept_voxels": 0.8721,
+     "voxel_weighted_on_tissue_predicted": 0.7988,
+     "voxel_weighted_on_tissue_reference": 0.7546,
+     "voxels": 3468285
+    }
+   },
+   "hit_by_box_size_tertile": {
+    "t1": [
+     1,
+     24
+    ],
+    "t2": [
+     4,
+     24
+    ],
+    "t3": [
+     6,
+     24
+    ]
+   },
+   "hit_by_tissue_group": {
+    "femoral_cartilage": [
+     7,
+     48
+    ],
+    "patellar_cartilage": [
+     2,
+     13
+    ],
+    "tibial_cartilage": [
+     2,
+     11
+    ]
+   },
+   "hit_chosen_at_least_10000": 1,
+   "hit_chosen_voxels": {
+    "max": 48978.0,
+    "mean": 4549.1818,
+    "min": 50.0,
+    "n": 11,
+    "p10": 51.0,
+    "p25": 64.5,
+    "p50": 77.0,
+    "p75": 162.0,
+    "p90": 242.0
+   },
+   "hit_host_groups": {
+    "femoral_cartilage->None": 6,
+    "femoral_cartilage->femoral_cartilage": 1,
+    "patellar_cartilage->None": 1,
+    "patellar_cartilage->patellar_cartilage": 1,
+    "tibial_cartilage->None": 1,
+    "tibial_cartilage->tibial_cartilage": 1
+   },
+   "kept_finding_voxels_total": 3977129,
+   "kept_share_of_positive_voxels": 0.823,
+   "kept_touching": {
+    "max": 5.0,
+    "mean": 1.2778,
+    "min": 1.0,
+    "n": 72,
+    "p10": 1.0,
+    "p25": 1.0,
+    "p50": 1.0,
+    "p75": 1.0,
+    "p90": 2.0
+   },
+   "kept_voxels_by_place_of_anchor": {
+    "ignored": 652697,
+    "other_class_primary": 309,
+    "outside_all": 3273758,
+    "same_class_primary": 50365
+   },
+   "kept_voxels_on_tissue_predicted": 0.718,
+   "kept_voxels_on_tissue_reference": 0.6764,
+   "largest_touching_voxels": {
+    "max": 67536.0,
+    "mean": 43938.75,
+    "min": 2700.0,
+    "n": 72,
+    "p10": 30931.1,
+    "p25": 34983.0,
+    "p50": 44171.0,
+    "p75": 52912.0,
+    "p90": 61461.0
+   },
+   "positive_fraction_bag": {
+    "max": 0.2452,
+    "mean": 0.1795,
+    "min": 0.1267,
+    "n": 72,
+    "p10": 0.1482,
+    "p25": 0.1611,
+    "p50": 0.1777,
+    "p75": 0.1941,
+    "p90": 0.2171
+   },
+   "positive_fraction_box": {
+    "max": 0.2361,
+    "mean": 0.054,
+    "min": 0.0043,
+    "n": 72,
+    "p10": 0.007,
+    "p25": 0.0254,
+    "p50": 0.0431,
+    "p75": 0.0723,
+    "p90": 0.0982
+   },
+   "positive_in_box_on_bag_share": {
+    "max": 1.0,
+    "mean": 0.5942,
+    "min": 0.0011,
+    "n": 72,
+    "p10": 0.3412,
+    "p25": 0.4497,
+    "p50": 0.5942,
+    "p75": 0.8096,
+    "p90": 0.9104
+   },
+   "positive_voxels_total": 4832458,
+   "scans_with_primary_box": {
+    "kept_per_scan": {
+     "max": 58.0,
+     "mean": 21.7297,
+     "min": 8.0,
+     "n": 37,
+     "p10": 12.6,
+     "p25": 14.0,
+     "p50": 21.0,
+     "p75": 25.0,
+     "p90": 30.2
+    },
+    "largest_finding_voxels_per_scan": {
+     "max": 67536.0,
+     "mean": 42365.7297,
+     "min": 17026.0,
+     "n": 37,
+     "p10": 27249.6,
+     "p25": 34932.0,
+     "p50": 43420.0,
+     "p75": 48772.0,
+     "p90": 56416.4
+    },
+    "n": 37,
+    "positive_voxels_per_scan": {
+     "max": 86040.0,
+     "mean": 59381.0541,
+     "min": 29933.0,
+     "n": 37,
+     "p10": 46176.6,
+     "p25": 49800.0,
+     "p50": 58456.0,
+     "p75": 70416.0,
+     "p90": 72854.6
+    },
+    "scans_with_a_finding_of_at_least_1000": 37,
+    "scans_with_a_finding_of_at_least_10000": 37
+   },
+   "scans_without_primary_box": {
+    "kept_per_scan": {
+     "max": 99.0,
+     "mean": 20.1224,
+     "min": 4.0,
+     "n": 49,
+     "p10": 10.8,
+     "p25": 13.0,
+     "p50": 18.0,
+     "p75": 23.0,
+     "p90": 30.2
+    },
+    "largest_finding_voxels_per_scan": {
+     "max": 66251.0,
+     "mean": 38323.8571,
+     "min": 14653.0,
+     "n": 49,
+     "p10": 23606.8,
+     "p25": 31151.0,
+     "p50": 39027.0,
+     "p75": 46180.0,
+     "p90": 48996.0
+    },
+    "n": 49,
+    "positive_voxels_per_scan": {
+     "max": 103250.0,
+     "mean": 53782.8367,
+     "min": 30349.0,
+     "n": 49,
+     "p10": 40258.8,
+     "p25": 45230.0,
+     "p50": 53635.0,
+     "p75": 59915.0,
+     "p90": 65727.8
+    },
+    "scans_with_a_finding_of_at_least_1000": 49,
+    "scans_with_a_finding_of_at_least_10000": 49
+   },
+   "stages": {
+    "anchor_outside": 61,
+    "hit_host_correct": 3,
+    "hit_host_wrong": 8
+   }
+  },
+  "meniscal_tear": {
+   "box_size_tertile_edges": [
+    3600.0,
+    31654.0
+   ],
+   "box_tissue_groups": {
+    "meniscus": 34
+   },
+   "boxes": 34,
+   "boxes_bag_voxels_sum": 264870,
+   "boxes_positive_voxels_sum": 75594,
+   "boxes_voxels_sum": 1676353,
+   "boxes_whose_largest_touching_is_at_least_1000": 34,
+   "boxes_whose_largest_touching_is_at_least_10000": 1,
+   "components_touching": {
+    "max": 256.0,
+    "mean": 46.2941,
+    "min": 1.0,
+    "n": 34,
+    "p10": 1.0,
+    "p25": 2.0,
+    "p50": 22.0,
+    "p75": 60.25,
+    "p90": 115.5
+   },
+   "findings": 1057,
+   "findings_by_place_on_tissue_reference_zero": {
+    "ignored": [
+     107,
+     125
+    ],
+    "other_class_primary": [
+     24,
+     32
+    ],
+    "outside_all": [
+     582,
+     882
+    ],
+    "same_class_primary": [
+     5,
+     18
+    ]
+   },
+   "findings_by_size": {
+    "100-999": {
+     "count": 485,
+     "host_groups_predicted": {
+      "None": 386,
+      "meniscus": 99
+     },
+     "host_predicted_bound": 99,
+     "host_reference_bound": 99,
+     "on_tissue_predicted": {
+      "max": 1.0,
+      "mean": 0.1497,
+      "min": 0.0,
+      "n": 485,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.8909
+     },
+     "on_tissue_predicted_zero": 386,
+     "on_tissue_reference": {
+      "max": 1.0,
+      "mean": 0.1413,
+      "min": 0.0,
+      "n": 485,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.851
+     },
+     "on_tissue_reference_zero": 386,
+     "places": {
+      "ignored": 59,
+      "other_class_primary": 18,
+      "outside_all": 406,
+      "same_class_primary": 2
+     },
+     "probability_mean": {
+      "max": 0.8494,
+      "mean": 0.7199,
+      "min": 0.5812,
+      "n": 485,
+      "p10": 0.6442,
+      "p25": 0.6778,
+      "p50": 0.7216,
+      "p75": 0.7595,
+      "p90": 0.7936
+     },
+     "share_of_kept_voxels": 0.1574,
+     "voxel_weighted_on_tissue_predicted": 0.2795,
+     "voxel_weighted_on_tissue_reference": 0.2629,
+     "voxels": 151759
+    },
+    "1000-9999": {
+     "count": 219,
+     "host_groups_predicted": {
+      "None": 11,
+      "meniscus": 208
+     },
+     "host_predicted_bound": 208,
+     "host_reference_bound": 209,
+     "on_tissue_predicted": {
+      "max": 0.9555,
+      "mean": 0.6849,
+      "min": 0.0,
+      "n": 219,
+      "p10": 0.4739,
+      "p25": 0.6025,
+      "p50": 0.7102,
+      "p75": 0.8464,
+      "p90": 0.9037
+     },
+     "on_tissue_predicted_zero": 11,
+     "on_tissue_reference": {
+      "max": 0.9693,
+      "mean": 0.6495,
+      "min": 0.0,
+      "n": 219,
+      "p10": 0.4377,
+      "p25": 0.5466,
+      "p50": 0.6792,
+      "p75": 0.8037,
+      "p90": 0.8922
+     },
+     "on_tissue_reference_zero": 10,
+     "places": {
+      "ignored": 12,
+      "other_class_primary": 6,
+      "outside_all": 189,
+      "same_class_primary": 12
+     },
+     "probability_mean": {
+      "max": 0.8774,
+      "mean": 0.8056,
+      "min": 0.6641,
+      "n": 219,
+      "p10": 0.7687,
+      "p25": 0.7902,
+      "p50": 0.81,
+      "p75": 0.8279,
+      "p90": 0.8453
+     },
+     "share_of_kept_voxels": 0.792,
+     "voxel_weighted_on_tissue_predicted": 0.6759,
+     "voxel_weighted_on_tissue_reference": 0.6431,
+     "voxels": 763516
+    },
+    "50-99": {
+     "count": 351,
+     "host_groups_predicted": {
+      "None": 320,
+      "meniscus": 31
+     },
+     "host_predicted_bound": 31,
+     "host_reference_bound": 29,
+     "on_tissue_predicted": {
+      "max": 1.0,
+      "mean": 0.0496,
+      "min": 0.0,
+      "n": 351,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.0
+     },
+     "on_tissue_predicted_zero": 320,
+     "on_tissue_reference": {
+      "max": 1.0,
+      "mean": 0.048,
+      "min": 0.0,
+      "n": 351,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0,
+      "p75": 0.0,
+      "p90": 0.0
+     },
+     "on_tissue_reference_zero": 322,
+     "places": {
+      "ignored": 54,
+      "other_class_primary": 8,
+      "outside_all": 286,
+      "same_class_primary": 3
+     },
+     "probability_mean": {
+      "max": 0.866,
+      "mean": 0.6925,
+      "min": 0.5471,
+      "n": 351,
+      "p10": 0.6199,
+      "p25": 0.6487,
+      "p50": 0.6888,
+      "p75": 0.7327,
+      "p90": 0.7755
+     },
+     "share_of_kept_voxels": 0.0253,
+     "voxel_weighted_on_tissue_predicted": 0.0493,
+     "voxel_weighted_on_tissue_reference": 0.0474,
+     "voxels": 24396
+    },
+    ">=10000": {
+     "count": 2,
+     "host_groups_predicted": {
+      "meniscus": 2
+     },
+     "host_predicted_bound": 2,
+     "host_reference_bound": 2,
+     "on_tissue_predicted": {
+      "max": 0.5731,
+      "mean": 0.5219,
+      "min": 0.4708,
+      "n": 2,
+      "p10": 0.481,
+      "p25": 0.4963,
+      "p50": 0.5219,
+      "p75": 0.5475,
+      "p90": 0.5629
+     },
+     "on_tissue_predicted_zero": 0,
+     "on_tissue_reference": {
+      "max": 0.4726,
+      "mean": 0.4479,
+      "min": 0.4232,
+      "n": 2,
+      "p10": 0.4282,
+      "p25": 0.4356,
+      "p50": 0.4479,
+      "p75": 0.4602,
+      "p90": 0.4677
+     },
+     "on_tissue_reference_zero": 0,
+     "places": {
+      "ignored": 0,
+      "other_class_primary": 0,
+      "outside_all": 1,
+      "same_class_primary": 1
+     },
+     "probability_mean": {
+      "max": 0.7958,
+      "mean": 0.7955,
+      "min": 0.7952,
+      "n": 2,
+      "p10": 0.7952,
+      "p25": 0.7953,
+      "p50": 0.7955,
+      "p75": 0.7957,
+      "p90": 0.7958
+     },
+     "share_of_kept_voxels": 0.0252,
+     "voxel_weighted_on_tissue_predicted": 0.5304,
+     "voxel_weighted_on_tissue_reference": 0.452,
+     "voxels": 24316
+    }
+   },
+   "hit_by_box_size_tertile": {
+    "t1": [
+     0,
+     11
+    ],
+    "t2": [
+     3,
+     11
+    ],
+    "t3": [
+     10,
+     12
+    ]
+   },
+   "hit_by_tissue_group": {
+    "meniscus": [
+     13,
+     34
+    ]
+   },
+   "hit_chosen_at_least_10000": 1,
+   "hit_chosen_voxels": {
+    "max": 14158.0,
+    "mean": 5111.5385,
+    "min": 70.0,
+    "n": 13,
+    "p10": 696.4,
+    "p25": 3988.0,
+    "p50": 4329.0,
+    "p75": 6023.0,
+    "p90": 8508.8
+   },
+   "hit_host_groups": {
+    "meniscus->None": 2,
+    "meniscus->meniscus": 11
+   },
+   "kept_finding_voxels_total": 963987,
+   "kept_share_of_positive_voxels": 0.8214,
+   "kept_touching": {
+    "max": 4.0,
+    "mean": 1.4412,
+    "min": 1.0,
+    "n": 34,
+    "p10": 1.0,
+    "p25": 1.0,
+    "p50": 1.0,
+    "p75": 2.0,
+    "p90": 2.0
+   },
+   "kept_voxels_by_place_of_anchor": {
+    "ignored": 66090,
+    "other_class_primary": 42430,
+    "outside_all": 780741,
+    "same_class_primary": 74726
+   },
+   "kept_voxels_on_tissue_predicted": 0.5939,
+   "kept_voxels_on_tissue_reference": 0.5633,
+   "largest_touching_voxels": {
+    "max": 14158.0,
+    "mean": 5733.7941,
+    "min": 1701.0,
+    "n": 34,
+    "p10": 3415.8,
+    "p25": 4051.5,
+    "p50": 5558.5,
+    "p75": 6741.75,
+    "p90": 8890.6
+   },
+   "positive_fraction_bag": {
+    "max": 0.5,
+    "mean": 0.2457,
+    "min": 0.1282,
+    "n": 34,
+    "p10": 0.1781,
+    "p25": 0.1974,
+    "p50": 0.2302,
+    "p75": 0.2782,
+    "p90": 0.3165
+   },
+   "positive_fraction_box": {
+    "max": 0.4193,
+    "mean": 0.1293,
+    "min": 0.0112,
+    "n": 34,
+    "p10": 0.0247,
+    "p25": 0.0593,
+    "p50": 0.1117,
+    "p75": 0.1663,
+    "p90": 0.2573
+   },
+   "positive_in_box_on_bag_share": {
+    "max": 1.0,
+    "mean": 0.7135,
+    "min": 0.0093,
+    "n": 34,
+    "p10": 0.2619,
+    "p25": 0.6264,
+    "p50": 0.7738,
+    "p75": 0.9347,
+    "p90": 0.984
+   },
+   "positive_voxels_total": 1173570,
+   "scans_with_primary_box": {
+    "kept_per_scan": {
+     "max": 21.0,
+     "mean": 12.4231,
+     "min": 7.0,
+     "n": 26,
+     "p10": 8.5,
+     "p25": 9.0,
+     "p50": 12.0,
+     "p75": 14.75,
+     "p90": 17.0
+    },
+    "largest_finding_voxels_per_scan": {
+     "max": 14158.0,
+     "mean": 6428.0,
+     "min": 2495.0,
+     "n": 26,
+     "p10": 3824.0,
+     "p25": 5041.5,
+     "p50": 6095.5,
+     "p75": 7709.75,
+     "p90": 9067.5
+    },
+    "n": 26,
+    "positive_voxels_per_scan": {
+     "max": 32892.0,
+     "mean": 17184.8462,
+     "min": 9222.0,
+     "n": 26,
+     "p10": 11183.0,
+     "p25": 13455.25,
+     "p50": 15254.5,
+     "p75": 20722.0,
+     "p90": 24149.5
+    },
+    "scans_with_a_finding_of_at_least_1000": 26,
+    "scans_with_a_finding_of_at_least_10000": 1
+   },
+   "scans_without_primary_box": {
+    "kept_per_scan": {
+     "max": 23.0,
+     "mean": 12.2333,
+     "min": 6.0,
+     "n": 60,
+     "p10": 6.9,
+     "p25": 9.0,
+     "p50": 11.5,
+     "p75": 15.0,
+     "p90": 17.0
+    },
+    "largest_finding_voxels_per_scan": {
+     "max": 10158.0,
+     "mean": 4263.2,
+     "min": 1630.0,
+     "n": 60,
+     "p10": 2418.7,
+     "p25": 2757.5,
+     "p50": 3467.5,
+     "p75": 5350.75,
+     "p90": 7665.7
+    },
+    "n": 60,
+    "positive_voxels_per_scan": {
+     "max": 25047.0,
+     "mean": 12112.7333,
+     "min": 5392.0,
+     "n": 60,
+     "p10": 7040.2,
+     "p25": 8470.75,
+     "p50": 10749.5,
+     "p75": 14676.5,
+     "p90": 18592.9
+    },
+    "scans_with_a_finding_of_at_least_1000": 60,
+    "scans_with_a_finding_of_at_least_10000": 1
+   },
+   "stages": {
+    "anchor_outside": 21,
+    "hit_host_correct": 11,
+    "hit_host_wrong": 2
+   }
+  },
+  "n_scans": 86,
+  "reused_identical": [
+   0,
+   0
+  ],
+  "scans_with_a_primary_box": {
+   "findings_per_scan": {
+    "max": 71.0,
+    "mean": 34.0217,
+    "min": 19.0,
+    "n": 46,
+    "p10": 22.5,
+    "p25": 27.0,
+    "p50": 32.0,
+    "p75": 39.0,
+    "p90": 46.0
+   },
+   "n": 46
+  },
+  "scans_without_any_primary_box": {
+   "findings_per_scan": {
+    "max": 122.0,
+    "mean": 32.05,
+    "min": 15.0,
+    "n": 40,
+    "p10": 19.0,
+    "p25": 23.0,
+    "p50": 30.0,
+    "p75": 35.25,
+    "p90": 46.0
+   },
+   "n": 40
+  }
+ }
+}
