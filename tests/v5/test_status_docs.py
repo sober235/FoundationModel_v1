@@ -620,3 +620,172 @@ def test_status_records_the_pilot_as_a_completed_run_not_as_validated_performanc
     meta = _front_matter()
     assert meta["scientific_conclusion"] == "NOT_EVALUATED" and meta["core_target_validated"] is None
     assert "CST" not in section and "amax 时间" not in section
+
+
+# ---------------------------------------------------------------------------
+# Second negative top-k pilot, 5 % (approved by the researcher on 2026-11-13)
+
+PILOT05_PLAN_SHA256 = "b4c3813a56bedd1548c0d4c8dd839cabf38cca30e694f195e0bcd2e86c6f627e"
+PILOT05_FOLDER = Path("reports/v5/negtopk05_pilot_20261113")
+PILOT05_REPORT = Path("reports/v5/negtopk05_pilot_20261113.md")
+PILOT05_PREREG = Path("reports/v5/negtopk05_pilot_prereg_20261113.md")
+PILOT05_PREREG_SHA256 = "5793bec8425bb44b9822dd5b3109fe22d12a9def72ef42e5d8035642a5dc1b40"
+PILOT05_CHECKPOINTS = ("895f69a9adfb2c455a5fbf7e9a5b5b49c951a5e40431b9b13b1a694b5461a928",
+                       "61274cd3d0f3a144abe414aab7b782923c835fe3a7ac6a67e20868f2a19aa105",
+                       "d0ea7813227d300f9b038e281a26c84dada72811beb39fa323f9b629a8d2b0b3")
+PILOT05_APPROVALS = ("3ee65a9b16905b729a22ff2edfd761f2e5a7cea066a64cffa2ba648204563bcf",
+                     "0b91e09be38879c8afea14048cef68dcf0f51af10460be667d1048e1f594bc37")
+# name: (sha256 of the copy in the repository, sha256 of the untouched server file, figures of the server's timing
+# replaced before the copy left the server)
+PILOT05_ARCHIVE = {
+    "smoke.md": ("618023f7e2cab42eb2be145020652d8f5e5b1f156dd7a1c376bfa44777b3b2fd",
+                 "daf39fdc0831d4ffad9f8d941bf0615ebd013aab5dc6742de693431cdaf11703", 2),
+    "training.md": ("717f3aa65b7bb173dbb1c437dc06382be4aef685b91661d24d21ef4914a1b408",
+                    "ea7f447d64270546f4b4625fc7b59d98dcc378c9b8f15c7002263a30c39f2677", 1),
+    "comparison.md": ("399e82e5a6ae1ba3dbad81dd662d78e8040d6da8323a750f6348e99d6b5a54df",
+                      "399e82e5a6ae1ba3dbad81dd662d78e8040d6da8323a750f6348e99d6b5a54df", 0),
+    "evaluation_new_6000.md": ("a88f1ebfa5447b6d04dd1e19f35851f23c8e7e53ad6185aac1ea285792938674",
+                               "34713e9d1d53aeb35f0f09f092aa6c0fd62df14c04c46a0dde23fdc6d9354999", 2),
+    "evaluation_old_6000.md": ("6699b33f6781b45d6559241b5f5339bd64c1840a39846677553d290c261a3270",
+                               "aa9d52ae01034f2e1556ba72a087c72d040673b6c787b7171acd18b88442b16d", 2),
+    "evaluation_old_30000.md": ("712ca2a06a28186d907c6e88698d21202fc3878b60ae2276a56dbdf4d9d27a15",
+                                "909bb658a91fb223543cc4338f1467230bc15d09a576b6d69a42d628c9c51e44", 2),
+    "replay.md": ("9c756b6c5f414edef6253df4a760afb8f4f1dc5881809277181a7504e3692290",
+                  "4541fb86a2e0ff40a3c8e575d9399c0a96e32377c66c5cbce7bf9c1126f2d402", 2),
+}
+PILOT05_DERIVED = ("compare_three.py", "comparison_6000_tables.md", "comparison_6000.json", "relocation_rows.py",
+                   "relocation_rows.json", "rows_by_boxes_6000.json", "log_terms.json")
+
+
+def _pilot05_section() -> str:
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    heading = "## 第二次负项短程试验：5%（2026-11-13 至 11-14）"
+    assert heading in status
+    return status.split(heading, 1)[1].split("\n## ", 1)[0]
+
+
+def test_the_reading_rules_of_the_second_pilot_were_not_edited_after_they_were_frozen():
+    assert hashlib.sha256(PILOT05_PREREG.read_bytes()).hexdigest() == PILOT05_PREREG_SHA256
+    text = PILOT05_PREREG.read_text(encoding="utf-8")
+    for phrase in (PILOT05_PLAN_SHA256, "跨患者置换不是有效的零假设", "不设数值界限", "之后不改"):
+        assert phrase in text, phrase
+
+
+def test_second_pilot_reports_are_archived_with_only_the_server_timing_replaced():
+    report = PILOT05_REPORT.read_text(encoding="utf-8")
+    assert {p.name for p in PILOT05_FOLDER.iterdir()} == set(PILOT05_ARCHIVE) | set(PILOT05_DERIVED)
+    for name, (copy, server, replaced) in PILOT05_ARCHIVE.items():
+        data = (PILOT05_FOLDER / name).read_bytes()
+        assert hashlib.sha256(data).hexdigest() == copy, name
+        assert (copy == server) == (replaced == 0), name
+        text = data.decode("utf-8")
+        assert text.count("[服务器端计时，未取回]") == replaced and not re.search(_SERVER_TIMING, text), name
+        assert not any(re.search(pattern, text) for pattern in _REDACTED), name
+        assert "NOT_EVALUATED" in text, name
+        assert copy in report and server in report, name                   # the report names both files
+    for name in PILOT05_DERIVED:
+        data = (PILOT05_FOLDER / name).read_bytes()
+        assert hashlib.sha256(data).hexdigest() in report, name
+        text = data.decode("utf-8")
+        assert "uid" not in text and not any(re.search(pattern, text) for pattern in _REDACTED), name
+
+
+def test_second_pilot_report_separates_completion_engineering_and_science():
+    text = PILOT05_REPORT.read_text(encoding="utf-8")
+    for phrase in (PILOT05_PLAN_SHA256, PILOT_PLAN_SHA256, UNIFIED_PLAN_SHA256, UNIFIED_CHECKPOINT_SHA256,
+                   *PILOT05_CHECKPOINTS, *PILOT_CHECKPOINTS["old"], *PILOT_CHECKPOINTS["new"], *PILOT05_APPROVALS,
+                   "NOT_EVALUATED", "core_target_validated", "locked_test 未读", "不能代替泛化评价", "没有推送",
+                   "本机墙钟时间", "实验是否按批准完成", "工程核对", "科学结论", "最终判断由研究者作出",
+                   "不能说模型学到了病变特异的定位", "不作为项目核心目标得到验证的依据", "**13.750**"):
+        assert phrase in text, phrase
+    for heading in ("已确定的事实", "证据支持的解释", "仍待检验的假设", "按冻结的读法", "预算", "没有做的事"):
+        assert re.search(rf"^#+ .*{heading}", text, flags=re.M), heading
+    assert "@@" not in text and "（待" not in text and "待填写" not in text      # no section is left open
+    assert not any(re.search(pattern, text) for pattern in _REDACTED)
+    assert "CST" not in text and "amax 时间" not in text
+    # the cross-patient pairing is never offered as evidence of localisation
+    for block in text.split("\n## "):
+        if "跨患者" in block:
+            assert "探索性" in block, block[:40]
+
+
+def test_the_three_evaluations_of_the_second_pilot_read_fresh_predictions_and_carry_both_controls():
+    for name, plan, checkpoint, step in (
+            ("evaluation_new_6000.md", PILOT05_PLAN_SHA256, PILOT05_CHECKPOINTS[2], 6000),
+            ("evaluation_old_6000.md", UNIFIED_PLAN_SHA256, PILOT_CHECKPOINTS["old"][2], 6000),
+            ("evaluation_old_30000.md", UNIFIED_PLAN_SHA256, UNIFIED_CHECKPOINT_SHA256, 30000)):
+        text = (PILOT05_FOLDER / name).read_text(encoding="utf-8")
+        for phrase in (plan, checkpoint, f"（第 {step} 步）", "权重未被修改", "结果：COMPLETED", "locked_test 未读",
+                       "没有复用任何已保存的输出", "实例掩膜的内存上限 256 GiB", "不是评价规则", "不能代替泛化评价",
+                       "偶然命中水平的对照（仅诊断）", "应当读的对照", "仅探索性，不能据此声称学到了病变定位"):
+            assert phrase in text, (name, phrase)
+
+
+def test_the_tables_and_the_report_of_the_second_pilot_agree_with_the_fetched_values():
+    import json
+
+    values = json.loads((PILOT05_FOLDER / "comparison_6000.json").read_text(encoding="utf-8"))
+    assert {side["sha256"] for side in values["checkpoints"].values()} == {
+        PILOT_CHECKPOINTS["old"][2], PILOT_CHECKPOINTS["new"][2], PILOT05_CHECKPOINTS[2]}
+    tables = (PILOT05_FOLDER / "comparison_6000_tables.md").read_text(encoding="utf-8")
+    for row in ("| 命中的框（计数） | 67 | 0 | 35 |", "| 命中的框（计数） | 28 | 0 | 14 |",
+                "| 所见总数 | 54750 | 0 | 6293 |", "| 所见总数 | 20391 | 0 | 2427 |",
+                "| 合计：命中：换位后的期望比例 | 0.626 | NA | 0.310 |",
+                "| 合计：命中：换位后的期望比例 | 0.554 | NA | 0.316 |",
+                "| 合计：命中：换位后不低于观察值的概率 | 0.492 | NA | 0.326 |",
+                "| 合计：命中：换位后不低于观察值的概率 | 0.784 | NA | 0.910 |"):
+        assert row in tables, row
+    report = PILOT05_REPORT.read_text(encoding="utf-8")
+    for row in ("| 5% | dev | 命中 | 14/53 | 0.264 | 0.316 | 0.226–0.415 | 0.910 |",
+                "| 原运行 | dev | 命中 | 28/53 | 0.528 | 0.554 | 0.472–0.642 | 0.784 |",
+                "| dev | 命中 | 11/53 | 0.208 | 0.206 | 0.132–0.302 | 0.558 |"):
+        assert row in report, row
+
+    moved = json.loads((PILOT05_FOLDER / "relocation_rows.json").read_text(encoding="utf-8"))
+    assert set(moved) == {"old_6000", "new_6000", "old_30000"}
+    expected = {"old_6000": {"train": 67, "development_val": 28}, "new_6000": {"train": 35, "development_val": 14},
+                "old_30000": {"train": 24, "development_val": 11}}
+    for side, roles in moved.items():
+        assert set(roles) == {"train", "development_val"}                      # locked_test is not in it
+        for role, block in roles.items():
+            overall = block["overall"]
+            assert overall["n_boxes"] == overall["n_usable"] == {"train": 106, "development_val": 53}[role]
+            assert overall["excluded"] == {} and overall["boxes_with_fewer_than_1000_comparable_placements"] == 0
+            assert overall["hit"]["observed"] == expected[side][role]
+            # no checkpoint's hit count is far above what relocated boxes would give
+            assert overall["hit"]["observed"] < overall["hit"]["expected"] + 5
+
+    by_boxes = json.loads((PILOT05_FOLDER / "rows_by_boxes_6000.json").read_text(encoding="utf-8"))
+    assert set(by_boxes) == {"old_6000", "new_6000"}
+    first = json.loads((PILOT_FOLDER / "rows_by_boxes_6000.json").read_text(encoding="utf-8"))
+    assert by_boxes["old_6000"] == first["old_6000"]            # the original run's checkpoint, inferred again
+    new = by_boxes["new_6000"]
+    assert new["train"]["n_scans"] == 86 and new["development_val"]["n_scans"] == 33
+    for role, n in (("train", 18), ("development_val", 6)):     # broad regions on scans that have no box at all
+        group = new[role]["scans_without_any_box"]
+        assert group["n"] == n and group["cartilage_lesion"]["scans_with_a_finding_of_at_least_10000"] == n
+
+
+def test_the_replay_of_the_second_pilot_matches_its_log_step_by_step():
+    text = (PILOT05_FOLDER / "replay.md").read_text(encoding="utf-8")
+    for phrase in (PILOT05_PLAN_SHA256, PILOT05_CHECKPOINTS[2], "权重未被修改", "结果：COMPLETED",
+                   "共 12000 项，不一致 0 项", "共 36000 项，不一致 0 项", "从未出现的袋 0 个", "locked_test 未读",
+                   "前 0.05 比例"):
+        assert phrase in text, phrase
+    import json
+
+    terms = json.loads((PILOT05_FOLDER / "log_terms.json").read_text(encoding="utf-8"))
+    assert terms["steps"] == 6000 and terms["window"] == 500 and len(terms["windows"]) == 12
+    assert all(abs(w["classes"]["cartilage_lesion"]["selected_share"] - 0.05) < 1e-4 for w in terms["windows"])
+
+
+def test_status_records_the_second_pilot_as_a_completed_run_not_as_validated_performance():
+    section = _pilot05_section()
+    for phrase in ("negtopk05_pilot_20261113.md", "negtopk05_pilot_prereg_20261113.md", PILOT05_PLAN_SHA256,
+                   PILOT05_CHECKPOINTS[2], *PILOT05_APPROVALS, "工程核对", "实验完成", "性能结论", "NOT_EVALUATED",
+                   "locked_test 未读", "没有推送", "没有接着跑 30000 步", "13.750 h", "只作探索性",
+                   "最终归类由研究者判断", "没有一个检查点的框命中率可以读作病变定位能力"):
+        assert phrase in section, phrase
+    meta = _front_matter()
+    assert meta["scientific_conclusion"] == "NOT_EVALUATED" and meta["core_target_validated"] is None
+    assert "CST" not in section and "amax 时间" not in section

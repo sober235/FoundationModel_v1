@@ -1,0 +1,1970 @@
+{
+ "new_6000": {
+  "development_val": {
+   "by_class": {
+    "cartilage_lesion": {
+     "boxes_with_fewer_than_1000_comparable_placements": 0,
+     "boxes_with_fewer_than_100_comparable_placements": 0,
+     "comparable_placements": {
+      "max": 931115.0,
+      "mean": 198918.9,
+      "min": 7498.0,
+      "n": 30,
+      "p10": 11904.4,
+      "p25": 50943.0,
+      "p50": 110630.5,
+      "p75": 310080.5,
+      "p90": 510619.2
+     },
+     "excluded": {},
+     "hit": {
+      "boxes_with_p_at_least_0_9": 1,
+      "boxes_with_p_at_most_0_1": 12,
+      "expected": 10.48,
+      "observed": 9,
+      "p_per_box": {
+       "max": 0.9444,
+       "mean": 0.3493,
+       "min": 0.0,
+       "n": 30,
+       "p10": 0.005,
+       "p25": 0.032,
+       "p50": 0.3603,
+       "p75": 0.589,
+       "p90": 0.7926
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.8802,
+       "mean": 0.2363,
+       "min": 0.0,
+       "n": 21,
+       "p10": 0.0,
+       "p25": 0.0084,
+       "p50": 0.0833,
+       "p75": 0.4715,
+       "p90": 0.6024
+      },
+      "p_per_box_of_observed": {
+       "max": 0.9444,
+       "mean": 0.613,
+       "min": 0.1966,
+       "n": 9,
+       "p10": 0.3557,
+       "p25": 0.4838,
+       "p50": 0.6718,
+       "p75": 0.7907,
+       "p90": 0.8366
+      }
+     },
+     "host_correct": {
+      "boxes_with_p_at_least_0_9": 0,
+      "boxes_with_p_at_most_0_1": 13,
+      "expected": 6.563,
+      "observed": 5,
+      "p_per_box": {
+       "max": 0.8506,
+       "mean": 0.2188,
+       "min": 0.0,
+       "n": 30,
+       "p10": 0.0,
+       "p25": 0.0299,
+       "p50": 0.154,
+       "p75": 0.3129,
+       "p90": 0.6412
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.6455,
+       "mean": 0.1508,
+       "min": 0.0,
+       "n": 25,
+       "p10": 0.0,
+       "p25": 0.0251,
+       "p50": 0.091,
+       "p75": 0.1814,
+       "p90": 0.3913
+      },
+      "p_per_box_of_observed": {
+       "max": 0.8506,
+       "mean": 0.5586,
+       "min": 0.2346,
+       "n": 5,
+       "p10": 0.2989,
+       "p25": 0.3954,
+       "p50": 0.6408,
+       "p75": 0.6718,
+       "p90": 0.7791
+      }
+     },
+     "host_voxels": {
+      "max": 37443.0,
+      "mean": 10092.0,
+      "min": 282.0,
+      "n": 30,
+      "p10": 791.5,
+      "p25": 2133.0,
+      "p50": 5891.5,
+      "p75": 13287.5,
+      "p90": 23368.4
+     },
+     "n_boxes": 30,
+     "n_usable": 30
+    },
+    "meniscal_tear": {
+     "boxes_with_fewer_than_1000_comparable_placements": 0,
+     "boxes_with_fewer_than_100_comparable_placements": 0,
+     "comparable_placements": {
+      "max": 352051.0,
+      "mean": 72875.2,
+      "min": 10261.0,
+      "n": 23,
+      "p10": 18730.4,
+      "p25": 28089.0,
+      "p50": 46644.0,
+      "p75": 71314.0,
+      "p90": 171828.2
+     },
+     "excluded": {},
+     "hit": {
+      "boxes_with_p_at_least_0_9": 2,
+      "boxes_with_p_at_most_0_1": 13,
+      "expected": 6.276,
+      "observed": 5,
+      "p_per_box": {
+       "max": 0.9925,
+       "mean": 0.2729,
+       "min": 0.0011,
+       "n": 23,
+       "p10": 0.0246,
+       "p25": 0.0449,
+       "p50": 0.0661,
+       "p75": 0.4357,
+       "p90": 0.7825
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.7316,
+       "mean": 0.1548,
+       "min": 0.0011,
+       "n": 18,
+       "p10": 0.0183,
+       "p25": 0.0419,
+       "p50": 0.0583,
+       "p75": 0.137,
+       "p90": 0.5029
+      },
+      "p_per_box_of_observed": {
+       "max": 0.9925,
+       "mean": 0.6979,
+       "min": 0.3081,
+       "n": 5,
+       "p10": 0.3558,
+       "p25": 0.4273,
+       "p50": 0.7952,
+       "p75": 0.9663,
+       "p90": 0.9821
+      }
+     },
+     "host_correct": {
+      "boxes_with_p_at_least_0_9": 1,
+      "boxes_with_p_at_most_0_1": 13,
+      "expected": 5.304,
+      "observed": 5,
+      "p_per_box": {
+       "max": 0.9435,
+       "mean": 0.2306,
+       "min": 0.0011,
+       "n": 23,
+       "p10": 0.0192,
+       "p25": 0.0428,
+       "p50": 0.0661,
+       "p75": 0.4331,
+       "p90": 0.5749
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.5353,
+       "mean": 0.125,
+       "min": 0.0011,
+       "n": 18,
+       "p10": 0.014,
+       "p25": 0.0369,
+       "p50": 0.0583,
+       "p75": 0.1239,
+       "p90": 0.4404
+      },
+      "p_per_box_of_observed": {
+       "max": 0.9435,
+       "mean": 0.6107,
+       "min": 0.3017,
+       "n": 5,
+       "p10": 0.3519,
+       "p25": 0.4273,
+       "p50": 0.5848,
+       "p75": 0.7961,
+       "p90": 0.8845
+      }
+     },
+     "host_voxels": {
+      "max": 29717.0,
+      "mean": 5072.0,
+      "min": 182.0,
+      "n": 23,
+      "p10": 421.4,
+      "p25": 896.0,
+      "p50": 2117.0,
+      "p75": 7651.0,
+      "p90": 12216.6
+     },
+     "n_boxes": 23,
+     "n_usable": 23
+    }
+   },
+   "n_scans": 33,
+   "overall": {
+    "boxes_with_fewer_than_1000_comparable_placements": 0,
+    "boxes_with_fewer_than_100_comparable_placements": 0,
+    "comparable_placements": {
+     "max": 931115.0,
+     "mean": 144220.7,
+     "min": 7498.0,
+     "n": 53,
+     "p10": 17354.2,
+     "p25": 39368.0,
+     "p50": 58897.0,
+     "p75": 186481.0,
+     "p90": 364832.6
+    },
+    "excluded": {},
+    "hit": {
+     "boxes_with_p_at_least_0_9": 3,
+     "boxes_with_p_at_most_0_1": 25,
+     "expected": 16.756,
+     "observed": 14,
+     "p_per_box": {
+      "max": 0.9925,
+      "mean": 0.3162,
+      "min": 0.0,
+      "n": 53,
+      "p10": 0.0057,
+      "p25": 0.0411,
+      "p50": 0.1566,
+      "p75": 0.549,
+      "p90": 0.7943
+     },
+     "p_per_box_of_not_observed": {
+      "max": 0.8802,
+      "mean": 0.1987,
+      "min": 0.0,
+      "n": 39,
+      "p10": 0.004,
+      "p25": 0.0262,
+      "p50": 0.0598,
+      "p75": 0.3744,
+      "p90": 0.6099
+     },
+     "p_per_box_of_observed": {
+      "max": 0.9925,
+      "mean": 0.6433,
+      "min": 0.1966,
+      "n": 14,
+      "p10": 0.3343,
+      "p25": 0.4414,
+      "p50": 0.6953,
+      "p75": 0.806,
+      "p90": 0.9597
+     }
+    },
+    "host_correct": {
+     "boxes_with_p_at_least_0_9": 1,
+     "boxes_with_p_at_most_0_1": 26,
+     "expected": 11.867,
+     "observed": 10,
+     "p_per_box": {
+      "max": 0.9435,
+      "mean": 0.2239,
+      "min": 0.0,
+      "n": 53,
+      "p10": 0.0049,
+      "p25": 0.0356,
+      "p50": 0.1132,
+      "p75": 0.3954,
+      "p90": 0.6296
+     },
+     "p_per_box_of_not_observed": {
+      "max": 0.6455,
+      "mean": 0.14,
+      "min": 0.0,
+      "n": 43,
+      "p10": 0.0018,
+      "p25": 0.0271,
+      "p50": 0.0609,
+      "p75": 0.1764,
+      "p90": 0.439
+     },
+     "p_per_box_of_observed": {
+      "max": 0.9435,
+      "mean": 0.5847,
+      "min": 0.2346,
+      "n": 10,
+      "p10": 0.2949,
+      "p25": 0.4034,
+      "p50": 0.6128,
+      "p75": 0.765,
+      "p90": 0.8599
+     }
+    },
+    "host_voxels": {
+     "max": 37443.0,
+     "mean": 7913.5,
+     "min": 182.0,
+     "n": 53,
+     "p10": 545.4,
+     "p25": 1239.0,
+     "p50": 4317.0,
+     "p75": 12029.0,
+     "p90": 21001.2
+    },
+    "n_boxes": 53,
+    "n_usable": 53
+   },
+   "scans_with_a_primary_box": 23
+  },
+  "train": {
+   "by_class": {
+    "cartilage_lesion": {
+     "boxes_with_fewer_than_1000_comparable_placements": 0,
+     "boxes_with_fewer_than_100_comparable_placements": 0,
+     "comparable_placements": {
+      "max": 1488156.0,
+      "mean": 302519.2,
+      "min": 1012.0,
+      "n": 72,
+      "p10": 12487.2,
+      "p25": 32540.8,
+      "p50": 169426.5,
+      "p75": 457215.2,
+      "p90": 780046.3
+     },
+     "excluded": {},
+     "hit": {
+      "boxes_with_p_at_least_0_9": 4,
+      "boxes_with_p_at_most_0_1": 21,
+      "expected": 21.418,
+      "observed": 24,
+      "p_per_box": {
+       "max": 1.0,
+       "mean": 0.2975,
+       "min": 0.0,
+       "n": 72,
+       "p10": 0.011,
+       "p25": 0.0889,
+       "p50": 0.2152,
+       "p75": 0.4219,
+       "p90": 0.7465
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.876,
+       "mean": 0.1693,
+       "min": 0.0,
+       "n": 48,
+       "p10": 0.0,
+       "p25": 0.0295,
+       "p50": 0.1358,
+       "p75": 0.2421,
+       "p90": 0.3657
+      },
+      "p_per_box_of_observed": {
+       "max": 1.0,
+       "mean": 0.5538,
+       "min": 0.0891,
+       "n": 24,
+       "p10": 0.2278,
+       "p25": 0.3038,
+       "p50": 0.5508,
+       "p75": 0.7605,
+       "p90": 0.9609
+      }
+     },
+     "host_correct": {
+      "boxes_with_p_at_least_0_9": 2,
+      "boxes_with_p_at_most_0_1": 43,
+      "expected": 11.794,
+      "observed": 15,
+      "p_per_box": {
+       "max": 0.9862,
+       "mean": 0.1638,
+       "min": 0.0,
+       "n": 72,
+       "p10": 0.0,
+       "p25": 0.0182,
+       "p50": 0.0817,
+       "p75": 0.208,
+       "p90": 0.4562
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.6889,
+       "mean": 0.1082,
+       "min": 0.0,
+       "n": 57,
+       "p10": 0.0,
+       "p25": 0.0087,
+       "p50": 0.0513,
+       "p75": 0.1082,
+       "p90": 0.2814
+      },
+      "p_per_box_of_observed": {
+       "max": 0.9862,
+       "mean": 0.3751,
+       "min": 0.0243,
+       "n": 15,
+       "p10": 0.0993,
+       "p25": 0.2018,
+       "p50": 0.277,
+       "p75": 0.4613,
+       "p90": 0.8357
+      }
+     },
+     "host_voxels": {
+      "max": 58877.0,
+      "mean": 9567.3,
+      "min": 20.0,
+      "n": 72,
+      "p10": 680.7,
+      "p25": 1805.8,
+      "p50": 5930.5,
+      "p75": 13956.0,
+      "p90": 25990.8
+     },
+     "n_boxes": 72,
+     "n_usable": 72
+    },
+    "meniscal_tear": {
+     "boxes_with_fewer_than_1000_comparable_placements": 0,
+     "boxes_with_fewer_than_100_comparable_placements": 0,
+     "comparable_placements": {
+      "max": 376264.0,
+      "mean": 71878.2,
+      "min": 1811.0,
+      "n": 34,
+      "p10": 3752.9,
+      "p25": 14698.0,
+      "p50": 26395.5,
+      "p75": 71929.2,
+      "p90": 179553.8
+     },
+     "excluded": {},
+     "hit": {
+      "boxes_with_p_at_least_0_9": 4,
+      "boxes_with_p_at_most_0_1": 14,
+      "expected": 11.483,
+      "observed": 11,
+      "p_per_box": {
+       "max": 1.0,
+       "mean": 0.3377,
+       "min": 0.0,
+       "n": 34,
+       "p10": 0.0051,
+       "p25": 0.0248,
+       "p50": 0.2222,
+       "p75": 0.5441,
+       "p90": 0.8972
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.7809,
+       "mean": 0.1568,
+       "min": 0.0,
+       "n": 23,
+       "p10": 0.003,
+       "p25": 0.0124,
+       "p50": 0.0696,
+       "p75": 0.2222,
+       "p90": 0.4498
+      },
+      "p_per_box_of_observed": {
+       "max": 1.0,
+       "mean": 0.7161,
+       "min": 0.3426,
+       "n": 11,
+       "p10": 0.3663,
+       "p25": 0.4591,
+       "p50": 0.8398,
+       "p75": 0.9437,
+       "p90": 0.9992
+      }
+     },
+     "host_correct": {
+      "boxes_with_p_at_least_0_9": 3,
+      "boxes_with_p_at_most_0_1": 17,
+      "expected": 10.086,
+      "observed": 10,
+      "p_per_box": {
+       "max": 1.0,
+       "mean": 0.2967,
+       "min": 0.0,
+       "n": 34,
+       "p10": 0.0031,
+       "p25": 0.0173,
+       "p50": 0.0992,
+       "p75": 0.5118,
+       "p90": 0.8648
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.7473,
+       "mean": 0.1292,
+       "min": 0.0,
+       "n": 24,
+       "p10": 0.0016,
+       "p25": 0.0084,
+       "p50": 0.0262,
+       "p75": 0.1125,
+       "p90": 0.4384
+      },
+      "p_per_box_of_observed": {
+       "max": 1.0,
+       "mean": 0.6985,
+       "min": 0.2864,
+       "n": 10,
+       "p10": 0.3355,
+       "p25": 0.4321,
+       "p50": 0.8427,
+       "p75": 0.8989,
+       "p90": 0.9667
+      }
+     },
+     "host_voxels": {
+      "max": 45510.0,
+      "mean": 7790.3,
+      "min": 4.0,
+      "n": 34,
+      "p10": 358.3,
+      "p25": 472.8,
+      "p50": 5148.0,
+      "p75": 9526.5,
+      "p90": 20568.4
+     },
+     "n_boxes": 34,
+     "n_usable": 34
+    }
+   },
+   "n_scans": 86,
+   "overall": {
+    "boxes_with_fewer_than_1000_comparable_placements": 0,
+    "boxes_with_fewer_than_100_comparable_placements": 0,
+    "comparable_placements": {
+     "max": 1488156.0,
+     "mean": 228540.0,
+     "min": 1012.0,
+     "n": 106,
+     "p10": 10841.0,
+     "p25": 23467.8,
+     "p50": 85227.5,
+     "p75": 346598.8,
+     "p90": 624103.0
+    },
+    "excluded": {},
+    "hit": {
+     "boxes_with_p_at_least_0_9": 8,
+     "boxes_with_p_at_most_0_1": 35,
+     "expected": 32.901,
+     "observed": 35,
+     "p_per_box": {
+      "max": 1.0,
+      "mean": 0.3104,
+      "min": 0.0,
+      "n": 106,
+      "p10": 0.0081,
+      "p25": 0.0644,
+      "p50": 0.2152,
+      "p75": 0.4578,
+      "p90": 0.8374
+     },
+     "p_per_box_of_not_observed": {
+      "max": 0.876,
+      "mean": 0.1652,
+      "min": 0.0,
+      "n": 71,
+      "p10": 0.0011,
+      "p25": 0.0197,
+      "p50": 0.1125,
+      "p75": 0.2483,
+      "p90": 0.4129
+     },
+     "p_per_box_of_observed": {
+      "max": 1.0,
+      "mean": 0.6048,
+      "min": 0.0891,
+      "n": 35,
+      "p10": 0.2529,
+      "p25": 0.3642,
+      "p50": 0.6051,
+      "p75": 0.8564,
+      "p90": 0.9858
+     }
+    },
+    "host_correct": {
+     "boxes_with_p_at_least_0_9": 5,
+     "boxes_with_p_at_most_0_1": 60,
+     "expected": 21.88,
+     "observed": 25,
+     "p_per_box": {
+      "max": 1.0,
+      "mean": 0.2064,
+      "min": 0.0,
+      "n": 106,
+      "p10": 0.0,
+      "p25": 0.0181,
+      "p50": 0.0849,
+      "p75": 0.284,
+      "p90": 0.6446
+     },
+     "p_per_box_of_not_observed": {
+      "max": 0.7473,
+      "mean": 0.1144,
+      "min": 0.0,
+      "n": 81,
+      "p10": 0.0,
+      "p25": 0.0086,
+      "p50": 0.051,
+      "p75": 0.1125,
+      "p90": 0.3252
+     },
+     "p_per_box_of_observed": {
+      "max": 1.0,
+      "mean": 0.5045,
+      "min": 0.0243,
+      "n": 25,
+      "p10": 0.1825,
+      "p25": 0.2583,
+      "p50": 0.4082,
+      "p75": 0.8456,
+      "p90": 0.9761
+     }
+    },
+    "host_voxels": {
+     "max": 58877.0,
+     "mean": 8997.3,
+     "min": 4.0,
+     "n": 106,
+     "p10": 388.0,
+     "p25": 1342.0,
+     "p50": 5589.5,
+     "p75": 11175.2,
+     "p90": 24636.0
+    },
+    "n_boxes": 106,
+    "n_usable": 106
+   },
+   "scans_with_a_primary_box": 46
+  }
+ },
+ "old_30000": {
+  "development_val": {
+   "by_class": {
+    "cartilage_lesion": {
+     "boxes_with_fewer_than_1000_comparable_placements": 0,
+     "boxes_with_fewer_than_100_comparable_placements": 0,
+     "comparable_placements": {
+      "max": 931115.0,
+      "mean": 198918.9,
+      "min": 7498.0,
+      "n": 30,
+      "p10": 11904.4,
+      "p25": 50943.0,
+      "p50": 110630.5,
+      "p75": 310080.5,
+      "p90": 510619.2
+     },
+     "excluded": {},
+     "hit": {
+      "boxes_with_p_at_least_0_9": 0,
+      "boxes_with_p_at_most_0_1": 17,
+      "expected": 3.408,
+      "observed": 4,
+      "p_per_box": {
+       "max": 0.4147,
+       "mean": 0.1136,
+       "min": 0.0,
+       "n": 30,
+       "p10": 0.0,
+       "p25": 0.0105,
+       "p50": 0.0782,
+       "p75": 0.148,
+       "p90": 0.2856
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.4147,
+       "mean": 0.0898,
+       "min": 0.0,
+       "n": 26,
+       "p10": 0.0,
+       "p25": 0.0059,
+       "p50": 0.0619,
+       "p75": 0.1212,
+       "p90": 0.2307
+      },
+      "p_per_box_of_observed": {
+       "max": 0.3867,
+       "mean": 0.2684,
+       "min": 0.0902,
+       "n": 4,
+       "p10": 0.1479,
+       "p25": 0.2343,
+       "p50": 0.2984,
+       "p75": 0.3325,
+       "p90": 0.365
+      }
+     },
+     "host_correct": {
+      "boxes_with_p_at_least_0_9": 0,
+      "boxes_with_p_at_most_0_1": 22,
+      "expected": 1.989,
+      "observed": 2,
+      "p_per_box": {
+       "max": 0.2618,
+       "mean": 0.0663,
+       "min": 0.0,
+       "n": 30,
+       "p10": 0.0,
+       "p25": 0.0024,
+       "p50": 0.0541,
+       "p75": 0.106,
+       "p90": 0.1738
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.1987,
+       "mean": 0.0529,
+       "min": 0.0,
+       "n": 28,
+       "p10": 0.0,
+       "p25": 0.0013,
+       "p50": 0.0491,
+       "p75": 0.0745,
+       "p90": 0.1221
+      },
+      "p_per_box_of_observed": {
+       "max": 0.2618,
+       "mean": 0.2536,
+       "min": 0.2455,
+       "n": 2,
+       "p10": 0.2471,
+       "p25": 0.2496,
+       "p50": 0.2536,
+       "p75": 0.2577,
+       "p90": 0.2602
+      }
+     },
+     "host_voxels": {
+      "max": 37443.0,
+      "mean": 10092.0,
+      "min": 282.0,
+      "n": 30,
+      "p10": 791.5,
+      "p25": 2133.0,
+      "p50": 5891.5,
+      "p75": 13287.5,
+      "p90": 23368.4
+     },
+     "n_boxes": 30,
+     "n_usable": 30
+    },
+    "meniscal_tear": {
+     "boxes_with_fewer_than_1000_comparable_placements": 0,
+     "boxes_with_fewer_than_100_comparable_placements": 0,
+     "comparable_placements": {
+      "max": 352051.0,
+      "mean": 72875.2,
+      "min": 10261.0,
+      "n": 23,
+      "p10": 18730.4,
+      "p25": 28089.0,
+      "p50": 46644.0,
+      "p75": 71314.0,
+      "p90": 171828.2
+     },
+     "excluded": {},
+     "hit": {
+      "boxes_with_p_at_least_0_9": 2,
+      "boxes_with_p_at_most_0_1": 8,
+      "expected": 7.488,
+      "observed": 7,
+      "p_per_box": {
+       "max": 0.9994,
+       "mean": 0.3256,
+       "min": 0.0012,
+       "n": 23,
+       "p10": 0.0122,
+       "p25": 0.0555,
+       "p50": 0.1929,
+       "p75": 0.5337,
+       "p90": 0.7588
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.703,
+       "mean": 0.1935,
+       "min": 0.0012,
+       "n": 16,
+       "p10": 0.0071,
+       "p25": 0.0287,
+       "p50": 0.1042,
+       "p75": 0.3019,
+       "p90": 0.5209
+      },
+      "p_per_box_of_observed": {
+       "max": 0.9994,
+       "mean": 0.6274,
+       "min": 0.1479,
+       "n": 7,
+       "p10": 0.2511,
+       "p25": 0.4073,
+       "p50": 0.691,
+       "p75": 0.8695,
+       "p90": 0.9795
+      }
+     },
+     "host_correct": {
+      "boxes_with_p_at_least_0_9": 2,
+      "boxes_with_p_at_most_0_1": 8,
+      "expected": 6.857,
+      "observed": 7,
+      "p_per_box": {
+       "max": 0.9994,
+       "mean": 0.2981,
+       "min": 0.0,
+       "n": 23,
+       "p10": 0.0093,
+       "p25": 0.0535,
+       "p50": 0.1692,
+       "p75": 0.4818,
+       "p90": 0.749
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.6556,
+       "mean": 0.16,
+       "min": 0.0,
+       "n": 16,
+       "p10": 0.004,
+       "p25": 0.0261,
+       "p50": 0.104,
+       "p75": 0.1989,
+       "p90": 0.3849
+      },
+      "p_per_box_of_observed": {
+       "max": 0.9994,
+       "mean": 0.6139,
+       "min": 0.1479,
+       "n": 7,
+       "p10": 0.2046,
+       "p25": 0.3686,
+       "p50": 0.6887,
+       "p75": 0.8622,
+       "p90": 0.976
+      }
+     },
+     "host_voxels": {
+      "max": 29717.0,
+      "mean": 5072.0,
+      "min": 182.0,
+      "n": 23,
+      "p10": 421.4,
+      "p25": 896.0,
+      "p50": 2117.0,
+      "p75": 7651.0,
+      "p90": 12216.6
+     },
+     "n_boxes": 23,
+     "n_usable": 23
+    }
+   },
+   "n_scans": 33,
+   "overall": {
+    "boxes_with_fewer_than_1000_comparable_placements": 0,
+    "boxes_with_fewer_than_100_comparable_placements": 0,
+    "comparable_placements": {
+     "max": 931115.0,
+     "mean": 144220.7,
+     "min": 7498.0,
+     "n": 53,
+     "p10": 17354.2,
+     "p25": 39368.0,
+     "p50": 58897.0,
+     "p75": 186481.0,
+     "p90": 364832.6
+    },
+    "excluded": {},
+    "hit": {
+     "boxes_with_p_at_least_0_9": 2,
+     "boxes_with_p_at_most_0_1": 25,
+     "expected": 10.896,
+     "observed": 11,
+     "p_per_box": {
+      "max": 0.9994,
+      "mean": 0.2056,
+      "min": 0.0,
+      "n": 53,
+      "p10": 0.0015,
+      "p25": 0.0288,
+      "p50": 0.1078,
+      "p75": 0.301,
+      "p90": 0.5571
+     },
+     "p_per_box_of_not_observed": {
+      "max": 0.703,
+      "mean": 0.1293,
+      "min": 0.0,
+      "n": 42,
+      "p10": 0.0001,
+      "p25": 0.0105,
+      "p50": 0.0717,
+      "p75": 0.1578,
+      "p90": 0.3042
+     },
+     "p_per_box_of_observed": {
+      "max": 0.9994,
+      "mean": 0.4969,
+      "min": 0.0902,
+      "n": 11,
+      "p10": 0.1479,
+      "p25": 0.2984,
+      "p50": 0.3867,
+      "p75": 0.7319,
+      "p90": 0.9662
+     }
+    },
+    "host_correct": {
+     "boxes_with_p_at_least_0_9": 2,
+     "boxes_with_p_at_most_0_1": 30,
+     "expected": 8.847,
+     "observed": 9,
+     "p_per_box": {
+      "max": 0.9994,
+      "mean": 0.1669,
+      "min": 0.0,
+      "n": 53,
+      "p10": 0.0,
+      "p25": 0.008,
+      "p50": 0.0719,
+      "p75": 0.1811,
+      "p90": 0.4896
+     },
+     "p_per_box_of_not_observed": {
+      "max": 0.6556,
+      "mean": 0.0919,
+      "min": 0.0,
+      "n": 44,
+      "p10": 0.0,
+      "p25": 0.0047,
+      "p50": 0.0577,
+      "p75": 0.118,
+      "p90": 0.1934
+     },
+     "p_per_box_of_observed": {
+      "max": 0.9994,
+      "mean": 0.5339,
+      "min": 0.1479,
+      "n": 9,
+      "p10": 0.2235,
+      "p25": 0.2455,
+      "p50": 0.4947,
+      "p75": 0.764,
+      "p90": 0.9682
+     }
+    },
+    "host_voxels": {
+     "max": 37443.0,
+     "mean": 7913.5,
+     "min": 182.0,
+     "n": 53,
+     "p10": 545.4,
+     "p25": 1239.0,
+     "p50": 4317.0,
+     "p75": 12029.0,
+     "p90": 21001.2
+    },
+    "n_boxes": 53,
+    "n_usable": 53
+   },
+   "scans_with_a_primary_box": 23
+  },
+  "train": {
+   "by_class": {
+    "cartilage_lesion": {
+     "boxes_with_fewer_than_1000_comparable_placements": 0,
+     "boxes_with_fewer_than_100_comparable_placements": 0,
+     "comparable_placements": {
+      "max": 1488156.0,
+      "mean": 302519.2,
+      "min": 1012.0,
+      "n": 72,
+      "p10": 12487.2,
+      "p25": 32540.8,
+      "p50": 169426.5,
+      "p75": 457215.2,
+      "p90": 780046.3
+     },
+     "excluded": {},
+     "hit": {
+      "boxes_with_p_at_least_0_9": 0,
+      "boxes_with_p_at_most_0_1": 45,
+      "expected": 8.591,
+      "observed": 11,
+      "p_per_box": {
+       "max": 0.8666,
+       "mean": 0.1193,
+       "min": 0.0,
+       "n": 72,
+       "p10": 0.0,
+       "p25": 0.0109,
+       "p50": 0.0696,
+       "p75": 0.1786,
+       "p90": 0.2674
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.8666,
+       "mean": 0.0959,
+       "min": 0.0,
+       "n": 61,
+       "p10": 0.0,
+       "p25": 0.0017,
+       "p50": 0.0622,
+       "p75": 0.1276,
+       "p90": 0.2169
+      },
+      "p_per_box_of_observed": {
+       "max": 0.7138,
+       "mean": 0.2494,
+       "min": 0.0579,
+       "n": 11,
+       "p10": 0.084,
+       "p25": 0.1668,
+       "p50": 0.209,
+       "p75": 0.258,
+       "p90": 0.3911
+      }
+     },
+     "host_correct": {
+      "boxes_with_p_at_least_0_9": 0,
+      "boxes_with_p_at_most_0_1": 55,
+      "expected": 4.889,
+      "observed": 3,
+      "p_per_box": {
+       "max": 0.627,
+       "mean": 0.0679,
+       "min": 0.0,
+       "n": 72,
+       "p10": 0.0,
+       "p25": 0.0,
+       "p50": 0.031,
+       "p75": 0.0953,
+       "p90": 0.1761
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.627,
+       "mean": 0.0638,
+       "min": 0.0,
+       "n": 69,
+       "p10": 0.0,
+       "p25": 0.0,
+       "p50": 0.0203,
+       "p75": 0.0848,
+       "p90": 0.1761
+      },
+      "p_per_box_of_observed": {
+       "max": 0.2185,
+       "mean": 0.1628,
+       "min": 0.0965,
+       "n": 3,
+       "p10": 0.1119,
+       "p25": 0.135,
+       "p50": 0.1735,
+       "p75": 0.196,
+       "p90": 0.2095
+      }
+     },
+     "host_voxels": {
+      "max": 58877.0,
+      "mean": 9567.3,
+      "min": 20.0,
+      "n": 72,
+      "p10": 680.7,
+      "p25": 1805.8,
+      "p50": 5930.5,
+      "p75": 13956.0,
+      "p90": 25990.8
+     },
+     "n_boxes": 72,
+     "n_usable": 72
+    },
+    "meniscal_tear": {
+     "boxes_with_fewer_than_1000_comparable_placements": 0,
+     "boxes_with_fewer_than_100_comparable_placements": 0,
+     "comparable_placements": {
+      "max": 376264.0,
+      "mean": 71878.2,
+      "min": 1811.0,
+      "n": 34,
+      "p10": 3752.9,
+      "p25": 14698.0,
+      "p50": 26395.5,
+      "p75": 71929.2,
+      "p90": 179553.8
+     },
+     "excluded": {},
+     "hit": {
+      "boxes_with_p_at_least_0_9": 5,
+      "boxes_with_p_at_most_0_1": 12,
+      "expected": 12.847,
+      "observed": 13,
+      "p_per_box": {
+       "max": 1.0,
+       "mean": 0.3779,
+       "min": 0.0001,
+       "n": 34,
+       "p10": 0.0057,
+       "p25": 0.0281,
+       "p50": 0.3162,
+       "p75": 0.6309,
+       "p90": 0.9505
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.776,
+       "mean": 0.1636,
+       "min": 0.0001,
+       "n": 21,
+       "p10": 0.0032,
+       "p25": 0.0121,
+       "p50": 0.054,
+       "p75": 0.3092,
+       "p90": 0.4442
+      },
+      "p_per_box_of_observed": {
+       "max": 1.0,
+       "mean": 0.724,
+       "min": 0.3163,
+       "n": 13,
+       "p10": 0.3284,
+       "p25": 0.5449,
+       "p50": 0.8742,
+       "p75": 0.9621,
+       "p90": 0.9989
+      }
+     },
+     "host_correct": {
+      "boxes_with_p_at_least_0_9": 5,
+      "boxes_with_p_at_most_0_1": 13,
+      "expected": 12.063,
+      "observed": 11,
+      "p_per_box": {
+       "max": 1.0,
+       "mean": 0.3548,
+       "min": 0.0,
+       "n": 34,
+       "p10": 0.0,
+       "p25": 0.0124,
+       "p50": 0.279,
+       "p75": 0.6296,
+       "p90": 0.9487
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.7466,
+       "mean": 0.1467,
+       "min": 0.0,
+       "n": 23,
+       "p10": 0.0,
+       "p25": 0.0026,
+       "p50": 0.0274,
+       "p75": 0.279,
+       "p90": 0.3826
+      },
+      "p_per_box_of_observed": {
+       "max": 1.0,
+       "mean": 0.7899,
+       "min": 0.3622,
+       "n": 11,
+       "p10": 0.5434,
+       "p25": 0.6102,
+       "p50": 0.8709,
+       "p75": 0.9784,
+       "p90": 1.0
+      }
+     },
+     "host_voxels": {
+      "max": 45510.0,
+      "mean": 7790.3,
+      "min": 4.0,
+      "n": 34,
+      "p10": 358.3,
+      "p25": 472.8,
+      "p50": 5148.0,
+      "p75": 9526.5,
+      "p90": 20568.4
+     },
+     "n_boxes": 34,
+     "n_usable": 34
+    }
+   },
+   "n_scans": 86,
+   "overall": {
+    "boxes_with_fewer_than_1000_comparable_placements": 0,
+    "boxes_with_fewer_than_100_comparable_placements": 0,
+    "comparable_placements": {
+     "max": 1488156.0,
+     "mean": 228540.0,
+     "min": 1012.0,
+     "n": 106,
+     "p10": 10841.0,
+     "p25": 23467.8,
+     "p50": 85227.5,
+     "p75": 346598.8,
+     "p90": 624103.0
+    },
+    "excluded": {},
+    "hit": {
+     "boxes_with_p_at_least_0_9": 5,
+     "boxes_with_p_at_most_0_1": 57,
+     "expected": 21.438,
+     "observed": 24,
+     "p_per_box": {
+      "max": 1.0,
+      "mean": 0.2022,
+      "min": 0.0,
+      "n": 106,
+      "p10": 0.0,
+      "p25": 0.0148,
+      "p50": 0.0722,
+      "p75": 0.2645,
+      "p90": 0.6127
+     },
+     "p_per_box_of_not_observed": {
+      "max": 0.8666,
+      "mean": 0.1132,
+      "min": 0.0,
+      "n": 82,
+      "p10": 0.0,
+      "p25": 0.0041,
+      "p50": 0.0569,
+      "p75": 0.1528,
+      "p90": 0.3083
+     },
+     "p_per_box_of_observed": {
+      "max": 1.0,
+      "mean": 0.5065,
+      "min": 0.0579,
+      "n": 24,
+      "p10": 0.1591,
+      "p25": 0.233,
+      "p50": 0.3793,
+      "p75": 0.8769,
+      "p90": 0.9849
+     }
+    },
+    "host_correct": {
+     "boxes_with_p_at_least_0_9": 5,
+     "boxes_with_p_at_most_0_1": 68,
+     "expected": 16.952,
+     "observed": 14,
+     "p_per_box": {
+      "max": 1.0,
+      "mean": 0.1599,
+      "min": 0.0,
+      "n": 106,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0413,
+      "p75": 0.1754,
+      "p90": 0.5574
+     },
+     "p_per_box_of_not_observed": {
+      "max": 0.7466,
+      "mean": 0.0845,
+      "min": 0.0,
+      "n": 92,
+      "p10": 0.0,
+      "p25": 0.0,
+      "p50": 0.0262,
+      "p75": 0.1083,
+      "p90": 0.2532
+     },
+     "p_per_box_of_observed": {
+      "max": 1.0,
+      "mean": 0.6555,
+      "min": 0.0965,
+      "n": 14,
+      "p10": 0.187,
+      "p25": 0.4075,
+      "p50": 0.7335,
+      "p75": 0.951,
+      "p90": 0.9984
+     }
+    },
+    "host_voxels": {
+     "max": 58877.0,
+     "mean": 8997.3,
+     "min": 4.0,
+     "n": 106,
+     "p10": 388.0,
+     "p25": 1342.0,
+     "p50": 5589.5,
+     "p75": 11175.2,
+     "p90": 24636.0
+    },
+    "n_boxes": 106,
+    "n_usable": 106
+   },
+   "scans_with_a_primary_box": 46
+  }
+ },
+ "old_6000": {
+  "development_val": {
+   "by_class": {
+    "cartilage_lesion": {
+     "boxes_with_fewer_than_1000_comparable_placements": 0,
+     "boxes_with_fewer_than_100_comparable_placements": 0,
+     "comparable_placements": {
+      "max": 931115.0,
+      "mean": 198918.9,
+      "min": 7498.0,
+      "n": 30,
+      "p10": 11904.4,
+      "p25": 50943.0,
+      "p50": 110630.5,
+      "p75": 310080.5,
+      "p90": 510619.2
+     },
+     "excluded": {},
+     "hit": {
+      "boxes_with_p_at_least_0_9": 15,
+      "boxes_with_p_at_most_0_1": 0,
+      "expected": 23.348,
+      "observed": 22,
+      "p_per_box": {
+       "max": 1.0,
+       "mean": 0.7783,
+       "min": 0.1955,
+       "n": 30,
+       "p10": 0.3478,
+       "p25": 0.619,
+       "p50": 0.9124,
+       "p75": 0.9918,
+       "p90": 1.0
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.8815,
+       "mean": 0.4439,
+       "min": 0.1955,
+       "n": 8,
+       "p10": 0.213,
+       "p25": 0.2413,
+       "p50": 0.3712,
+       "p75": 0.5141,
+       "p90": 0.8705
+      },
+      "p_per_box_of_observed": {
+       "max": 1.0,
+       "mean": 0.8999,
+       "min": 0.549,
+       "n": 22,
+       "p10": 0.6575,
+       "p25": 0.8422,
+       "p50": 0.986,
+       "p75": 0.9987,
+       "p90": 1.0
+      }
+     },
+     "host_correct": {
+      "boxes_with_p_at_least_0_9": 5,
+      "boxes_with_p_at_most_0_1": 0,
+      "expected": 18.335,
+      "observed": 19,
+      "p_per_box": {
+       "max": 1.0,
+       "mean": 0.6112,
+       "min": 0.1647,
+       "n": 30,
+       "p10": 0.2161,
+       "p25": 0.3655,
+       "p50": 0.6656,
+       "p75": 0.7859,
+       "p90": 0.9725
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.8545,
+       "mean": 0.4117,
+       "min": 0.1647,
+       "n": 11,
+       "p10": 0.1935,
+       "p25": 0.259,
+       "p50": 0.3385,
+       "p75": 0.5363,
+       "p90": 0.7209
+      },
+      "p_per_box_of_observed": {
+       "max": 1.0,
+       "mean": 0.7266,
+       "min": 0.1936,
+       "n": 19,
+       "p10": 0.4414,
+       "p25": 0.6252,
+       "p50": 0.7492,
+       "p75": 0.883,
+       "p90": 0.9988
+      }
+     },
+     "host_voxels": {
+      "max": 37443.0,
+      "mean": 10092.0,
+      "min": 282.0,
+      "n": 30,
+      "p10": 791.5,
+      "p25": 2133.0,
+      "p50": 5891.5,
+      "p75": 13287.5,
+      "p90": 23368.4
+     },
+     "n_boxes": 30,
+     "n_usable": 30
+    },
+    "meniscal_tear": {
+     "boxes_with_fewer_than_1000_comparable_placements": 0,
+     "boxes_with_fewer_than_100_comparable_placements": 0,
+     "comparable_placements": {
+      "max": 352051.0,
+      "mean": 72875.2,
+      "min": 10261.0,
+      "n": 23,
+      "p10": 18730.4,
+      "p25": 28089.0,
+      "p50": 46644.0,
+      "p75": 71314.0,
+      "p90": 171828.2
+     },
+     "excluded": {},
+     "hit": {
+      "boxes_with_p_at_least_0_9": 0,
+      "boxes_with_p_at_most_0_1": 11,
+      "expected": 6.003,
+      "observed": 6,
+      "p_per_box": {
+       "max": 0.8613,
+       "mean": 0.261,
+       "min": 0.0,
+       "n": 23,
+       "p10": 0.0176,
+       "p25": 0.021,
+       "p50": 0.1393,
+       "p75": 0.5042,
+       "p90": 0.6582
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.6509,
+       "mean": 0.1459,
+       "min": 0.0,
+       "n": 17,
+       "p10": 0.0125,
+       "p25": 0.0198,
+       "p50": 0.0363,
+       "p75": 0.1414,
+       "p90": 0.5455
+      },
+      "p_per_box_of_observed": {
+       "max": 0.8613,
+       "mean": 0.5869,
+       "min": 0.3098,
+       "n": 6,
+       "p10": 0.3841,
+       "p25": 0.4643,
+       "p50": 0.5711,
+       "p75": 0.7275,
+       "p90": 0.8056
+      }
+     },
+     "host_correct": {
+      "boxes_with_p_at_least_0_9": 0,
+      "boxes_with_p_at_most_0_1": 14,
+      "expected": 2.337,
+      "observed": 2,
+      "p_per_box": {
+       "max": 0.5017,
+       "mean": 0.1016,
+       "min": 0.0,
+       "n": 23,
+       "p10": 0.0008,
+       "p25": 0.015,
+       "p50": 0.0572,
+       "p75": 0.137,
+       "p90": 0.2606
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.2792,
+       "mean": 0.0723,
+       "min": 0.0,
+       "n": 21,
+       "p10": 0.0,
+       "p25": 0.0113,
+       "p50": 0.055,
+       "p75": 0.134,
+       "p90": 0.1473
+      },
+      "p_per_box_of_observed": {
+       "max": 0.5017,
+       "mean": 0.4096,
+       "min": 0.3176,
+       "n": 2,
+       "p10": 0.336,
+       "p25": 0.3636,
+       "p50": 0.4096,
+       "p75": 0.4557,
+       "p90": 0.4833
+      }
+     },
+     "host_voxels": {
+      "max": 29717.0,
+      "mean": 5072.0,
+      "min": 182.0,
+      "n": 23,
+      "p10": 421.4,
+      "p25": 896.0,
+      "p50": 2117.0,
+      "p75": 7651.0,
+      "p90": 12216.6
+     },
+     "n_boxes": 23,
+     "n_usable": 23
+    }
+   },
+   "n_scans": 33,
+   "overall": {
+    "boxes_with_fewer_than_1000_comparable_placements": 0,
+    "boxes_with_fewer_than_100_comparable_placements": 0,
+    "comparable_placements": {
+     "max": 931115.0,
+     "mean": 144220.7,
+     "min": 7498.0,
+     "n": 53,
+     "p10": 17354.2,
+     "p25": 39368.0,
+     "p50": 58897.0,
+     "p75": 186481.0,
+     "p90": 364832.6
+    },
+    "excluded": {},
+    "hit": {
+     "boxes_with_p_at_least_0_9": 15,
+     "boxes_with_p_at_most_0_1": 11,
+     "expected": 29.351,
+     "observed": 28,
+     "p_per_box": {
+      "max": 1.0,
+      "mean": 0.5538,
+      "min": 0.0,
+      "n": 53,
+      "p10": 0.0207,
+      "p25": 0.1584,
+      "p50": 0.6072,
+      "p75": 0.9488,
+      "p90": 0.9987
+     },
+     "p_per_box_of_not_observed": {
+      "max": 0.8815,
+      "mean": 0.2413,
+      "min": 0.0,
+      "n": 25,
+      "p10": 0.018,
+      "p25": 0.0214,
+      "p50": 0.1414,
+      "p75": 0.3836,
+      "p90": 0.6203
+     },
+     "p_per_box_of_observed": {
+      "max": 1.0,
+      "mean": 0.8328,
+      "min": 0.3098,
+      "n": 28,
+      "p10": 0.529,
+      "p25": 0.6796,
+      "p50": 0.946,
+      "p75": 0.9937,
+      "p90": 1.0
+     }
+    },
+    "host_correct": {
+     "boxes_with_p_at_least_0_9": 5,
+     "boxes_with_p_at_most_0_1": 14,
+     "expected": 20.672,
+     "observed": 21,
+     "p_per_box": {
+      "max": 1.0,
+      "mean": 0.39,
+      "min": 0.0,
+      "n": 53,
+      "p10": 0.0127,
+      "p25": 0.0689,
+      "p50": 0.3176,
+      "p75": 0.7044,
+      "p90": 0.846
+     },
+     "p_per_box_of_not_observed": {
+      "max": 0.8545,
+      "mean": 0.1889,
+      "min": 0.0,
+      "n": 32,
+      "p10": 0.0044,
+      "p25": 0.0306,
+      "p50": 0.135,
+      "p75": 0.2842,
+      "p90": 0.4935
+     },
+     "p_per_box_of_observed": {
+      "max": 1.0,
+      "mean": 0.6965,
+      "min": 0.1936,
+      "n": 21,
+      "p10": 0.4306,
+      "p25": 0.5534,
+      "p50": 0.7271,
+      "p75": 0.8117,
+      "p90": 0.9985
+     }
+    },
+    "host_voxels": {
+     "max": 37443.0,
+     "mean": 7913.5,
+     "min": 182.0,
+     "n": 53,
+     "p10": 545.4,
+     "p25": 1239.0,
+     "p50": 4317.0,
+     "p75": 12029.0,
+     "p90": 21001.2
+    },
+    "n_boxes": 53,
+    "n_usable": 53
+   },
+   "scans_with_a_primary_box": 23
+  },
+  "train": {
+   "by_class": {
+    "cartilage_lesion": {
+     "boxes_with_fewer_than_1000_comparable_placements": 0,
+     "boxes_with_fewer_than_100_comparable_placements": 0,
+     "comparable_placements": {
+      "max": 1488156.0,
+      "mean": 302519.2,
+      "min": 1012.0,
+      "n": 72,
+      "p10": 12487.2,
+      "p25": 32540.8,
+      "p50": 169426.5,
+      "p75": 457215.2,
+      "p90": 780046.3
+     },
+     "excluded": {},
+     "hit": {
+      "boxes_with_p_at_least_0_9": 30,
+      "boxes_with_p_at_most_0_1": 2,
+      "expected": 53.153,
+      "observed": 51,
+      "p_per_box": {
+       "max": 1.0,
+       "mean": 0.7382,
+       "min": 0.0594,
+       "n": 72,
+       "p10": 0.3604,
+       "p25": 0.5183,
+       "p50": 0.8373,
+       "p75": 0.9932,
+       "p90": 1.0
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.8562,
+       "mean": 0.4669,
+       "min": 0.0594,
+       "n": 21,
+       "p10": 0.1111,
+       "p25": 0.321,
+       "p50": 0.4993,
+       "p75": 0.6384,
+       "p90": 0.7849
+      },
+      "p_per_box_of_observed": {
+       "max": 1.0,
+       "mean": 0.85,
+       "min": 0.2714,
+       "n": 51,
+       "p10": 0.5438,
+       "p25": 0.6845,
+       "p50": 0.951,
+       "p75": 0.9998,
+       "p90": 1.0
+      }
+     },
+     "host_correct": {
+      "boxes_with_p_at_least_0_9": 8,
+      "boxes_with_p_at_most_0_1": 5,
+      "expected": 39.394,
+      "observed": 39,
+      "p_per_box": {
+       "max": 1.0,
+       "mean": 0.5471,
+       "min": 0.0115,
+       "n": 72,
+       "p10": 0.1899,
+       "p25": 0.3403,
+       "p50": 0.5745,
+       "p75": 0.7456,
+       "p90": 0.9109
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.8614,
+       "mean": 0.4232,
+       "min": 0.0115,
+       "n": 33,
+       "p10": 0.0651,
+       "p25": 0.236,
+       "p50": 0.4346,
+       "p75": 0.6417,
+       "p90": 0.7285
+      },
+      "p_per_box_of_observed": {
+       "max": 1.0,
+       "mean": 0.652,
+       "min": 0.1208,
+       "n": 39,
+       "p10": 0.3492,
+       "p25": 0.4725,
+       "p50": 0.6475,
+       "p75": 0.8055,
+       "p90": 1.0
+      }
+     },
+     "host_voxels": {
+      "max": 58877.0,
+      "mean": 9567.3,
+      "min": 20.0,
+      "n": 72,
+      "p10": 680.7,
+      "p25": 1805.8,
+      "p50": 5930.5,
+      "p75": 13956.0,
+      "p90": 25990.8
+     },
+     "n_boxes": 72,
+     "n_usable": 72
+    },
+    "meniscal_tear": {
+     "boxes_with_fewer_than_1000_comparable_placements": 0,
+     "boxes_with_fewer_than_100_comparable_placements": 0,
+     "comparable_placements": {
+      "max": 376264.0,
+      "mean": 71878.2,
+      "min": 1811.0,
+      "n": 34,
+      "p10": 3752.9,
+      "p25": 14698.0,
+      "p50": 26395.5,
+      "p75": 71929.2,
+      "p90": 179553.8
+     },
+     "excluded": {},
+     "hit": {
+      "boxes_with_p_at_least_0_9": 4,
+      "boxes_with_p_at_most_0_1": 13,
+      "expected": 13.256,
+      "observed": 16,
+      "p_per_box": {
+       "max": 0.9964,
+       "mean": 0.3899,
+       "min": 0.0,
+       "n": 34,
+       "p10": 0.0096,
+       "p25": 0.0281,
+       "p50": 0.3175,
+       "p75": 0.6268,
+       "p90": 0.9463
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.624,
+       "mean": 0.1246,
+       "min": 0.0,
+       "n": 18,
+       "p10": 0.0048,
+       "p25": 0.0096,
+       "p50": 0.0289,
+       "p75": 0.189,
+       "p90": 0.3686
+      },
+      "p_per_box_of_observed": {
+       "max": 0.9964,
+       "mean": 0.6883,
+       "min": 0.3169,
+       "n": 16,
+       "p10": 0.3577,
+       "p25": 0.4715,
+       "p50": 0.6791,
+       "p75": 0.8901,
+       "p90": 0.9917
+      }
+     },
+     "host_correct": {
+      "boxes_with_p_at_least_0_9": 0,
+      "boxes_with_p_at_most_0_1": 18,
+      "expected": 5.909,
+      "observed": 7,
+      "p_per_box": {
+       "max": 0.8365,
+       "mean": 0.1738,
+       "min": 0.0,
+       "n": 34,
+       "p10": 0.0,
+       "p25": 0.0109,
+       "p50": 0.0657,
+       "p75": 0.2912,
+       "p90": 0.4988
+      },
+      "p_per_box_of_not_observed": {
+       "max": 0.545,
+       "mean": 0.0903,
+       "min": 0.0,
+       "n": 27,
+       "p10": 0.0,
+       "p25": 0.0057,
+       "p50": 0.0273,
+       "p75": 0.1239,
+       "p90": 0.2099
+      },
+      "p_per_box_of_observed": {
+       "max": 0.8365,
+       "mean": 0.4961,
+       "min": 0.3169,
+       "n": 7,
+       "p10": 0.3358,
+       "p25": 0.3729,
+       "p50": 0.4728,
+       "p75": 0.5503,
+       "p90": 0.689
+      }
+     },
+     "host_voxels": {
+      "max": 45510.0,
+      "mean": 7790.3,
+      "min": 4.0,
+      "n": 34,
+      "p10": 358.3,
+      "p25": 472.8,
+      "p50": 5148.0,
+      "p75": 9526.5,
+      "p90": 20568.4
+     },
+     "n_boxes": 34,
+     "n_usable": 34
+    }
+   },
+   "n_scans": 86,
+   "overall": {
+    "boxes_with_fewer_than_1000_comparable_placements": 0,
+    "boxes_with_fewer_than_100_comparable_placements": 0,
+    "comparable_placements": {
+     "max": 1488156.0,
+     "mean": 228540.0,
+     "min": 1012.0,
+     "n": 106,
+     "p10": 10841.0,
+     "p25": 23467.8,
+     "p50": 85227.5,
+     "p75": 346598.8,
+     "p90": 624103.0
+    },
+    "excluded": {},
+    "hit": {
+     "boxes_with_p_at_least_0_9": 34,
+     "boxes_with_p_at_most_0_1": 15,
+     "expected": 66.408,
+     "observed": 67,
+     "p_per_box": {
+      "max": 1.0,
+      "mean": 0.6265,
+      "min": 0.0,
+      "n": 106,
+      "p10": 0.0534,
+      "p25": 0.4041,
+      "p50": 0.6579,
+      "p75": 0.9823,
+      "p90": 1.0
+     },
+     "p_per_box_of_not_observed": {
+      "max": 0.8562,
+      "mean": 0.3089,
+      "min": 0.0,
+      "n": 39,
+      "p10": 0.0096,
+      "p25": 0.0389,
+      "p50": 0.2527,
+      "p75": 0.5166,
+      "p90": 0.6633
+     },
+     "p_per_box_of_observed": {
+      "max": 1.0,
+      "mean": 0.8114,
+      "min": 0.2714,
+      "n": 67,
+      "p10": 0.4658,
+      "p25": 0.6563,
+      "p50": 0.9071,
+      "p75": 0.9958,
+      "p90": 1.0
+     }
+    },
+    "host_correct": {
+     "boxes_with_p_at_least_0_9": 8,
+     "boxes_with_p_at_most_0_1": 23,
+     "expected": 45.303,
+     "observed": 46,
+     "p_per_box": {
+      "max": 1.0,
+      "mean": 0.4274,
+      "min": 0.0,
+      "n": 106,
+      "p10": 0.0149,
+      "p25": 0.1225,
+      "p50": 0.4459,
+      "p75": 0.6707,
+      "p90": 0.8426
+     },
+     "p_per_box_of_not_observed": {
+      "max": 0.8614,
+      "mean": 0.2734,
+      "min": 0.0,
+      "n": 60,
+      "p10": 0.0048,
+      "p25": 0.0257,
+      "p50": 0.2059,
+      "p75": 0.4759,
+      "p90": 0.6765
+     },
+     "p_per_box_of_observed": {
+      "max": 1.0,
+      "mean": 0.6283,
+      "min": 0.1208,
+      "n": 46,
+      "p10": 0.3387,
+      "p25": 0.4605,
+      "p50": 0.6096,
+      "p75": 0.7774,
+      "p90": 1.0
+     }
+    },
+    "host_voxels": {
+     "max": 58877.0,
+     "mean": 8997.3,
+     "min": 4.0,
+     "n": 106,
+     "p10": 388.0,
+     "p25": 1342.0,
+     "p50": 5589.5,
+     "p75": 11175.2,
+     "p90": 24636.0
+    },
+    "n_boxes": 106,
+    "n_usable": 106
+   },
+   "scans_with_a_primary_box": 46
+  }
+ }
+}
