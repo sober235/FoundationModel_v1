@@ -953,3 +953,20 @@ def test_status_records_the_approval_and_the_amendment_apart_from_the_conclusion
     assert "CST" not in section and "amax 时间" not in section
     for pattern in _REDACTED:
         assert not re.search(pattern, section), pattern
+
+
+def test_the_context_summary_of_the_audit_in_progress_carries_no_ranking_result_and_no_identifier():
+    text = Path("reports/v5/context_summary_20261115.md").read_text(encoding="utf-8")
+    for phrase in ("`f1120e2`", RANKING_PREREG_SHA256, RANKING_AMENDMENT_SHA256, "**撰写时排序审计还在运行。本文件里没有任何排序结果**",
+                   "累计 14 个作业小时", "**不合并 PR #2**", "**未测量**", "预检的第一次尝试作废", "没有碰别人的进程",
+                   "可用负体素的计数 ≠ 被选中的难负样本的构成 ≠ 梯度的贡献", "不自动启动任何训练", "推送要另行同意",
+                   "NOT_EVALUATED", "`locked_test` 没有读过"):
+        assert phrase in text, phrase
+    for pattern in _REDACTED:
+        assert not re.search(pattern, text), pattern
+    assert "CST" not in text and "amax 时间" not in text
+    # the counts of the census are those of the report the server wrote (its hash is named)
+    assert "69616beff2bc73c04b21840423080d3fc661faae44ad6afbc35fa612dddb6103" in text
+    assert "17,667,373,086" in text and "17,707,628,330" in text
+    meta = _front_matter()
+    assert meta["scientific_conclusion"] == "NOT_EVALUATED" and meta["core_target_validated"] is None
