@@ -14,11 +14,12 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import torch
 
 from ..contracts_v5 import V5Error
 from ..losses import box_mil_terms_v5, box_terms_record_v5, negative_top_count_v5
-from .box_data_v5 import box_positive_centers_v5
+from .box_data_v5 import _is_primary, _window, box_positive_centers_v5
 from .data_v5 import PatchSamplerV5, positive_centers_v5
 from .train_unified_v5 import _bag_count
 from .train_v5 import _support
@@ -175,3 +176,29 @@ def negative_census_v5(uids: list, anatomy: torch.Tensor, bags: torch.Tensor, e_
                     "eligible": sum(sum(counts.values()) for counts in negative.values()),
                     "host": sum(counts["host"] for counts in negative.values())})
     return out
+
+
+def negative_policy_check_v5(reference: dict, e_neg, classes: list) -> list:
+    """Whether one scan's negative support keeps out of what the policy excludes, per class, on the scan's grid.
+
+    `e_neg`: the sample's eligibility of the negatives [classes, *shape]. The regions are redrawn here from the
+    scan's boxes: `ignore_voxels` the voxels of its ignore regions (boxes that are not primary) and `own_box_voxels`
+    those of the class's primary boxes; `negative_in_ignore` and `negative_in_own_boxes` count the eligible
+    negatives inside them. Both are 0 when the implemented policy holds."""
+    e_neg = np.asarray(e_neg, dtype=bool)
+    shape = tuple(int(n) for n in e_neg.shape[1:])
+    if e_neg.shape[0] != len(classes):
+        raise V5Error("GRID_MISMATCH", "$.e_neg")
+    ignored = np.zeros(shape, dtype=bool)
+    own = np.zeros((len(classes), *shape), dtype=bool)
+    for box in reference["boxes"]:
+        window = _window(box["box"], shape)
+        if window is None:
+            continue
+        if _is_primary(box):
+            own[(classes.index(box["abnormality_class"]), *window)] = True
+        else:
+            ignored[window] = True
+    return [{"ignore_voxels": int(ignored.sum()), "negative_in_ignore": int((e_neg[c] & ignored).sum()),
+             "own_box_voxels": int(own[c].sum()), "negative_in_own_boxes": int((e_neg[c] & own[c]).sum())}
+            for c in range(len(classes))]

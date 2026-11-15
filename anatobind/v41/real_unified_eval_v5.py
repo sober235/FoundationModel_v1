@@ -45,6 +45,13 @@ anchor. `run_unified_census_v5` (2026-11-14) builds no model: it redraws the tra
 and counts what the negative support of the box objective was made of (host tissue, other tissue, the rest; by
 whether the scan has a box). Only train is read.
 
+Amendment of 2026-11-15: `run_unified_ranking_v5(preflight=N)` reads the first N train scans with a primary box
+(by sample uid: a rule, not a choice) and checks the chain before the audit spends its budget: the checkpoint, the
+normalisation of the input, the restoration to the original grid, the probabilities, the agreement of the predicted
+with the reference anatomy and the place of the boxes on it. It reports no ranking. The private rows of a ranking
+keep each box's pool, seed key and grid; the census also checks that the ignore regions and the class's own boxes
+hold no eligible negative.
+
 Private rows stay under the new directory; the renderers show configuration, counts, metrics and hashes only.
 scientific_conclusion stays NOT_EVALUATED; values on train are diagnostics, never a generalisation result.
 """
@@ -53,6 +60,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import resource
+import sys
 import time
 from collections import Counter
 from pathlib import Path
@@ -62,12 +71,13 @@ import torch
 
 from . import real_unified_v5 as driver
 from .contracts_v5 import V5Error
+from .engine.box_data_v5 import _is_primary, load_box_references_v5
 from .engine.data_v5 import make_batch_v5, original_geometry_v5
 from .engine.module_eval_v5 import freeze_module_reference_v5, module_metrics_v5, summarize_module_metrics_v5
 from .engine.registration_v5 import READABLE_ROLES, _is_sha256, _positive_int, readable_role_v5, run_sha256_v5
 from .engine.replay_v5 import (
     CENSUS_TISSUES, batch_exposure_v5, box_counts_v5, box_objective_parts_v5, full_bag_voxels_v5, member_sampler_v5,
-    negative_census_v5, negative_reach_v5)
+    negative_census_v5, negative_policy_check_v5, negative_reach_v5)
 from .engine.smoke_v5 import _same
 from .engine.train_v5 import _append_jsonl, _to_device, autocast_v5, load_checkpoint_v5
 from .engine.unified_registration_v5 import member_recipe_v5, stop_step_v5, unified_plan_sha256_v5
@@ -600,13 +610,20 @@ def run_unified_ranking_v5(*, plan: dict, plan_sha256: str, protocols: dict, mem
                            run_id: str, roles: list, max_wall_hours: float, created_at: str, environment: dict,
                            code: dict, fixture_mode: bool, protocol_ids: list | None = None,
                            checkpoint: tuple | None = None, n_placements: int = N_PLACEMENTS,
-                           n_bootstrap: int = N_BOOTSTRAP) -> dict:
+                           n_bootstrap: int = N_BOOTSTRAP, preflight: int | None = None) -> dict:
     """Read the abnormality probabilities of the finished run `run_id` on `roles`, under its final checkpoint or
     the checkpoint `(step, sha256)` of that run, against the readers' boxes without any threshold
     (evaluation.findings_ranking_v5). The acceptance policy, the instances and the findings are never built.
-    summary.json and the private rows go to the new directory `private_root`. Returns the summary."""
+    summary.json and the private rows go to the new directory `private_root`. Returns the summary.
+
+    `preflight` N: only the first N train scans that have a primary box (sorted by sample uid) are read, the chain
+    is checked on them (_preflight_scan) and no ranking is reported or written."""
     started = time.monotonic()
     roles = _check_roles(roles)
+    if preflight is not None and not _positive_int(preflight):
+        raise V5Error("INVALID_TYPE", "$.preflight")
+    if preflight is not None and roles != ["train"]:
+        raise V5Error("INVALID_ROLE", "$.roles")
     if not _positive_int(n_placements):
         raise V5Error("INVALID_TYPE", "$.n_placements")
     if not (isinstance(n_bootstrap, int) and not isinstance(n_bootstrap, bool) and n_bootstrap >= 0):
@@ -620,10 +637,12 @@ def run_unified_ranking_v5(*, plan: dict, plan_sha256: str, protocols: dict, mem
     wanted = _box_members(plan, protocols, pids, protocol_ids)
     model = _frozen_model(plan, scopes, _load_selected(opened, device_t.type), device_t)
     before = state_sha256_v5(model)
-    summary = _header(plan, plan_sha256, opened, scopes, "unified_ranking", device_t, before, max_wall_hours,
+    summary = _header(plan, plan_sha256, opened, scopes,
+                      "unified_ranking" if preflight is None else "unified_ranking_preflight", device_t, before,
+                      max_wall_hours,
                       {"roles": roles, "code": dict(code), "environment": dict(environment),
                        "created_at": created_at, "n_placements": int(n_placements), "n_bootstrap": int(n_bootstrap),
-                       "seed": RANKING_SEED})
+                       "seed": RANKING_SEED, "preflight_scans": preflight})
 
     def finish(stop_code: str | None, phase: str | None) -> dict:
         summary["stop_code"], summary["stop_phase"] = stop_code, phase
@@ -636,11 +655,20 @@ def run_unified_ranking_v5(*, plan: dict, plan_sha256: str, protocols: dict, mem
         for pid in wanted:
             member, scope, protocol = plan["members"][pid], scopes[pid], protocols[pid]
             member_run, registry = opened["member_runs"][pid], members[pid]["registry"]
+            by_uid = {record.sample_uid: record for record in members[pid]["records"]}
+            subset = None
+            if preflight is not None:               # a rule fixed in advance: the first scans that have a primary box
+                boxed = load_box_references_v5(Path(members[pid]["box_references"]), registry, [role])
+                subset = set([uid for uid in sorted(boxed) if uid in by_uid and any(
+                    _is_primary(box) for box in boxed[uid]["boxes"])][:preflight])
+                if len(subset) != preflight:
+                    raise V5Error("PREFLIGHT_TOO_FEW_SCANS", "$.preflight")
             samples, references = driver.load_member_samples_v5(
                 plan=plan, protocol_id=pid, protocol=protocol, records=members[pid]["records"], registry=registry,
-                raw=raw, label_maps=label_maps, roles=[role], box_references=members[pid].get("box_references"))
-            by_uid = {record.sample_uid: record for record in members[pid]["records"]}
+                raw=raw, label_maps=label_maps, roles=[role], box_references=members[pid].get("box_references"),
+                subset=subset)
             rows_path = resolve_private_output(private_root / "rows" / f"{role}.{pid}.jsonl", private_root, repo)
+            checks = []
             group_ids, classes = _group_ids(scope, protocol["groups"]), list(scope.abnormality_classes)
             # the placements drawn for a box depend on its split, its member, its scan and its place among the
             # scan's boxes, not on which roles one command reads or on the checkpoint
@@ -655,7 +683,8 @@ def run_unified_ranking_v5(*, plan: dict, plan_sha256: str, protocols: dict, mem
                 observation = sample.observation
                 batch = build_model_input_v5(observation.channels, scope, observation.valid_fov, observation.grid,
                                              list(observation.to_original))
-                shape = tuple(int(n) for n in original_geometry_v5(observation, record)["shape"])
+                geometry = original_geometry_v5(observation, record)
+                shape = tuple(int(n) for n in geometry["shape"])
                 restored, represented, valid_fov = restored_probabilities_v5(
                     model.view(pid), batch, shape, tuple(member["inference"]["window"]),
                     tuple(member["inference"]["stride"]), plan["shared"]["precision"])
@@ -665,9 +694,16 @@ def run_unified_ranking_v5(*, plan: dict, plan_sha256: str, protocols: dict, mem
                     anatomy_reference=sample.targets["A"], anatomy_eligible=eligible, classes=classes,
                     group_ids=group_ids, groups_by_class=protocol["groups_by_class"],
                     topk_fraction=member["box_supervision"]["topk_fraction"], patient_uid=record.patient_uid,
-                    seed_key=(*role_key, ordinal), n_placements=n_placements)
+                    seed_key=(*role_key, ordinal), n_placements=n_placements, grid=geometry)
+                if preflight is not None:                           # the chain is checked; no ranking leaves here
+                    checks.append(_preflight_scan(observation, restored, represented, valid_fov, sample.targets["A"],
+                                                  list(scope.anatomy_classes), row))
+                    continue
                 _append_jsonl(rows_path, {"ranking": row})
                 rows.append(row)
+            if preflight is not None:
+                results[pid] = {"preflight": _preflight_summary(checks, device_t)}
+                continue
             results[pid][role] = {"n_scans": len(rows),
                                   "ranking": summarize_ranking_v5(rows, classes, n_bootstrap=n_bootstrap)}
     if state_sha256_v5(model) != before:
@@ -678,6 +714,132 @@ def run_unified_ranking_v5(*, plan: dict, plan_sha256: str, protocols: dict, mem
     return finish(None, None)
 
 
+PREFLIGHT_INPUT_TOLERANCE = 1e-3         # of the mean and the standard deviation of a channel inside the FOV
+PREFLIGHT_MIN_ELIGIBLE_SHARE = 0.99      # of the original grid that the restored output represents inside the FOV
+PREFLIGHT_SUM_TOLERANCE = 1e-3           # of the sum of the anatomy probabilities of a voxel
+PREFLIGHT_MIN_ANATOMY_DICE = 0.5         # mean Dice of the predicted against the reference anatomy, per scan
+
+
+def _preflight_scan(observation, restored: dict, represented, valid_fov, reference_anatomy, anatomy_classes: list,
+                    row: dict) -> dict:
+    """What the preflight checks on one scan: numbers of the input, of the restored probabilities and of the
+    boxes on the reference anatomy. Nothing of the ranking (percentiles, p-values) is kept."""
+    fov = np.asarray(observation.valid_fov, dtype=bool)
+    channels = []
+    for array in observation.channels.values():
+        values = np.asarray(array)[fov].astype(np.float64)
+        channels.append({"finite": bool(np.isfinite(array).all()), "mean": float(values.mean()),
+                         "std": float(values.std())})
+    inside = np.asarray(represented, dtype=bool) & np.asarray(valid_fov, dtype=bool)
+    abnormality, anatomy = restored["abnormality"], restored["anatomy"]
+    shape = tuple(int(n) for n in np.shape(reference_anatomy))
+    predicted = anatomy.argmax(axis=0)
+    dice = [value for value in anatomy_dice_v5(predicted, reference_anatomy, inside, anatomy_classes).values()
+            if value is not None]
+    boxes = row["boxes"]
+    return {"channels": channels,
+            "shape_matches": abnormality.shape[1:] == shape and anatomy.shape[1:] == shape
+            and anatomy.shape[0] == 1 + len(anatomy_classes) and inside.shape == shape,
+            "eligible_share": float(inside.mean()),
+            "abnormality": {"finite": bool(np.isfinite(abnormality).all()), "min": float(abnormality.min()),
+                            "max": float(abnormality.max())},
+            "anatomy": {"finite": bool(np.isfinite(anatomy).all()), "min": float(anatomy.min()),
+                        "max": float(anatomy.max()),
+                        "sum_error": float(np.abs(anatomy.sum(axis=0)[inside] - 1.0).max()) if inside.any() else None},
+            "anatomy_dice_mean": float(np.mean(dice)) if dice else None, "anatomy_classes_compared": len(dice),
+            "boxes": len(boxes), "boxes_with_bag": sum(1 for box in boxes if box["status"] == "ok"),
+            "bag_share_of_box": [box["bag_voxels"] / box["box_voxels"] for box in boxes if box["box_voxels"]],
+            "pools": [box["pool"] for box in boxes if box["status"] == "ok"]}
+
+
+def _preflight_summary(checks: list, device: torch.device) -> dict:
+    """The checks over the preflight scans, each with what it saw and whether it passed (thresholds above)."""
+    channels = [channel for check in checks for channel in check["channels"]]
+    mean_error = max(abs(channel["mean"]) for channel in channels)
+    std_error = max(abs(channel["std"] - 1.0) for channel in channels)
+    sum_errors = [check["anatomy"]["sum_error"] for check in checks]
+    dice = [check["anatomy_dice_mean"] for check in checks]
+    probabilities = [check[key] for check in checks for key in ("abnormality", "anatomy")]
+    result = {
+        "scans": len(checks),
+        "input_normalisation": {
+            "channels": len(channels), "max_abs_mean": mean_error, "max_abs_std_minus_1": std_error,
+            "pass": all(channel["finite"] for channel in channels) and mean_error <= PREFLIGHT_INPUT_TOLERANCE
+            and std_error <= PREFLIGHT_INPUT_TOLERANCE},
+        "grid_restoration": {
+            "min_eligible_share": min(check["eligible_share"] for check in checks),
+            "pass": all(check["shape_matches"] for check in checks)
+            and min(check["eligible_share"] for check in checks) >= PREFLIGHT_MIN_ELIGIBLE_SHARE},
+        "probabilities": {
+            "min": min(item["min"] for item in probabilities), "max": max(item["max"] for item in probabilities),
+            "max_anatomy_sum_error": None if None in sum_errors else max(sum_errors),
+            "abnormality_varies": all(check["abnormality"]["max"] > check["abnormality"]["min"] for check in checks),
+            "pass": all(item["finite"] and item["min"] >= 0.0 and item["max"] <= 1.0 for item in probabilities)
+            and None not in sum_errors and max(sum_errors) <= PREFLIGHT_SUM_TOLERANCE
+            and all(check["abnormality"]["max"] > check["abnormality"]["min"] for check in checks)},
+        "anatomy_agreement": {
+            "min_mean_dice": None if None in dice else min(dice),
+            "pass": None not in dice and min(dice) >= PREFLIGHT_MIN_ANATOMY_DICE},
+        "box_alignment": {
+            "boxes": sum(check["boxes"] for check in checks),
+            "boxes_with_bag": sum(check["boxes_with_bag"] for check in checks),
+            "bag_share_of_box": _distribution([v for check in checks for v in check["bag_share_of_box"]]),
+            "pool": _distribution([v for check in checks for v in check["pools"]]),
+            "pass": sum(check["boxes"] for check in checks) > 0
+            and all(check["boxes"] == check["boxes_with_bag"] for check in checks)},
+        "resources": {
+            "peak_gpu_bytes": int(torch.cuda.max_memory_allocated(device)) if device.type == "cuda" else None,
+            "peak_rss_bytes": int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+            * (1 if sys.platform == "darwin" else 1024)}}
+    result["passed"] = all(result[key]["pass"] for key in (
+        "input_normalisation", "grid_restoration", "probabilities", "anatomy_agreement", "box_alignment"))
+    return result
+
+
+def render_unified_ranking_preflight_md_v5(summary: dict) -> str:
+    """The checks of a preflight; no identifiers, no ranking."""
+    lines = _intro(summary, "统一模型排序审计的预检")
+    lines += ["- 只读 train；locked_test 与 development_val 未读。",
+              f"- 扫描的取法事先定下：train 里有主分析框的扫描按样本标识排序后的前 {summary['evaluation']['preflight_scans']} 个；"
+              "不按结果挑选。",
+              "- **本报告不含任何排序结果**（百分位、p 值都没有计算进摘要，也没有写出逐次扫描的行）。"
+              "检查点的身份由入口核对：文件哈希与登记的一致才会加载，结束时再核对权重未被改动（见上）。"]
+    passed = {True: "通过", False: "**未通过**"}
+    for pid, item in (summary["members"] or {}).items():
+        check = item["preflight"]
+        gpu, rss = check["resources"]["peak_gpu_bytes"], check["resources"]["peak_rss_bytes"]
+        lines += ["", f"## {pid}：预检（{check['scans']} 次扫描）", "",
+                  f"- 总结果：{passed[check['passed']]}", "",
+                  "| 检查 | 看到的 | 界限 | 结果 |", "| --- | --- | --- | --- |",
+                  f"| 输入归一化（FOV 内每个通道的均值与标准差） | 通道 {check['input_normalisation']['channels']} 个；"
+                  f"|均值| 最大 {check['input_normalisation']['max_abs_mean']:.2e}；|标准差 − 1| 最大 "
+                  f"{check['input_normalisation']['max_abs_std_minus_1']:.2e} | 有限，且都 ≤ {PREFLIGHT_INPUT_TOLERANCE:g} | "
+                  f"{passed[check['input_normalisation']['pass']]} |",
+                  f"| 恢复到原始网格 | 形状与参照解剖一致；FOV 内被表示的体素占比最小 "
+                  f"{check['grid_restoration']['min_eligible_share']:.5f} | 形状一致，占比 ≥ {PREFLIGHT_MIN_ELIGIBLE_SHARE:g} | "
+                  f"{passed[check['grid_restoration']['pass']]} |",
+                  f"| 概率的取值 | 最小 {check['probabilities']['min']:.3g}，最大 {check['probabilities']['max']:.6g}；"
+                  f"解剖概率之和与 1 的最大偏差 {_cell_or_na(check['probabilities']['max_anatomy_sum_error'])}；"
+                  f"异常概率{'不是' if check['probabilities']['abnormality_varies'] else '是'}常数 | 有限，在 [0, 1] 内，"
+                  f"偏差 ≤ {PREFLIGHT_SUM_TOLERANCE:g}，不是常数 | {passed[check['probabilities']['pass']]} |",
+                  f"| 预测解剖对参照解剖（各组织 Dice 的平均，逐次扫描取最小） | "
+                  f"{_cell_or_na(check['anatomy_agreement']['min_mean_dice'])} | ≥ {PREFLIGHT_MIN_ANATOMY_DICE:g} | "
+                  f"{passed[check['anatomy_agreement']['pass']]} |",
+                  f"| 框与解剖的对位 | 主分析框 {check['box_alignment']['boxes']} 个，其中框内有宿主组织的 "
+                  f"{check['box_alignment']['boxes_with_bag']} 个；袋占框体积的比例中位数 "
+                  f"{_cell_or_na(check['box_alignment']['bag_share_of_box']['p50'])}；可比摆放池大小中位数 "
+                  f"{_cell_or_na(check['box_alignment']['pool']['p50'])} | 每个框内都有宿主组织 | "
+                  f"{passed[check['box_alignment']['pass']]} |",
+                  "", f"- 资源：GPU 显存峰值 {'NA' if gpu is None else f'{gpu / 2 ** 30:.2f} GiB'}；进程常驻内存峰值 "
+                  f"{rss / 2 ** 30:.2f} GiB。速度由本机时钟与作业起止另行记账，不在本报告内。",
+                  "- 预测解剖对参照解剖用的是概率最大的类别（不应用接受策略），只用来确认输入、网格与标注对得上，不是正式指标。"]
+    return "\n".join(lines) + "\n"
+
+
+def _cell_or_na(value) -> str:
+    return "NA" if value is None else f"{value:.3g}"
+
+
 def render_unified_ranking_md_v5(summary: dict) -> str:
     """Configuration, counts, distributions and hashes of a ranking run; no identifiers."""
     evaluation = summary["evaluation"]
@@ -685,7 +847,8 @@ def render_unified_ranking_md_v5(summary: dict) -> str:
     lines = _intro(summary, "统一模型不用阈值的排序诊断")
     lines += [f"- 读取的划分角色：{'、'.join(roles)}；locked_test 未读。",
               "- 不用阈值：只做整卷推理并把概率恢复到原始网格（与只评价读到的概率相同）；没有应用接受策略，"
-              "没有连通块、实例、定位点与所见，也没有保存任何输出。",
+              "没有连通块、实例、定位点与所见；概率图没有保存，私有目录里只留逐次扫描的行（每个框的统计量、"
+              "可比摆放池的取值、种子与网格）和摘要。",
               f"- 每个主分析框的可比摆放的上限 {evaluation['n_placements']}（超过时带种子均匀抽样，种子 "
               f"{evaluation['seed']}）；患者重抽样 {evaluation['n_bootstrap']} 次。"]
     for pid, by_role in (summary["members"] or {}).items():
@@ -758,6 +921,15 @@ def run_unified_census_v5(*, plan: dict, plan_sha256: str, protocols: dict, memb
         host_ids = [sorted({i for group in protocol["groups_by_class"].get(name, []) for i in ids[group]})
                     for name in classes]
         groups = {uid: [scan_group_v5(references[uid]["boxes"], name) for name in classes] for uid in samples}
+        # the policy on whole scans: no eligible negative inside an ignore region or inside the class's own boxes
+        policy = [{"scans_with_ignore_region": 0, "ignore_voxels": 0, "negative_in_ignore": 0, "own_box_voxels": 0,
+                   "negative_in_own_boxes": 0} for _ in classes]
+        for uid in sorted(samples):
+            checked = negative_policy_check_v5(references[uid], samples[uid].e_neg["U"], classes)
+            for total, item in zip(policy, checked):
+                total["scans_with_ignore_region"] += int(item["ignore_voxels"] > 0)
+                for key, value in item.items():
+                    total[key] += value
         sampler = member_sampler_v5(samples, recipe, seed, box)
         compared = mismatches = 0
         totals = [{"negative": {group: dict.fromkeys(CENSUS_TISSUES, 0) for group in SCAN_GROUPS},
@@ -806,7 +978,10 @@ def run_unified_census_v5(*, plan: dict, plan_sha256: str, protocols: dict, memb
                                               "patches": total["patches"][group],
                                               "patch_share": total["patches"][group] / patches if patches else None}
                                       for group in SCAN_GROUPS}},
-                "host_share_per_batch": _distribution(total["host_share"])}
+                "host_share_per_batch": _distribution(total["host_share"]),
+                "policy_check": dict(policy[c], scans=len(groups),
+                                     passed=policy[c]["negative_in_ignore"] == 0
+                                     and policy[c]["negative_in_own_boxes"] == 0)}
         results[pid] = {"steps": taken, "run_steps": run_steps[pid], "patches": taken * recipe["batch_size"],
                         "patch_size": list(recipe["patch_size"]),
                         "positive_fraction": recipe["sampling"]["positive_fraction"],
@@ -837,7 +1012,11 @@ def render_unified_census_md_v5(summary: dict) -> str:
              "只按训练时的种子重抽裁块并计数，所以这些计数与权重无关。",
              "- 只读 train；development_val 与 locked_test 未读。",
              "- 负监督指框目标把它当作“无该类异常”的体素（所有同类主分析框与忽略区之外）。这是训练规则："
-             "医生没有标注不等于正常。"]
+             "医生没有标注不等于正常。",
+             "- 扫描的三个分组按类别分：有该类主分析框；只有其他的框（忽略区，或别的类别的主分析框）；没有任何框。",
+             "- **这里数的是“可用负体素”。它不等于“被选中的难负样本”，更不等于“梯度的贡献”**：负项取前一定比例时，"
+             "被选中的是哪些体素取决于当时的权重。被选中的难负样本的解剖构成：**未测量**。各类体素对梯度的贡献：**未测量**。"
+             "不能由体素计数推断哪一类体素主导了负项的梯度。"]
     for pid, item in (summary["members"] or {}).items():
         check = item["verification"]
         fraction = item["negative_topk_fraction"]
@@ -855,7 +1034,8 @@ def render_unified_census_md_v5(summary: dict) -> str:
             lines += ["", f"### {pid}：{name}", "",
                       "| 项 | 取值 |", "| --- | --- |",
                       *[f"| train 里{group_labels[group]} | {block['scans'][group]} |" for group in SCAN_GROUPS],
-                      f"| 批次里有该类袋的步数 | {block['steps_with_a_bag']} |",
+                      f"| 批次里有该类袋的步数 | {block['steps_with_a_bag']}（占 "
+                      f"{_share(block['steps_with_a_bag'] / item['steps'])}） |",
                       f"| 袋出现次数 | {block['bags']} |",
                       f"| 袋的体素（正监督的候选体素） | {block['bag_voxels']} |",
                       f"| 可用负体素 | {negative['voxels']} |",
@@ -868,7 +1048,15 @@ def render_unified_census_md_v5(summary: dict) -> str:
                         f"（{_share(negative['by_scan_group'][group]['patch_share'])}） |" for group in SCAN_GROUPS],
                       f"| 每个批次里宿主组织占可用负体素的比例：中位数 | {_share(block['host_share_per_batch']['p50'])} |",
                       f"| 同上：第 10 百分位 / 第 90 百分位 | {_share(block['host_share_per_batch']['p10'])} / "
-                      f"{_share(block['host_share_per_batch']['p90'])} |"]
+                      f"{_share(block['host_share_per_batch']['p90'])} |",
+                      f"| 策略核对（整卷，train 全部 {block['policy_check']['scans']} 次扫描）：有忽略区的扫描 | "
+                      f"{block['policy_check']['scans_with_ignore_region']} |",
+                      f"| 策略核对：忽略区的体素 / 其中的可用负体素 | {block['policy_check']['ignore_voxels']} / "
+                      f"{block['policy_check']['negative_in_ignore']} |",
+                      f"| 策略核对：该类主分析框的体素 / 其中的可用负体素 | {block['policy_check']['own_box_voxels']} / "
+                      f"{block['policy_check']['negative_in_own_boxes']} |",
+                      f"| 策略核对：忽略区与该类主分析框不提供负监督 | "
+                      f"{'成立' if block['policy_check']['passed'] else '**不成立**'} |"]
     return "\n".join(lines) + "\n"
 
 

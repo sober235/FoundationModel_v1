@@ -884,3 +884,72 @@ def test_status_records_the_classification_of_the_second_pilot_apart_from_the_co
     # nothing was run on real data: no result of the audit is in the repository
     assert not list(Path("reports/v5").glob("ranking_audit_2026111[4-9]*")) or \
         [p.name for p in Path("reports/v5").glob("ranking_audit_2026111[4-9]*")] == [RANKING_PREREG.name]
+
+
+# ---------------------------------------------------------------------------
+# Approval and amendment of the ranking audit (researcher's decisions of 2026-11-15)
+
+RANKING_AMENDMENT = Path("reports/v5/ranking_audit_prereg_amendment_20261115.md")
+RANKING_AMENDMENT_SHA256 = "8be9bd2cabca9879dc295cb0656502017b7e4afb22ce2b3d9d70c15446daf903"
+
+
+def _approval_section() -> str:
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    heading = "## 排序审计：批准、方案修订与执行（2026-11-15）"
+    assert heading in status
+    return status.split(heading, 1)[1].split("\n## ", 1)[0]
+
+
+def test_the_amendment_of_the_ranking_audit_was_frozen_and_leaves_the_first_plan_as_it_was():
+    assert hashlib.sha256(RANKING_PREREG.read_bytes()).hexdigest() == RANKING_PREREG_SHA256
+    assert hashlib.sha256(RANKING_AMENDMENT.read_bytes()).hexdigest() == RANKING_AMENDMENT_SHA256
+    text = RANKING_AMENDMENT.read_text(encoding="utf-8")
+    for phrase in (RANKING_PREREG_SHA256, "在任何真实数据作业启动之前写定并提交", "没有读到过任何真实的排序结果",
+                   "累计 14 个作业小时", "一次只用一张空闲的 A800", "**不合并 PR #2**", "8 个比较", "Holm",
+                   "不是同时区间", "不是病变概率的阈值", "**检出排序证据**", "**未检出排序证据**", "**不可判读**",
+                   "不证明病变特异的定位", "不是同等训练预算下的比较", "不报告任何排序结果", "**未测量**",
+                   "可用负体素的计数 ≠ 被选中的难负样本的构成 ≠ 梯度的贡献", "**完整的概率图不保存。**",
+                   "不读 `locked_test`", "**不作为既定的建模顺序**", "推荐的唯一一个最小的下一步实验",
+                   "输出概率图里没有富集，不说明编码器里没有有用的信息", "NOT_EVALUATED", "0.003125"):
+        assert phrase in text, phrase
+    for pattern in _REDACTED:
+        assert not re.search(pattern, text), pattern
+    assert "CST" not in text and "amax 时间" not in text
+
+
+def test_the_amendment_names_the_values_the_code_uses():
+    from anatobind.v41 import real_unified_eval_v5 as entries
+    from anatobind.v41.evaluation import findings_ranking_v5 as ranking
+
+    text = RANKING_AMENDMENT.read_text(encoding="utf-8")
+    assert ranking.FAMILY_SIZE == 8 and ranking.FAMILY_ROLE == "development_val" and ranking.FAMILY_ALPHA == 0.05
+    assert "四个检查点 × 两个病变类别" in text and "Holm p ≤ 0.05" in text
+    assert ranking.NULL_PERCENTILE == 0.5 and ranking.PRIMARY_STAT == "topk_mean"
+    assert ranking.MIN_PATIENTS == 10 and "少于 10 名" in text
+    assert ranking.MAX_EXCLUDED_SHARE == 0.2 and "超过 20%" in text
+    assert (ranking.MIN_POOL, ranking.MAX_SMALL_POOL_SHARE) == (20, 0.5) and "可比摆放池小于 20 的超过一半" in text
+    for code in ("FEW_PATIENTS", "MANY_BOXES_WITHOUT_BAG", "SMALL_POOLS", "NO_NULL_VARIANCE", "NO_INTERVAL",
+                 "JOB_NOT_COMPLETED", "WEIGHTS_NOT_VERIFIED", "PREFLIGHT_NOT_PASSED", "SUPPORT_DIFFERS_BETWEEN_CHECKPOINTS"):
+        assert f"`{code}`" in text, code
+    assert ranking.N_BOOTSTRAP == 10000 and ranking.SEED == 20261114 and "重抽样 10000 次（种子 20261114）" in text
+    assert (entries.PREFLIGHT_INPUT_TOLERANCE, entries.PREFLIGHT_SUM_TOLERANCE) == (1e-3, 1e-3) and "≤ 0.001" in text
+    assert entries.PREFLIGHT_MIN_ELIGIBLE_SHARE == 0.99 and "占比 ≥ 0.99" in text
+    assert entries.PREFLIGHT_MIN_ANATOMY_DICE == 0.5 and "在每次扫描上 ≥ 0.5" in text
+    assert "排序后的前 2 个" in text
+    # the budget adds up, and the entries' own bounds lie under the accounted ones
+    assert 4 * 3.0 + 1.5 + 0.5 == 14.0 and "| **合计** | **14.0 h** |" in text
+    assert "| R1–R4（各） | 3.0 h | 2.9 h |" in text and "| C1 | 1.5 h | 1.4 h |" in text
+
+
+def test_status_records_the_approval_and_the_amendment_apart_from_the_conclusion_fields():
+    section = _approval_section()
+    for phrase in ("ranking_audit_prereg_amendment_20261115.md", "累计 14 个作业小时", "一次只用一张空闲的 A800",
+                   "**不合并 PR #2**", "development_val 的 8 个比较", "Holm", "不是病变概率的阈值", "这两个字段没有改动",
+                   "原方案 `ranking_audit_prereg_20261114.md` 的文件没有改动", "B → A → C 不作为既定的建模顺序",
+                   "不保存完整的概率图", "locked_test 未读", "没有训练", "没有合并 PR"):
+        assert phrase in section, phrase
+    meta = _front_matter()
+    assert meta["scientific_conclusion"] == "NOT_EVALUATED" and meta["core_target_validated"] is None
+    assert "CST" not in section and "amax 时间" not in section
+    for pattern in _REDACTED:
+        assert not re.search(pattern, section), pattern

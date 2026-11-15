@@ -361,3 +361,192 @@ def test_the_report_carries_counts_and_no_identifier():
     for phrase in ("不用阈值", "train", "development_val", "cartilage_lesion", "meniscal_tear", "可比摆放", "百分位",
                    "弱标注", "不是体素级", "不等于正常", "患者", "宿主组织", "仅诊断"):
         assert phrase in text, phrase
+
+
+# ---------------------------------------------------------------------------
+# Amendment of 2026-11-15: patient-equal result, one family of development comparisons, what the rows keep
+
+
+def _lesion_rows(n_patients, *, signal=True, boxes_of=lambda index: 1, prefix="p", seed=0):
+    """One scan per patient on the long strip: the response is at the boxes (`signal`) or unrelated to them."""
+    anatomy, rows = _strip(120), []
+    for index in range(n_patients):
+        boxes = _six_boxes(step=20)[:boxes_of(index)]
+        probability = (0.05 if signal else 1.0) * _random(anatomy, seed=seed + index)
+        if signal:
+            for box in boxes:
+                probability[(0, *_window(box))] += 0.9
+        rows.append(_scan(probability, boxes, anatomy, patient=f"{prefix}{index}", key=(7, index)))
+    return rows
+
+
+def test_the_percentile_of_a_pool_member_averages_one_half_whatever_the_ties():
+    """The null expectation the reading rests on: a uniformly drawn member of any pool, with any ties, has a
+    mid-rank percentile of exactly one half on average, and the variance the pool reports."""
+    from anatobind.v41.evaluation.findings_ranking_v5 import NULL_PERCENTILE, _against_pool
+
+    rng = np.random.default_rng(11)
+    for pool in ([0.3] * 7, [0.1, 0.1, 0.1, 0.9], [0.0, 1.0], [0.5],
+                 list(rng.integers(0, 4, size=37) / 4.0), list(rng.random(101))):
+        measured = [_against_pool(value, pool) for value in pool]
+        percentiles = np.asarray([entry["percentile"] for entry in measured])
+        assert percentiles.mean() == pytest.approx(NULL_PERCENTILE, abs=1e-12)
+        assert ((percentiles - 0.5) ** 2).mean() == pytest.approx(measured[0]["null_variance"], abs=1e-12)
+        assert all(entry["pool_values"] == sorted(pool) for entry in measured)
+        assert all(entry["p_at_least"] >= 1.0 / len(pool) for entry in measured)
+    assert NULL_PERCENTILE == 0.5                                    # of a ranking percentile, not of a probability
+
+
+def test_the_group_result_weighs_patients_equally_and_tests_that_same_mean():
+    rows = _lesion_rows(4, boxes_of=lambda index: 1 + index)         # 1, 2, 3 and 4 boxes
+    rows += _lesion_rows(3, signal=False, boxes_of=lambda index: 5, prefix="q", seed=40)
+    entry = summarize_ranking_v5(rows, CLASSES, n_bootstrap=300)["boxes"]["overall"]["stats"]["topk_mean"]
+    by_patient = {}
+    for row in rows:
+        for box in row["boxes"]:
+            by_patient.setdefault(row["patient_uid"], []).append(box["stats"]["topk_mean"])
+    means = [np.mean([e["percentile"] for e in group]) for group in by_patient.values()]
+    patients = entry["patients"]
+    assert patients["n"] == 7 and patients["mean"] == pytest.approx(np.mean(means))
+    assert patients["effect"] == pytest.approx(np.mean(means) - 0.5)
+    assert patients["mean"] != pytest.approx(entry["mean_percentile"])        # 25 boxes do not weigh like 7 patients
+    independent = math.sqrt(sum(sum(e["null_variance"] for e in g) / len(g) ** 2 for g in by_patient.values())) / 7
+    dependent = math.sqrt(sum((sum(math.sqrt(e["null_variance"]) for e in g) / len(g)) ** 2
+                              for g in by_patient.values())) / 7
+    assert patients["null_sd"] == pytest.approx(independent) and patients["null_sd_dependent"] == pytest.approx(dependent)
+    assert dependent > independent
+    z = (patients["mean"] - 0.5) / independent
+    assert patients["z"] == pytest.approx(z) and patients["p_normal"] == pytest.approx(0.5 * math.erfc(z / math.sqrt(2)))
+    assert patients["p_normal"] <= patients["p_normal_dependent"] <= 0.5       # the effect is positive
+
+
+def test_under_the_null_the_patient_equal_p_is_not_small_more_often_than_it_says():
+    anatomy = _slab((24, 14, 4))
+    probability = _random(anatomy, seed=31)
+    size = [3, 3, 2]
+    starts = [start for start in np.ndindex(*[n - m + 1 for n, m in zip(anatomy.shape, size)])
+              if (anatomy[tuple(slice(a, a + n) for a, n in zip(start, size))] == 1).any()]
+    measured = [_scan(probability, [_box("cartilage_lesion", "femoral_cartilage", list(start), size)], anatomy)
+                for start in starts]
+    rng = np.random.default_rng(8)
+    owners = ["p0", "p1", "p1", "p2", "p2", "p2", "p3", "p3", "p3", "p3", "p4", "p5"]      # 1 to 4 boxes a patient
+    ps, effects = [], []
+    for _ in range(400):
+        drawn = [measured[int(i)] for i in rng.integers(len(starts), size=len(owners))]
+        rows = [dict(row, patient_uid=owner) for owner, row in zip(owners, drawn)]
+        patients = summarize_ranking_v5(rows, CLASSES, n_bootstrap=0)["boxes"]["overall"]["stats"]["topk_mean"]["patients"]
+        ps.append(patients["p_normal"])
+        effects.append(patients["effect"])
+        assert patients["p_normal_dependent"] >= patients["p_normal"] or patients["effect"] <= 0
+    assert np.mean(effects) == pytest.approx(0.0, abs=0.02)
+    for alpha in (0.01, 0.05, 0.1, 0.25):
+        assert (np.asarray(ps) <= alpha).mean() <= alpha + 3 * np.sqrt(alpha * (1 - alpha) / 400) + 0.01
+
+
+def test_holm_adjusts_step_down_and_counts_the_comparisons_without_a_value():
+    from anatobind.v41.evaluation.findings_ranking_v5 import holm_adjust_v5
+
+    assert holm_adjust_v5([0.01, 0.04, 0.03, 0.005]) == pytest.approx([0.03, 0.06, 0.06, 0.02])
+    assert holm_adjust_v5([0.5, 0.001], family_size=8) == pytest.approx([1.0, 0.008])
+    assert holm_adjust_v5([0.02, 0.02, 0.02]) == pytest.approx([0.06, 0.06, 0.06])          # never below an earlier one
+    assert holm_adjust_v5([]) == []
+    for bad in ([1.5], [-0.1]):
+        with pytest.raises(ValueError):
+            holm_adjust_v5(bad)
+    with pytest.raises(ValueError):
+        holm_adjust_v5([0.1, 0.2], family_size=1)
+
+
+def _family_entry(label, development, train=None, problems=()):
+    ranking = {"development_val": summarize_ranking_v5(development, CLASSES, n_bootstrap=300)}
+    if train is not None:
+        ranking["train"] = summarize_ranking_v5(train, CLASSES, n_bootstrap=300)
+    return {"label": label, "checkpoint_sha256": label * 8, "step": 6000, "plan_id": "plan", "problems": list(problems),
+            "ranking": ranking}
+
+
+def test_the_family_is_the_development_comparisons_and_reads_each_of_them_once():
+    from anatobind.v41.evaluation.findings_ranking_v5 import (
+        DETECTED, FAMILY_SIZE, NOT_DETECTED, NOT_INTERPRETABLE, ranking_family_v5, render_ranking_family_md_v5)
+
+    assert FAMILY_SIZE == 8
+    signal, noise = _lesion_rows(12, boxes_of=lambda i: 1 + i % 2), _lesion_rows(12, signal=False,
+                                                                                 boxes_of=lambda i: 1 + i % 2)
+    family = ranking_family_v5([_family_entry("a", signal, train=signal), _family_entry("b", noise, train=signal),
+                                _family_entry("c", signal, problems=["PREFLIGHT_NOT_PASSED"]),
+                                {"label": "d", "checkpoint_sha256": "d" * 8, "step": 1, "plan_id": "plan",
+                                 "problems": ["JOB_NOT_COMPLETED"], "ranking": None}])
+    assert family["same_support"] is True and family["family_size"] == 8
+    rows = {(row["label"], row["role"], row["class"]): row for row in family["comparisons"]}
+    a, b, c = (rows[(label, "development_val", "cartilage_lesion")] for label in "abc")
+    assert a["family"] and a["reading"] == DETECTED and a["effect"] > 0 and a["ci95_low"] > 0.5
+    assert a["p_holm"] == pytest.approx(min(1.0, 8 * a["p"])) and a["p_holm"] <= 0.05      # the smallest of the family
+    assert b["reading"] == NOT_DETECTED and b["p_holm"] >= b["p"] and b["problems"] == []
+    assert c["reading"] == NOT_INTERPRETABLE and c["p_holm"] is None and c["problems"] == ["PREFLIGHT_NOT_PASSED"]
+    assert not any(row["label"] == "d" for row in family["comparisons"])            # no result, no row; still counted
+    # a class without boxes cannot be read; train and the pooled classes are listed without adjustment or reading
+    assert rows[("a", "development_val", "meniscal_tear")]["reading"] == NOT_INTERPRETABLE
+    assert "FEW_PATIENTS" in rows[("a", "development_val", "meniscal_tear")]["problems"]
+    for key in (("a", "train", "cartilage_lesion"), ("a", "development_val", "pooled"), ("a", "train", "pooled")):
+        assert rows[key]["family"] is False and rows[key]["reading"] is None and rows[key]["p_holm"] is None
+        assert rows[key]["p"] is not None
+    text = render_ranking_family_md_v5(family)
+    for phrase in ("检出排序证据", "未检出排序证据", "不可判读", "Holm", "不是病变概率的阈值", "不是同时区间",
+                   "不等于证明了病变特异的定位", "train（诊断", "两类合计", "JOB_NOT_COMPLETED", "患者等权"):
+        assert phrase in text, phrase
+    assert "p0" not in text and "patient" not in text
+
+
+def test_the_family_cannot_be_read_on_thin_support_or_when_the_checkpoints_saw_other_boxes():
+    from anatobind.v41.evaluation.findings_ranking_v5 import (
+        MIN_PATIENTS, NOT_INTERPRETABLE, ranking_family_v5, support_problems_v5)
+
+    few = _lesion_rows(MIN_PATIENTS - 1)
+    family = ranking_family_v5([_family_entry("a", few)])
+    row = next(r for r in family["comparisons"] if r["class"] == "cartilage_lesion")
+    assert row["problems"] == ["FEW_PATIENTS"] and row["reading"] == NOT_INTERPRETABLE and row["p"] < 0.001
+    enough, other = _lesion_rows(12), _lesion_rows(12, boxes_of=lambda i: 2)
+    family = ranking_family_v5([_family_entry("a", enough), _family_entry("b", other)])
+    assert family["same_support"] is False
+    assert all(row["reading"] == NOT_INTERPRETABLE and "SUPPORT_DIFFERS_BETWEEN_CHECKPOINTS" in row["problems"]
+               for row in family["comparisons"] if row["family"])
+    # boxes off their tissue and pools too small to place a box
+    anatomy = _strip(120)
+    off = [_scan(_random(anatomy, seed=i), [_box("cartilage_lesion", "femoral_cartilage", [2, 4, 1], [3, 3, 2]),
+                                             _box("cartilage_lesion", "femoral_cartilage", [2, 0, 0], [3, 2, 1])],
+                 anatomy, patient=f"p{i}", key=(7, i)) for i in range(12)]
+    block = summarize_ranking_v5(off, CLASSES, n_bootstrap=50)["boxes"]["by_class"]["cartilage_lesion"]
+    assert block["excluded"] == 12 and support_problems_v5(block) == ["MANY_BOXES_WITHOUT_BAG"]
+    tiny = np.ones((5, 3, 2), dtype=np.int64)                        # three placements of the box, all tissue
+    small = [_scan(_random(tiny, seed=i), [_box("cartilage_lesion", "femoral_cartilage", [1, 0, 0], [3, 3, 2])],
+                   tiny, patient=f"p{i}", key=(7, i)) for i in range(12)]
+    block = summarize_ranking_v5(small, CLASSES, n_bootstrap=50)["boxes"]["by_class"]["cartilage_lesion"]
+    assert block["small_pool_boxes"] == 12 and "SMALL_POOLS" in support_problems_v5(block)
+    with pytest.raises(ValueError):
+        ranking_family_v5([_family_entry("a", enough), _family_entry("a", enough)])
+    with pytest.raises(ValueError):
+        ranking_family_v5([_family_entry(label, enough) for label in "abcde"])      # ten comparisons in a family of 8
+
+
+def test_the_private_row_keeps_what_the_reading_needs_without_the_model():
+    """Each box's pool, its seed key and the grid: the percentile, its p and its null variance follow from them."""
+    from anatobind.v41.evaluation.findings_ranking_v5 import _against_pool
+
+    anatomy = _strip(120)
+    grid = {"shape": list(anatomy.shape), "spacing": [0.4, 0.4, 0.8]}
+    probability = _random(anatomy, seed=4)
+    row = ranking_scan_v5(
+        probability=probability, reference={"boxes": _six_boxes(step=20)[:2]}, anatomy_reference=anatomy,
+        anatomy_eligible=np.ones(anatomy.shape, dtype=bool), classes=CLASSES, group_ids=GROUP_IDS,
+        groups_by_class=GROUPS_BY_CLASS, topk_fraction=0.1, patient_uid="p0", seed_key=(7, 3), n_placements=30, grid=grid)
+    assert row["grid"] == grid and row["shape"] == list(anatomy.shape) and row["n_placements"] == 30
+    assert row["topk_fraction"] == 0.1 and row["eligible_voxels"] == anatomy.size
+    for ordinal, box in enumerate(row["boxes"]):
+        assert box["seed_key"] == [7, 3, ordinal] and box["exhaustive"] is False and box["pool"] == 31
+        for stat in STATS:
+            kept = box["stats"][stat]
+            again = _against_pool(kept["value"], kept["pool_values"])
+            assert len(kept["pool_values"]) == 31
+            for key in ("percentile", "p_at_least", "null_variance", "p_top_decile"):
+                assert again[key] == pytest.approx(kept[key]), (stat, key)
+    assert _scan(probability, _six_boxes(step=20)[:2], anatomy)["grid"] is None            # optional

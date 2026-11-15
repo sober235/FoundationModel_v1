@@ -48,6 +48,19 @@ voxel-level AUROC of lesions. What is measured is whether the response is higher
    scan has a primary box of the class, only other boxes, or no box at all.
 
 Rows carry a patient id; summaries and the report carry counts and distributions only.
+
+AMENDMENT OF 2026-11-15 (reports/v5/ranking_audit_prereg_amendment_20261115.md; frozen before any real-data job).
+The bag statistics and the pools are unchanged. What is read changed:
+  * the group result is patient-equal: the boxes of a patient are averaged first; the effect is that mean minus the
+    null expectation 0.5, its interval resamples patients (pointwise, not simultaneous), and its one-sided p uses
+    the randomisation variance of the same patient-equal mean (`patients.p_normal`; boxes relocate independently
+    under the null). `patients.p_normal_dependent` assumes the boxes of one patient move together (an upper bound of
+    the variance): a sensitivity value, never used for the reading;
+  * the family is the development_val comparisons of the checkpoints read (checkpoint x class, FAMILY_SIZE = 8),
+    adjusted by Holm (ranking_family_v5); train is diagnostic and pooled classes are descriptive;
+  * a comparison reads RANKING_EVIDENCE_DETECTED, NO_RANKING_EVIDENCE_DETECTED or NOT_INTERPRETABLE (read_comparison_v5);
+  * the private row of a scan keeps each box's pool values, its seed key and the grid, so that every number of the
+    reading can be recomputed without the model.
 """
 from __future__ import annotations
 
@@ -71,6 +84,17 @@ NEGATIVE_ZONES = ("host_outside", "other_tissue", "background")
 HOST_ZONES = ("bag", "ignored_host", "host_outside")
 SCAN_GROUPS = ("with_primary", "other_boxes_only", "no_box")
 TOP_VOLUME = (0.001, 0.01)
+# the reading of the amendment of 2026-11-15
+NULL_PERCENTILE = 0.5
+FAMILY_ROLE, DIAGNOSTIC_ROLE = "development_val", "train"
+FAMILY_SIZE = 8                 # four checkpoints x two lesion classes on development_val
+FAMILY_ALPHA = 0.05
+MIN_PATIENTS = 10               # fewer usable patients: the support is inadequate
+MAX_EXCLUDED_SHARE = 0.2        # more of the class's primary boxes without a bag: the support is inadequate
+MIN_POOL = 20                   # a smaller pool cannot place its box below 0.05
+MAX_SMALL_POOL_SHARE = 0.5      # more of the usable boxes with such a pool: the control says too little
+DETECTED, NOT_DETECTED, NOT_INTERPRETABLE = (
+    "RANKING_EVIDENCE_DETECTED", "NO_RANKING_EVIDENCE_DETECTED", "NOT_INTERPRETABLE")
 HOST_TOP_FRACTION = 0.01
 LOGIT_LIMIT, LOGIT_STEP = 16.0, 0.025
 BINS = int(round(2 * LOGIT_LIMIT / LOGIT_STEP))
@@ -103,7 +127,7 @@ def _against_pool(own, pool: list) -> dict:
     """The box's value against its pool (which holds the box itself); members without a value are left out."""
     if own is None:
         return {"value": None, "percentile": None, "p_at_least": None, "null_variance": None, "p_top_decile": None,
-                "pool_median": None}
+                "pool_median": None, "pool_values": None}
     values = np.asarray([value for value in pool if value is not None], dtype=np.float64)
     size = values.size
     percentiles = (rankdata(values, method="average") - 0.5) / size
@@ -111,7 +135,8 @@ def _against_pool(own, pool: list) -> dict:
     return {"value": float(own), "percentile": (below + 0.5 * equal) / size,
             "p_at_least": float((values >= own).sum()) / size,
             "null_variance": float(((percentiles - 0.5) ** 2).mean()),
-            "p_top_decile": float((percentiles >= 0.9).mean()), "pool_median": float(np.median(values))}
+            "p_top_decile": float((percentiles >= 0.9).mean()), "pool_median": float(np.median(values)),
+            "pool_values": [float(value) for value in np.sort(values)]}
 
 
 def _tissue_ranks(probability: np.ndarray, tissue: np.ndarray) -> np.ndarray:
@@ -171,10 +196,11 @@ def scan_group_v5(boxes: list, cls: str) -> str:
 def ranking_scan_v5(*, probability: np.ndarray, reference: dict, anatomy_reference: np.ndarray,
                     anatomy_eligible: np.ndarray, classes: list, group_ids: dict, groups_by_class: dict,
                     topk_fraction: float, patient_uid: str, seed_key: tuple,
-                    n_placements: int = N_PLACEMENTS) -> dict:
+                    n_placements: int = N_PLACEMENTS, grid: dict | None = None) -> dict:
     """One scan's private row. `probability`: [classes, *shape], restored to the grid of the reference anatomy;
     `group_ids`: tissue group -> anatomy class ids; `groups_by_class`: abnormality class -> its host tissue groups;
-    `seed_key`: integers that name this scan in the split (the placements drawn depend on nothing else)."""
+    `seed_key`: integers that name this scan in the split (the placements drawn depend on nothing else);
+    `grid`: the geometry of the original grid, kept in the row as given."""
     anatomy = np.asarray(anatomy_reference)
     shape = tuple(int(n) for n in anatomy.shape)
     eligible = np.asarray(anatomy_eligible, dtype=bool)
@@ -240,7 +266,11 @@ def ranking_scan_v5(*, probability: np.ndarray, reference: dict, anatomy_referen
                       "host_mean": float(on_host.mean()) if on_host.size else None,
                       "host_top_mean": float(on_host[-max(1, math.ceil(HOST_TOP_FRACTION * on_host.size)):].mean())
                       if on_host.size else None}
-    return {"patient_uid": patient_uid, "classes": list(classes), "boxes": box_rows, "zones": zones, "scan": scan}
+    for ordinal, row in enumerate(box_rows):
+        row["seed_key"] = [int(v) for v in seed_key] + [ordinal]
+    return {"patient_uid": patient_uid, "classes": list(classes), "shape": list(shape), "grid": grid,
+            "eligible_voxels": int(eligible.sum()), "topk_fraction": float(topk_fraction),
+            "n_placements": int(n_placements), "boxes": box_rows, "zones": zones, "scan": scan}
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +321,9 @@ def _stat_block(boxes: list, stat: str, n_bootstrap: int, seed: int) -> dict:
            "mean_percentile": None, "null_sd": None, "z": None, "p_normal": None,
            "top_decile": {"observed": 0, "expected": None, "p_at_least_observed": None},
            "boxes_p_at_most_0.05": sum(1 for _, e in entries if e["p_at_least"] <= 0.05),
-           "patients": {"n": 0, "mean": None, "ci95_low": None, "ci95_high": None, "above_half": 0}}
+           "patients": {"n": 0, "mean": None, "effect": None, "ci95_low": None, "ci95_high": None, "above_half": 0,
+                        "null_sd": None, "z": None, "p_normal": None, "null_sd_dependent": None,
+                        "p_normal_dependent": None}}
     if not entries:
         return out
     percentiles = np.asarray([e["percentile"] for _, e in entries], dtype=np.float64)
@@ -302,15 +334,34 @@ def _stat_block(boxes: list, stat: str, n_bootstrap: int, seed: int) -> dict:
     tail, _, _ = _upper_tail([e["p_top_decile"] for _, e in entries], observed)
     by_patient = {}
     for patient, entry in entries:
-        by_patient.setdefault(patient, []).append(entry["percentile"])
-    means = [float(np.mean(values)) for _, values in sorted(by_patient.items())]
+        by_patient.setdefault(patient, []).append(entry)
+    means = [float(np.mean([e["percentile"] for e in group])) for _, group in sorted(by_patient.items())]
     low, high = _resample(means, lambda drawn: float(np.mean(drawn)), n_bootstrap, seed)
+    # the patient-equal mean under the null: each box's percentile has mean 0.5 and its own null variance. Boxes
+    # relocate independently (the stated null); "dependent" lets the boxes of one patient move together, which
+    # bounds the variance of that patient's mean from above (sensitivity only)
+    patient_mean = float(np.mean(means))
+    independent = math.sqrt(sum(sum(e["null_variance"] for e in group) / len(group) ** 2
+                                for group in by_patient.values())) / len(by_patient)
+    dependent = math.sqrt(sum((sum(math.sqrt(e["null_variance"]) for e in group) / len(group)) ** 2
+                              for group in by_patient.values())) / len(by_patient)
+
+    def upper(null_sd: float) -> tuple:
+        if not null_sd > 0:
+            return None, 1.0
+        score = (patient_mean - NULL_PERCENTILE) / null_sd
+        return score, 0.5 * math.erfc(score / math.sqrt(2.0))
+
+    patient_z, patient_p = upper(independent)
     out.update(mean_percentile=mean, null_sd=sd, z=z,
                p_normal=1.0 if z is None else 0.5 * math.erfc(z / math.sqrt(2.0)),
                top_decile={"observed": observed, "expected": float(np.mean([e["p_top_decile"] for _, e in entries])),
                            "p_at_least_observed": tail},
-               patients={"n": len(means), "mean": float(np.mean(means)), "ci95_low": low, "ci95_high": high,
-                         "above_half": sum(1 for value in means if value > 0.5)})
+               patients={"n": len(means), "mean": patient_mean, "effect": patient_mean - NULL_PERCENTILE,
+                         "ci95_low": low, "ci95_high": high,
+                         "above_half": sum(1 for value in means if value > 0.5),
+                         "null_sd": independent, "z": patient_z, "p_normal": patient_p,
+                         "null_sd_dependent": dependent, "p_normal_dependent": upper(dependent)[1]})
     return out
 
 
@@ -321,6 +372,7 @@ def _box_block(rows: list, cls: str | None, n_bootstrap: int, seed: int) -> dict
     return {"n_boxes": len(selected), "n_usable": len(usable), "excluded": len(selected) - len(usable),
             "n_patients": len({patient for patient, _ in selected}),
             "exhaustive_boxes": sum(1 for _, box in usable if box["exhaustive"]),
+            "small_pool_boxes": sum(1 for _, box in usable if box["pool"] < MIN_POOL),
             **{key: _distribution([box[key] for _, box in usable])
                for key in ("comparable_placements", "pool", "bag_voxels", "box_voxels")},
             "stats": {stat: _stat_block(usable, stat, n_bootstrap, seed) for stat in STATS}}
@@ -513,9 +565,14 @@ def render_ranking_md_v5(by_role: dict) -> str:
                 ("患者等权的平均百分位", lambda s: entry(s)["patients"]["mean"]),
                 ("患者区间下限（2.5%）", lambda s: entry(s)["patients"]["ci95_low"]),
                 ("患者区间上限（97.5%）", lambda s: entry(s)["patients"]["ci95_high"]),
-                ("平均百分位高于 0.5 的患者", lambda s: entry(s)["patients"]["above_half"])])
+                ("平均百分位高于 0.5 的患者", lambda s: entry(s)["patients"]["above_half"]),
+                ("效应量（患者等权的平均百分位 − 0.5）", lambda s: entry(s)["patients"]["effect"])])
             lines += table("p（单侧，越小越不像偶然）", [
-                ("平均百分位高于 0.5（随机化分布的正态近似）", lambda s: entry(s)["p_normal"]),
+                ("患者等权的平均百分位高于 0.5（随机化分布的正态近似；各框独立换位）",
+                 lambda s: entry(s)["patients"]["p_normal"]),
+                ("同上，假设同一患者的框一起移动（敏感性，不进入判读）",
+                 lambda s: entry(s)["patients"]["p_normal_dependent"]),
+                ("框等权的平均百分位高于 0.5（随机化分布的正态近似）", lambda s: entry(s)["p_normal"]),
                 ("百分位 ≥ 0.9 的框数不少于实际（泊松二项，精确）",
                  lambda s: entry(s)["top_decile"]["p_at_least_observed"])], cell=_p)
             lines.append("")
@@ -585,3 +642,167 @@ def render_ranking_md_v5(by_role: dict) -> str:
         lines += table("项", rows)
         lines.append("")
     return "\n".join(lines).rstrip("\n") + "\n"
+
+
+# ---------------------------------------------------------------------------
+# The reading of the amendment of 2026-11-15: one family of development comparisons
+
+
+def holm_adjust_v5(pvalues: list, family_size: int | None = None) -> list:
+    """Holm's step-down adjusted p-values, in the order given. `family_size`: the number of comparisons of the
+    family when some of them have no p-value here (they still count: the adjustment is then conservative)."""
+    m = len(pvalues) if family_size is None else int(family_size)
+    if m < len(pvalues) or any(not (0.0 <= p <= 1.0) for p in pvalues):
+        raise ValueError("INVALID_ARGUMENT")
+    order = sorted(range(len(pvalues)), key=lambda i: (pvalues[i], i))
+    adjusted, running = [None] * len(pvalues), 0.0
+    for rank, index in enumerate(order):
+        running = max(running, min(1.0, (m - rank) * pvalues[index]))
+        adjusted[index] = running
+    return adjusted
+
+
+def support_problems_v5(block: dict) -> list:
+    """Why a class's boxes of one split cannot carry a reading (frozen thresholds); empty when they can."""
+    entry = block["stats"][PRIMARY_STAT]
+    problems = []
+    if entry["patients"]["n"] < MIN_PATIENTS:
+        problems.append("FEW_PATIENTS")
+    if block["n_boxes"] and block["excluded"] > MAX_EXCLUDED_SHARE * block["n_boxes"]:
+        problems.append("MANY_BOXES_WITHOUT_BAG")
+    if block["n_usable"] and block["small_pool_boxes"] > MAX_SMALL_POOL_SHARE * block["n_usable"]:
+        problems.append("SMALL_POOLS")
+    if entry["patients"]["n"] and not (entry["patients"]["null_sd"] or 0) > 0:
+        problems.append("NO_NULL_VARIANCE")
+    if entry["patients"]["n"] and entry["patients"]["ci95_low"] is None:
+        problems.append("NO_INTERVAL")
+    return problems
+
+
+def read_comparison_v5(patients: dict, holm_p, problems: list) -> str:
+    """DETECTED: the effect is positive, the patient interval lies above the null, and the Holm-adjusted p is at
+    most FAMILY_ALPHA. NOT_INTERPRETABLE: `problems` is not empty. NOT_DETECTED: anything else (which is not a
+    proof that nothing is there)."""
+    if problems or holm_p is None:
+        return NOT_INTERPRETABLE
+    detected = patients["effect"] > 0 and patients["ci95_low"] > NULL_PERCENTILE and holm_p <= FAMILY_ALPHA
+    return DETECTED if detected else NOT_DETECTED
+
+
+def _comparison(block: dict) -> dict:
+    entry = block["stats"][PRIMARY_STAT]
+    patients = entry["patients"]
+    return {"n_boxes": block["n_boxes"], "n_usable": block["n_usable"], "excluded": block["excluded"],
+            "small_pool_boxes": block["small_pool_boxes"], "exhaustive_boxes": block["exhaustive_boxes"],
+            "pool": dict(block["pool"]), "n_patients": patients["n"], "mean": patients["mean"],
+            "effect": patients["effect"], "ci95_low": patients["ci95_low"], "ci95_high": patients["ci95_high"],
+            "above_half": patients["above_half"], "p": patients["p_normal"],
+            "p_dependent": patients["p_normal_dependent"], "box_mean": entry["mean_percentile"],
+            "box_p": entry["p_normal"], "top_decile": dict(entry["top_decile"])}
+
+
+def ranking_family_v5(entries: list, *, family_size: int = FAMILY_SIZE) -> dict:
+    """The comparisons of several checkpoints side by side. `entries`: [{"label", "checkpoint_sha256", "step",
+    "plan_id", "problems": [...], "ranking": {role: summarize_ranking_v5(...)}}], every one read with the same
+    settings. The family is label x class on FAMILY_ROLE (its p-values Holm-adjusted over `family_size`
+    comparisons); DIAGNOSTIC_ROLE and the pooled classes are listed without adjustment and without a reading.
+    `problems` of an entry (a failed job, a failed preflight) make all its comparisons NOT_INTERPRETABLE; an entry
+    whose job left no result (`ranking` None) has no row and still counts in `family_size`. The
+    pools of a box do not depend on the checkpoint, so the entries must agree on the counts of every block; when
+    they do not, nothing is interpretable."""
+    read = [entry for entry in entries if entry.get("ranking")]
+    if not read or len({entry["label"] for entry in entries}) != len(entries) \
+            or any(FAMILY_ROLE not in entry["ranking"] for entry in read):
+        raise ValueError("INVALID_ARGUMENT")
+    classes = list(read[0]["ranking"][FAMILY_ROLE]["classes"])
+    if len(entries) * len(classes) > family_size:
+        raise ValueError("FAMILY_TOO_SMALL")
+    counts = ("n_boxes", "n_usable", "excluded", "small_pool_boxes", "exhaustive_boxes", "pool")
+    rows, same_support = [], True
+    for entry in read:                                  # an entry without a result has no row; it still counts
+        for role, summary in entry["ranking"].items():
+            for scope, block in (("pooled", summary["boxes"]["overall"]),
+                                 *((name, summary["boxes"]["by_class"][name]) for name in classes)):
+                row = {"label": entry["label"], "role": role, "class": scope, **_comparison(block),
+                       "problems": [*entry.get("problems", []),
+                                    *(support_problems_v5(block) if scope != "pooled" else [])]}
+                first = next((r for r in rows if (r["role"], r["class"]) == (role, scope)), None)
+                if first is not None and any(first[key] != row[key] for key in counts):
+                    same_support = False
+                rows.append(row)
+    family = [row for row in rows if row["role"] == FAMILY_ROLE and row["class"] != "pooled"]
+    if not same_support:
+        for row in family:
+            row["problems"].append("SUPPORT_DIFFERS_BETWEEN_CHECKPOINTS")
+    readable = [row for row in family if not row["problems"] and row["p"] is not None]
+    for row, adjusted in zip(readable, holm_adjust_v5([row["p"] for row in readable], family_size)):
+        row["p_holm"] = adjusted
+    for row in rows:
+        in_family = row["role"] == FAMILY_ROLE and row["class"] != "pooled"
+        row.setdefault("p_holm", None)
+        row["family"] = in_family
+        row["reading"] = read_comparison_v5(row, row["p_holm"], row["problems"]) if in_family else None
+    return {"kind": "ranking_family", "primary_stat": PRIMARY_STAT, "null_percentile": NULL_PERCENTILE,
+            "family_role": FAMILY_ROLE, "family_size": int(family_size), "alpha": FAMILY_ALPHA,
+            "thresholds": {"min_patients": MIN_PATIENTS, "max_excluded_share": MAX_EXCLUDED_SHARE,
+                           "min_pool": MIN_POOL, "max_small_pool_share": MAX_SMALL_POOL_SHARE},
+            "classes": classes, "same_support": same_support,
+            "entries": [{key: entry.get(key) for key in ("label", "checkpoint_sha256", "step", "plan_id", "problems")}
+                        for entry in entries],
+            "comparisons": rows}
+
+
+_READING_LABELS = {DETECTED: "检出排序证据", NOT_DETECTED: "未检出排序证据", NOT_INTERPRETABLE: "不可判读", None: "—"}
+
+
+def render_ranking_family_md_v5(family: dict) -> str:
+    """The family of comparisons; counts, effects, intervals and p-values only."""
+    def line(row: dict, with_reading: bool) -> str:
+        cells = [row["label"], row["class"], f"{row['n_usable']}/{row['n_boxes']}", str(row["n_patients"]),
+                 _cell(row["mean"]), "NA" if row["effect"] is None else f"{row['effect']:+.3f}",
+                 f"{_cell(row['ci95_low'])} – {_cell(row['ci95_high'])}", _p(row["p"])]
+        if with_reading:
+            cells += [_p(row["p_holm"]), _p(row["p_dependent"]),
+                      _READING_LABELS[row["reading"]] + (f"（{'、'.join(row['problems'])}）" if row["problems"] else "")]
+        else:
+            cells += [_p(row["p_dependent"])]
+        return "| " + " | ".join(cells) + " |"
+
+    thresholds = family["thresholds"]
+    lines = ["# 不用阈值的排序审计：四个检查点的比较族（仅诊断）", "",
+             "本报告只含计数、效应量、区间与 p 值；不含样本或患者 ID、路径或文件名。全部是对所读检查点的诊断，不是正式指标。", "",
+             f"- 主要量：`{family['primary_stat']}` 的百分位（真实框在同一次扫描的可比摆放里的中位秩位置）。"
+             f"零假设下的期望是 {family['null_percentile']}：这是**排序百分位**，不是病变概率的阈值。",
+             "- 患者等权：先在患者内对框取平均，再对患者取平均。效应量 = 患者平均百分位 − 0.5。",
+             "- 区间：对患者重抽样的 95% 区间，逐个比较给出（不是同时区间）。",
+             "- p：患者等权平均百分位高于 0.5 的单侧 p（随机化分布的正态近似；零假设下各框独立地换位）。"
+             "“同患者相依”一列假设同一患者的框一起移动（方差的上界），只作敏感性参考，不进入判读。",
+             f"- 比较族：{family['family_role']} 上“检查点 × 病变类别”共 {family['family_size']} 个比较，"
+             f"Holm 校正，族错误率 {family['alpha']}。train 只作诊断，两类合计只作描述；它们不校正、不判读。",
+             f"- 判读：**检出排序证据** = 效应量为正，患者区间下限高于 0.5，且 Holm 校正后的 p ≤ {family['alpha']}；"
+             "**未检出排序证据** = 没有达到上面的条件（不等于证明没有）；**不可判读** = 支持不足、对照假设不成立或实现问题"
+             f"（可用患者少于 {thresholds['min_patients']}；没有袋的框超过 {thresholds['max_excluded_share']:.0%}；"
+             f"可比摆放池小于 {thresholds['min_pool']} 的框超过 {thresholds['max_small_pool_share']:.0%}；"
+             "作业或预检未通过；各检查点读到的框与摆放池不一致）。",
+             "- 即使检出，也只表示“在所述解剖对照下，框处的概率更高”，不等于证明了病变特异的定位。",
+             "- 各检查点读到的框与摆放池" + ("一致。" if family["same_support"] else "**不一致**。"), "",
+             "## 读取的检查点", "", "| 代号 | 计划 | 步 | 检查点 sha256 | 问题 |", "| --- | --- | --- | --- | --- |"]
+    for entry in family["entries"]:
+        lines.append(f"| {entry['label']} | {entry['plan_id']} | {entry['step']} | `{entry['checkpoint_sha256']}` | "
+                     f"{'、'.join(entry['problems'] or []) or '无'} |")
+    rows = family["comparisons"]
+    lines += ["", f"## 比较族：{family['family_role']}（判读）", "",
+              "| 检查点 | 类别 | 计入框/主分析框 | 患者 | 患者平均百分位 | 效应量 | 95% 患者区间 | p | Holm p | "
+              "p（同患者相依） | 判读 |", "| --- |" + " --- |" * 10]
+    lines += [line(row, True) for row in rows if row["family"]]
+    for title, chosen in ((f"两类合计：{family['family_role']}（描述，不校正、不判读）",
+                           lambda r: r["role"] == family["family_role"] and r["class"] == "pooled"),
+                          ("train（诊断，不校正、不判读；含训练过的框，不能代替泛化评价）",
+                           lambda r: r["role"] != family["family_role"])):
+        selected = [row for row in rows if chosen(row)]
+        if selected:
+            lines += ["", f"## {title}", "",
+                      "| 检查点 | 类别 | 计入框/主分析框 | 患者 | 患者平均百分位 | 效应量 | 95% 患者区间 | p | "
+                      "p（同患者相依） |", "| --- |" + " --- |" * 8]
+            lines += [line(row, False) for row in selected]
+    return "\n".join(lines) + "\n"

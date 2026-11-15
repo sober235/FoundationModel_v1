@@ -1048,3 +1048,157 @@ def test_the_rank_and_census_commands_hand_their_arguments_to_the_driver(tmp_pat
     assert given["steps"] == 6000 and given["max_wall_hours"] == 2.0 and "roles" not in given and "device" not in given
     assert (out / "unified_census.md").read_text() == "census report\n"
     assert capsys.readouterr().out == "census report\n"
+
+
+# ---------------------------------------------------------------------------
+# Amendment of 2026-11-15: the preflight, what the rows keep, the policy check of the census, the family
+
+
+def test_the_preflight_checks_the_chain_on_the_first_boxed_train_scans_and_reports_no_ranking(finished, monkeypatch):
+    from anatobind.v41.real_unified_eval_v5 import render_unified_ranking_preflight_md_v5, run_unified_ranking_v5
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("the preflight wrote or summarised a ranking")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(real_unified_module, "load_member_samples_v5", _fail_if_called)
+        _raises("INVALID_ROLE", "$.roles", run_unified_ranking_v5, **_rank_kwargs(finished, preflight=1))
+        for bad in (0, True, 1.0):
+            _raises("INVALID_TYPE", "$.preflight", run_unified_ranking_v5,
+                    **_rank_kwargs(finished, roles=["train"], preflight=bad))
+        _raises("PREFLIGHT_TOO_FEW_SCANS", "$.preflight", run_unified_ranking_v5,
+                **_rank_kwargs(finished, roles=["train"], preflight=2))        # one train scan has a primary box
+    monkeypatch.setattr(eval_module, "summarize_ranking_v5", _fail_if_called)
+    monkeypatch.setattr(eval_module, "_append_jsonl", _fail_if_called)
+    kwargs = _rank_kwargs(finished, roles=["train"], preflight=1)
+    result = run_unified_ranking_v5(**kwargs)
+    assert result["status"] == "COMPLETED" and result["kind"] == "unified_ranking_preflight", result
+    assert result["evaluation"]["preflight_scans"] == 1 and result["checkpoint"]["weights_unchanged"] is True
+    check = result["members"]["knee"]["preflight"]
+    assert check["scans"] == 1
+    for key in ("input_normalisation", "grid_restoration", "probabilities", "box_alignment"):
+        assert check[key]["pass"] is True, (key, check[key])
+    assert check["box_alignment"]["boxes"] == check["box_alignment"]["boxes_with_bag"] == 1
+    assert check["grid_restoration"]["min_eligible_share"] == 1.0
+    assert 0.0 <= check["probabilities"]["min"] <= check["probabilities"]["max"] <= 1.0
+    assert check["anatomy_agreement"]["min_mean_dice"] is not None          # a four-step model: only that it is read
+    assert check["passed"] == all(check[key]["pass"] for key in (
+        "input_normalisation", "grid_restoration", "probabilities", "anatomy_agreement", "box_alignment"))
+    assert check["resources"]["peak_rss_bytes"] > 0 and check["resources"]["peak_gpu_bytes"] is None
+    dumped = json.dumps(result)
+    for word in ("percentile", "p_at_least", "pool_values", "p_normal", "knee-0"):
+        assert word not in dumped, word
+    assert not (kwargs["private_root"] / "rows").exists()
+    assert _tree(finished.root) == finished.before
+    text = render_unified_ranking_preflight_md_v5(result)
+    assert "knee-0" not in text and str(finished.root) not in text
+    for phrase in ("预检", "只读 train", "不含任何排序结果", "输入归一化", "恢复到原始网格", "概率的取值", "框与解剖的对位",
+                   "不按结果挑选", "权重未被修改", result["checkpoint"]["sha256"], "NOT_EVALUATED"):
+        assert phrase in text, phrase
+
+
+def test_the_rows_of_a_ranking_keep_the_pool_the_seed_key_and_the_grid(finished):
+    from anatobind.v41.real_unified_eval_v5 import run_unified_ranking_v5
+
+    kwargs = _rank_kwargs(finished, n_placements=3)
+    result = run_unified_ranking_v5(**kwargs)
+    assert result["evaluation"]["preflight_scans"] is None
+    for role in ("train", "development_val"):
+        rows = [json.loads(line)["ranking"] for line in
+                (kwargs["private_root"] / "rows" / f"{role}.knee.jsonl").read_text().splitlines()]
+        for row in rows:
+            assert row["grid"]["shape"] == row["shape"] and row["n_placements"] == 3
+            for box in row["boxes"]:
+                assert len(box["seed_key"]) == 5 and box["seed_key"][0] == result["evaluation"]["seed"]
+                if box["status"] == "ok":
+                    assert len(box["stats"]["topk_mean"]["pool_values"]) == box["pool"]
+    assert "pool_values" not in json.dumps(result)                    # the summary carries no pool
+
+
+def test_the_census_checks_that_what_the_policy_excludes_holds_no_negative(finished):
+    from anatobind.v41.real_unified_eval_v5 import render_unified_census_md_v5, run_unified_census_v5
+
+    result = run_unified_census_v5(**_census_kwargs(finished))
+    for name in ("target_a", "target_b"):
+        check = result["members"]["knee"]["classes"][name]["policy_check"]
+        assert check["passed"] is True and check["negative_in_ignore"] == 0 and check["negative_in_own_boxes"] == 0
+        assert check["scans"] == 2
+    assert result["members"]["knee"]["classes"]["target_a"]["policy_check"]["own_box_voxels"] > 0
+    text = render_unified_census_md_v5(result)
+    for phrase in ("策略核对", "成立", "**未测量**", "不能由体素计数推断", "批次里有该类袋的步数", "可用负体素"):
+        assert phrase in text, phrase
+    assert "不成立" not in text
+
+
+def test_the_family_entry_reads_ranking_summaries_alike_and_asks_for_their_preflights(finished, tmp_path, capsys):
+    from anatobind.v41 import ranking_family_v5 as family_module
+    from anatobind.v41.real_unified_eval_v5 import run_unified_ranking_v5
+
+    earlier = _sidecar(finished.root, 2)["sha256"]
+    base = _rank_kwargs(finished)["private_root"]
+    final = run_unified_ranking_v5(**_rank_kwargs(finished))
+    early = run_unified_ranking_v5(**_rank_kwargs(finished, private_root=base.with_name("ranking_early")),
+                                   checkpoint=(2, earlier))
+    flight = run_unified_ranking_v5(**_rank_kwargs(finished, roles=["train"], preflight=1,
+                                                   private_root=base.with_name("preflight_final")))
+    family = family_module.build_ranking_family_v5({"final": final, "early": early}, {"final": flight})
+    assert family["kind"] == "ranking_family" and family["scientific_conclusion"] == "NOT_EVALUATED"
+    assert family["preflight_required"] is True and family["same_support"] is True
+    problems = {entry["label"]: entry["problems"] for entry in family["entries"]}
+    assert "PREFLIGHT_NOT_PASSED" in problems["early"]                # no preflight was given for it
+    assert ("PREFLIGHT_NOT_PASSED" in problems["final"]) == (not flight["members"]["knee"]["preflight"]["passed"])
+    rows = [row for row in family["comparisons"] if row["family"]]
+    assert len(rows) == 4 and all(row["reading"] == "NOT_INTERPRETABLE" for row in rows)   # one box: no support
+    assert all("FEW_PATIENTS" in row["problems"] for row in rows)
+    free = family_module.build_ranking_family_v5({"final": final, "early": early}, None)
+    assert free["preflight_required"] is False and all(entry["problems"] == [] for entry in free["entries"])
+    # what makes summaries unfit for one family
+    other = json.loads(json.dumps(early))
+    other["evaluation"]["n_placements"] = 7
+    _raises("FAMILY_SETTINGS_DIFFER", "$.entries", family_module.build_ranking_family_v5, {"a": final, "b": other})
+    _raises("FAMILY_CHECKPOINT_REPEATED", "$.entries", family_module.build_ranking_family_v5, {"a": final, "b": final})
+    _raises("FAMILY_ENTRY_INVALID", "$.entries", family_module.build_ranking_family_v5, {"a": flight})
+    _raises("FAMILY_ENTRY_INVALID", "$.entries", family_module.build_ranking_family_v5, {})
+    failed = json.loads(json.dumps(early))
+    failed.update(status="FAILED", members=None)
+    listed = family_module.build_ranking_family_v5({"final": final, "early": failed}, None)
+    assert {entry["label"]: entry["problems"] for entry in listed["entries"]}["early"] == ["JOB_NOT_COMPLETED"]
+    assert {row["label"] for row in listed["comparisons"]} == {"final"}
+    # the command
+    out = tmp_path / "family"
+    arguments = ["--entry", f"final={base / 'summary.json'}", "--entry",
+                 f"early={base.with_name('ranking_early') / 'summary.json'}", "--out", str(out)]
+    assert family_module.main([*arguments, "--preflight",
+                               f"final={base.with_name('preflight_final') / 'summary.json'}"]) == 0
+    assert json.loads(capsys.readouterr().out)["comparisons"] == 4
+    assert json.loads((out / "family.json").read_text())["comparisons"] == family["comparisons"]
+    text = (out / "ranking_family.md").read_text()
+    assert "knee-0" not in text and str(finished.root) not in text and "不可判读" in text and final["checkpoint"]["sha256"] in text
+    for path in out.iterdir():
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(out.stat().st_mode) == 0o700
+    assert family_module.main([*arguments, "--no-preflight"]) == 1      # the directory exists: never written over
+    assert family_module.main(["--entry", f"final={base / 'summary.json'}", "--no-preflight", "--preflight", "final=x",
+                               "--out", str(tmp_path / "other")]) == 1
+    assert not (tmp_path / "other").exists()
+
+
+def test_the_rank_command_hands_a_preflight_to_the_driver_and_fails_when_a_check_fails(tmp_path, monkeypatch, capsys):
+    calls, passed = [], [True]
+
+    def fake(**kwargs):
+        kwargs["private_root"].mkdir(mode=0o700)
+        calls.append(kwargs)
+        return {"status": "COMPLETED", "members": {"knee": {"preflight": {"passed": passed[0]}}}}
+
+    shared = _command_files(tmp_path)
+    monkeypatch.setattr(eval_module, "run_unified_ranking_v5", fake)
+    monkeypatch.setattr(eval_module, "render_unified_ranking_preflight_md_v5", lambda summary: "preflight report\n")
+    out = tmp_path / "preflight"
+    command = ["rank", *shared, "--role", "train", "--max-wall-hours", "0.1", "--preflight", "2"]
+    assert real_unified_module.main([*command, "--out", str(out)]) == 0
+    assert calls.pop()["preflight"] == 2
+    assert (out / "unified_ranking_preflight.md").read_text() == "preflight report\n"
+    passed[0] = False
+    assert real_unified_module.main([*command, "--out", str(tmp_path / "preflight_failed")]) != 0
+    capsys.readouterr()

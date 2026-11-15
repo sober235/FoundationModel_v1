@@ -611,6 +611,8 @@ def main(argv: list | None = None) -> int:
         if name == "rank":
             command.add_argument("--placements", type=int, default=1000,
                                  help="comparable placements per box before a seeded sample is drawn")
+            command.add_argument("--preflight", type=int,
+                                 help="check the chain on the first N train scans with a primary box; no ranking")
         if name == "census":
             command.add_argument("--steps", type=int, help="redraw only the run's first steps (default: all of them)")
         if name == "evaluate":
@@ -755,8 +757,12 @@ def main(argv: list | None = None) -> int:
             selected = (args.checkpoint_step, args.checkpoint_sha256)
         if args.command == "rank":
             summary = finished.run_unified_ranking_v5(**common, roles=list(args.role), checkpoint=selected,
-                                                      n_placements=args.placements)
-            markdown, name = finished.render_unified_ranking_md_v5(summary), "unified_ranking.md"
+                                                      n_placements=args.placements, preflight=args.preflight)
+            if args.preflight is None:
+                markdown, name = finished.render_unified_ranking_md_v5(summary), "unified_ranking.md"
+            else:
+                markdown = finished.render_unified_ranking_preflight_md_v5(summary)
+                name = "unified_ranking_preflight.md"
         elif args.command == "census":
             common.pop("device")                                                # no model is built
             summary = finished.run_unified_census_v5(**common, steps=args.steps)
@@ -782,6 +788,8 @@ def main(argv: list | None = None) -> int:
             summary = finished.run_unified_replay_v5(**common, loss_steps=args.loss_steps)
             markdown, name = finished.render_unified_replay_md_v5(summary), "unified_replay.md"
         ok = summary["status"] == "COMPLETED"
+        if args.command == "rank" and args.preflight is not None:               # a failed check is a failed command
+            ok = ok and all(item["preflight"]["passed"] for item in summary["members"].values())
     else:
         summary = run_unified_training_v5(**common, resume=resuming)
         baselines = {}

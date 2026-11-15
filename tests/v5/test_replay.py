@@ -182,3 +182,35 @@ def test_the_census_places_every_eligible_negative_voxel_by_tissue_and_by_the_sc
     with pytest.raises(V5Error) as err:
         negative_census_v5(["a"], anatomy, bags, e_pos, e_neg, [[1], [2]], groups)
     assert (err.value.code, err.value.path) == ("GRID_MISMATCH", "$.bags")
+
+
+def test_the_policy_check_counts_eligible_negatives_inside_what_the_policy_excludes():
+    """Amendment of 2026-11-15: ignore regions and the class's own primary boxes hold no eligible negative."""
+    import numpy as np
+
+    from anatobind.v41.engine.box_data_v5 import box_bags_v5
+    from anatobind.v41.engine.replay_v5 import negative_policy_check_v5
+
+    def box(cls, start, size, analysis="primary", status="included"):
+        return {"status": status, "analysis": analysis, "abnormality_class": cls, "box": {"start": start, "size": size},
+                "host": {"tissue_group": "g"}}
+
+    classes = ["a", "b"]
+    reference = {"boxes": [box("a", [1, 1, 0], [2, 2, 2]), box("a", [5, 5, 1], [2, 2, 1], analysis="secondary"),
+                           box("b", [0, 6, 0], [1, 1, 1], status="excluded")]}
+    e_neg = np.ones((2, 8, 8, 2), dtype=bool)
+    e_neg[:, 5:7, 5:7, 1] = False                  # the ignore regions: negative for no class
+    e_neg[:, 0, 6, 0] = False
+    e_neg[0, 1:3, 1:3, :] = False                  # the primary box of class a: not negative for a, negative for b
+    first, second = negative_policy_check_v5(reference, e_neg, classes)
+    assert first == {"ignore_voxels": 5, "negative_in_ignore": 0, "own_box_voxels": 8, "negative_in_own_boxes": 0}
+    assert second == {"ignore_voxels": 5, "negative_in_ignore": 0, "own_box_voxels": 0, "negative_in_own_boxes": 0}
+    broken = e_neg.copy()
+    broken[1, 5, 5, 1] = True                      # an ignore region left negative for b
+    broken[0, 1, 1, 0] = True                      # a's own box left negative for a
+    first, second = negative_policy_check_v5(reference, broken, classes)
+    assert (first["negative_in_own_boxes"], first["negative_in_ignore"]) == (1, 0)
+    assert (second["negative_in_own_boxes"], second["negative_in_ignore"]) == (0, 1)
+    with pytest.raises(Exception) as error:
+        negative_policy_check_v5(reference, e_neg[:1], classes)
+    assert error.value.code == "GRID_MISMATCH"
