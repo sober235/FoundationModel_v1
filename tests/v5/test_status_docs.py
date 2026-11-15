@@ -789,3 +789,98 @@ def test_status_records_the_second_pilot_as_a_completed_run_not_as_validated_per
     meta = _front_matter()
     assert meta["scientific_conclusion"] == "NOT_EVALUATED" and meta["core_target_validated"] is None
     assert "CST" not in section and "amax 时间" not in section
+
+
+# ---------------------------------------------------------------------------
+# Classification of the second pilot and the threshold-free audit (researcher's decisions of 2026-11-14)
+
+RANKING_PREREG = Path("reports/v5/ranking_audit_prereg_20261114.md")
+RANKING_PREREG_SHA256 = "53d1dce7a31ff5f17f9ac1b3a79599a7794794b3180c9d2f1745922241b62456"
+SUPERVISION_AUDIT = Path("reports/v5/supervision_audit_20261114.md")
+MODELING_OPTIONS = Path("reports/v5/modeling_options_20261114.md")
+# original run step 6000 and step 30000, first pilot step 6000, second pilot step 6000
+RANKING_CHECKPOINTS = (PILOT_CHECKPOINTS["old"][2],
+                       "5b1e8c6d14ca32f2a538bf43d04b61cdece62262fb2c34fadaa3b12466c72e35",
+                       PILOT_CHECKPOINTS["new"][2], PILOT05_CHECKPOINTS[2])
+
+
+def _audit_section() -> str:
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    heading = "## 5% 试验的归类与排序审计的准备（2026-11-14）"
+    assert heading in status
+    return status.split(heading, 1)[1].split("\n## ", 1)[0]
+
+
+def test_the_plan_of_the_ranking_audit_was_not_edited_after_it_was_frozen():
+    assert hashlib.sha256(RANKING_PREREG.read_bytes()).hexdigest() == RANKING_PREREG_SHA256
+    text = RANKING_PREREG.read_text(encoding="utf-8")
+    for phrase in (*RANKING_CHECKPOINTS, "没有在真实数据上运行过", "批准之前不启动任何真实数据作业", "没有现成的概率图可以复用",
+                   "不是体素级的病变 AUROC", "没有任何体素被当作确认的阳性或阴性", "之后不改", "p1 ≤ 0.003", "总上限 14 h",
+                   "不读 `locked_test`", "不训练，不更新任何权重", "不能说明的", "NOT_EVALUATED"):
+        assert phrase in text, phrase
+    for pattern in _REDACTED:
+        assert not re.search(pattern, text), pattern
+    assert "CST" not in text and "amax 时间" not in text
+
+
+def test_the_plan_of_the_ranking_audit_names_the_values_the_code_uses():
+    from anatobind.v41.evaluation import findings_ranking_v5 as ranking
+
+    text = RANKING_PREREG.read_text(encoding="utf-8")
+    assert ranking.PRIMARY_STAT == "topk_mean" and "`topk_mean`（**主要量**）" in text
+    for stat in ("mean", "auc"):
+        assert stat in ranking.STATS and f"| `{stat}` |" in text
+    assert [name for name, _ in ranking.ENRICHMENT] == ["enrichment_01", "enrichment_05", "enrichment_10"]
+    assert "`enrichment_01 / 05 / 10`" in text
+    assert ranking.N_PLACEMENTS == 1000 and "抽 1000 个" in text and "摆放上限 1000" in text
+    assert ranking.N_BOOTSTRAP == 10000 and ranking.SEED == 20261114 and "重抽样 10000 次，种子 20261114" in text
+    assert ranking.BINS == 1280 and (ranking.LOGIT_LIMIT, ranking.LOGIT_STEP) == (16.0, 0.025)
+    assert "分成 1280 格（±16，步长 0.025）" in text
+    assert len(ranking.ZONES) == 7 and "互不重叠的七个区" in text
+    assert ranking.TOP_VOLUME == (0.001, 0.01) and "最高的 0.1% 与 1% 体素" in text
+    assert ranking.HOST_TOP_FRACTION == 0.01 and "最高 1% 体素的平均概率" in text
+    assert "0.05 除以 16 组" in text and abs(0.05 / 16 - 0.003) < 2e-4
+
+
+def test_the_supervision_audit_separates_defects_assumptions_and_hypotheses():
+    text = SUPERVISION_AUDIT.read_text(encoding="utf-8")
+    for phrase in ("**没有发现实现缺陷**", "**实现缺陷：** 没有发现。", "**监督假设", "**待检验的假设", "**证据支持的解释：**",
+                   "box_mil_terms_v5", "box_bags_v5", "这一轮没有在真实数据上运行任何东西", "有记录的、有意的偏离",
+                   "BLOCKED_EXPERT_REVIEW", "没有测过", "NOT_EVALUATED"):
+        assert phrase in text, phrase
+    for pattern in _REDACTED:
+        assert not re.search(pattern, text), pattern
+    # the counts it cites are those of the archived evaluation reports, and the proposal says what it is quoted for
+    archived = (PILOT05_FOLDER / "evaluation_old_6000.md").read_text(encoding="utf-8")
+    for count in ("17748517", "4144623"):
+        assert count in text and f"宿主组织体素 | {count} |" in archived
+    proposal = Path("Proposal_v5.md").read_text(encoding="utf-8")
+    assert "框不生成逐体素全阳性或框外阴性" in proposal and "框不生成逐体素全阳性或框外阴性" in text
+    assert "无框的扫描或组织记 annotation_unknown" in proposal and "无框的扫描或组织记 annotation_unknown" in text
+
+
+def test_the_comparison_of_the_three_directions_is_planning_and_waits_for_the_audit():
+    text = MODELING_OPTIONS.read_text(encoding="utf-8")
+    for phrase in ("**这是研究规划，不是实现。**", "**最终推荐要等排序审计的结果。**", "A. 空间约束的 MIL",
+                   "B. 按解剖分区的难负样本", "C. 共享编码器上的轻量框级定位头", "**B 在前，A 其次，C 最后。**",
+                   "**它不是执行建议**", "最小的对照实验", "有证据支持的失败机制是", "NOT_EVALUATED"):
+        assert phrase in text, phrase
+    for pattern in _REDACTED:
+        assert not re.search(pattern, text), pattern
+
+
+def test_status_records_the_classification_of_the_second_pilot_apart_from_the_conclusion_fields():
+    section = _audit_section()
+    for phrase in ("**阴性**", "只针对这一次试验", "也不写进 `scientific_conclusion`", "这两个字段没有改动",
+                   "ranking_audit_prereg_20261114.md", "supervision_audit_20261114.md", "modeling_options_20261114.md",
+                   "**没有运行。**", "**等研究者批准。**", "总上限 14 h", "实现缺陷：没有发现", "locked_test 未读",
+                   "没有训练", "没有推送，没有合并 PR", "不合并 PR #2", "`3f02e2b`"):
+        assert phrase in section, phrase
+    meta = _front_matter()
+    assert meta["scientific_conclusion"] == "NOT_EVALUATED" and meta["core_target_validated"] is None
+    assert "CST" not in section and "amax 时间" not in section
+    # the second pilot's own section still says what it said: the classification is recorded here, not written back
+    assert "最终归类由研究者判断" in _pilot05_section()
+    # nothing was run on real data: no result of the audit is in the repository
+    assert not list(Path("reports/v5").glob("ranking_audit_2026111[4-9]*")) or \
+        [p.name for p in Path("reports/v5").glob("ranking_audit_2026111[4-9]*")] == [RANKING_PREREG.name]
