@@ -38,6 +38,13 @@ a given fraction keeps of the negatives that currently reach the acceptance thre
 `compare_unified_runs_v5` (2026-11-12) reads no sample: two plans, two run records, two logs and the checkpoint
 states of both runs, to say whether initialisation, sampling order and learning rate were the same.
 
+`run_unified_ranking_v5` (2026-11-14) reads a checkpoint of a finished run like the evaluation does, but stops
+before the acceptance step: the restored probabilities of every scan go to evaluation.findings_ranking_v5 (boxes
+against their comparable placements, zones of the supervision, scans), with no threshold, connected component or
+anchor. `run_unified_census_v5` (2026-11-14) builds no model: it redraws the training patches of a finished run
+and counts what the negative support of the box objective was made of (host tissue, other tissue, the rest; by
+whether the scan has a box). Only train is read.
+
 Private rows stay under the new directory; the renderers show configuration, counts, metrics and hashes only.
 scientific_conclusion stays NOT_EVALUATED; values on train are diagnostics, never a generalisation result.
 """
@@ -59,7 +66,8 @@ from .engine.data_v5 import make_batch_v5, original_geometry_v5
 from .engine.module_eval_v5 import freeze_module_reference_v5, module_metrics_v5, summarize_module_metrics_v5
 from .engine.registration_v5 import READABLE_ROLES, _is_sha256, _positive_int, readable_role_v5, run_sha256_v5
 from .engine.replay_v5 import (
-    batch_exposure_v5, box_counts_v5, box_objective_parts_v5, full_bag_voxels_v5, member_sampler_v5, negative_reach_v5)
+    CENSUS_TISSUES, batch_exposure_v5, box_counts_v5, box_objective_parts_v5, full_bag_voxels_v5, member_sampler_v5,
+    negative_census_v5, negative_reach_v5)
 from .engine.smoke_v5 import _same
 from .engine.train_v5 import _append_jsonl, _to_device, autocast_v5, load_checkpoint_v5
 from .engine.unified_registration_v5 import member_recipe_v5, stop_step_v5, unified_plan_sha256_v5
@@ -67,13 +75,16 @@ from .evaluation.findings_diagnostics_v5 import (
     _distribution, diagnose_scan_v5, render_diagnostics_md_v5, summarize_diagnostics_v5)
 from .evaluation.findings_chance_v5 import (
     chance_hit_control_v5, relocation_rows_v5, render_chance_md_v5, summarize_relocation_v5)
+from .evaluation.findings_ranking_v5 import (
+    N_BOOTSTRAP, N_PLACEMENTS, SCAN_GROUPS, SEED as RANKING_SEED, ranking_scan_v5, render_ranking_md_v5,
+    scan_group_v5, summarize_ranking_v5)
 from .evaluation.findings_v5 import OUTSIDE_NOTE, anatomy_dice_v5, score_findings_v5, summarize_findings_v5
 from .findings_v5 import _group_ids, findings_from_output_v5, host_relation_fn_v5, render_findings_zh_v5
 from .models.interface_v5 import build_model_input_v5
 from .models.unified_v5 import build_unified_model_v5
 from .paths import resolve_private_output, write_private_json
 from . import perception
-from .perception import run_perception_v5
+from .perception import restored_probabilities_v5, run_perception_v5
 from .perception_io import load_output_v5, output_prefix_v5
 
 CONCLUSION = "NOT_EVALUATED"
@@ -578,6 +589,291 @@ def render_unified_evaluation_md_v5(summary: dict) -> str:
             body = chance.split("\n", 1)[1].lstrip("\n").replace("\n## ", "\n### ")
             lines += ["", f"## {pid}：偶然命中水平的对照（仅诊断）", "", *body.rstrip("\n").splitlines()]
     return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Ranking without a threshold (audit of 2026-11-14)
+
+
+def run_unified_ranking_v5(*, plan: dict, plan_sha256: str, protocols: dict, members: dict, approvals: dict,
+                           raw: Path, label_maps: dict, run_root: Path, private_root: Path, repo: Path, device: str,
+                           run_id: str, roles: list, max_wall_hours: float, created_at: str, environment: dict,
+                           code: dict, fixture_mode: bool, protocol_ids: list | None = None,
+                           checkpoint: tuple | None = None, n_placements: int = N_PLACEMENTS,
+                           n_bootstrap: int = N_BOOTSTRAP) -> dict:
+    """Read the abnormality probabilities of the finished run `run_id` on `roles`, under its final checkpoint or
+    the checkpoint `(step, sha256)` of that run, against the readers' boxes without any threshold
+    (evaluation.findings_ranking_v5). The acceptance policy, the instances and the findings are never built.
+    summary.json and the private rows go to the new directory `private_root`. Returns the summary."""
+    started = time.monotonic()
+    roles = _check_roles(roles)
+    if not _positive_int(n_placements):
+        raise V5Error("INVALID_TYPE", "$.n_placements")
+    if not (isinstance(n_bootstrap, int) and not isinstance(n_bootstrap, bool) and n_bootstrap >= 0):
+        raise V5Error("INVALID_TYPE", "$.n_bootstrap")
+    opened = _open_finished_run(plan=plan, plan_sha256=plan_sha256, protocols=protocols, members=members,
+                                approvals=approvals, run_root=run_root, run_id=run_id, private_root=private_root,
+                                max_wall_hours=max_wall_hours, code=code, fixture_mode=fixture_mode,
+                                checkpoint=checkpoint)
+    private_root, device_t, pids = Path(private_root), torch.device(device), opened["pids"]
+    scopes = {pid: protocols[pid]["scope"] for pid in pids}
+    wanted = _box_members(plan, protocols, pids, protocol_ids)
+    model = _frozen_model(plan, scopes, _load_selected(opened, device_t.type), device_t)
+    before = state_sha256_v5(model)
+    summary = _header(plan, plan_sha256, opened, scopes, "unified_ranking", device_t, before, max_wall_hours,
+                      {"roles": roles, "code": dict(code), "environment": dict(environment),
+                       "created_at": created_at, "n_placements": int(n_placements), "n_bootstrap": int(n_bootstrap),
+                       "seed": RANKING_SEED})
+
+    def finish(stop_code: str | None, phase: str | None) -> dict:
+        summary["stop_code"], summary["stop_phase"] = stop_code, phase
+        summary["elapsed_hours"] = (time.monotonic() - started) / 3600.0
+        write_private_json(resolve_private_output(private_root / "summary.json", private_root, repo), summary)
+        return summary
+
+    results = {pid: {} for pid in wanted}
+    for role in roles:
+        for pid in wanted:
+            member, scope, protocol = plan["members"][pid], scopes[pid], protocols[pid]
+            member_run, registry = opened["member_runs"][pid], members[pid]["registry"]
+            samples, references = driver.load_member_samples_v5(
+                plan=plan, protocol_id=pid, protocol=protocol, records=members[pid]["records"], registry=registry,
+                raw=raw, label_maps=label_maps, roles=[role], box_references=members[pid].get("box_references"))
+            by_uid = {record.sample_uid: record for record in members[pid]["records"]}
+            rows_path = resolve_private_output(private_root / "rows" / f"{role}.{pid}.jsonl", private_root, repo)
+            group_ids, classes = _group_ids(scope, protocol["groups"]), list(scope.abnormality_classes)
+            # the placements drawn for a box depend on its split, its member, its scan and its place among the
+            # scan's boxes, not on which roles one command reads or on the checkpoint
+            role_key = (RANKING_SEED, sorted(READABLE_ROLES).index(role), wanted.index(pid))
+            rows = []
+            for ordinal, uid in enumerate(sorted(samples)):
+                if time.monotonic() - started > max_wall_hours * 3600.0:    # no partial result
+                    return finish("EVAL_BUDGET_EXCEEDED", role)
+                if readable_role_v5(uid, registry, member_run) != role:
+                    raise V5Error("ROLE_NOT_READABLE", "$.sample_uid")
+                sample, record = samples.pop(uid), by_uid[uid]
+                observation = sample.observation
+                batch = build_model_input_v5(observation.channels, scope, observation.valid_fov, observation.grid,
+                                             list(observation.to_original))
+                shape = tuple(int(n) for n in original_geometry_v5(observation, record)["shape"])
+                restored, represented, valid_fov = restored_probabilities_v5(
+                    model.view(pid), batch, shape, tuple(member["inference"]["window"]),
+                    tuple(member["inference"]["stride"]), plan["shared"]["precision"])
+                eligible = (sample.e_pos["A"] & sample.e_neg["A"]).all(axis=0) & represented & valid_fov
+                row = ranking_scan_v5(
+                    probability=restored["abnormality"], reference=references[uid],
+                    anatomy_reference=sample.targets["A"], anatomy_eligible=eligible, classes=classes,
+                    group_ids=group_ids, groups_by_class=protocol["groups_by_class"],
+                    topk_fraction=member["box_supervision"]["topk_fraction"], patient_uid=record.patient_uid,
+                    seed_key=(*role_key, ordinal), n_placements=n_placements)
+                _append_jsonl(rows_path, {"ranking": row})
+                rows.append(row)
+            results[pid][role] = {"n_scans": len(rows),
+                                  "ranking": summarize_ranking_v5(rows, classes, n_bootstrap=n_bootstrap)}
+    if state_sha256_v5(model) != before:
+        raise V5Error("EVAL_WEIGHTS_CHANGED", "$.checkpoint")
+    summary["checkpoint"]["weights_unchanged"] = True
+    summary["members"] = results
+    summary["status"] = "COMPLETED"
+    return finish(None, None)
+
+
+def render_unified_ranking_md_v5(summary: dict) -> str:
+    """Configuration, counts, distributions and hashes of a ranking run; no identifiers."""
+    evaluation = summary["evaluation"]
+    roles = evaluation["roles"]
+    lines = _intro(summary, "统一模型不用阈值的排序诊断")
+    lines += [f"- 读取的划分角色：{'、'.join(roles)}；locked_test 未读。",
+              "- 不用阈值：只做整卷推理并把概率恢复到原始网格（与只评价读到的概率相同）；没有应用接受策略，"
+              "没有连通块、实例、定位点与所见，也没有保存任何输出。",
+              f"- 每个主分析框的可比摆放的上限 {evaluation['n_placements']}（超过时带种子均匀抽样，种子 "
+              f"{evaluation['seed']}）；患者重抽样 {evaluation['n_bootstrap']} 次。"]
+    for pid, by_role in (summary["members"] or {}).items():
+        present = [role for role in roles if role in by_role]
+        body = render_ranking_md_v5({role: by_role[role]["ranking"] for role in present})
+        body = body.split("\n", 1)[1].lstrip("\n").replace("\n### ", "\n#### ").replace("\n## ", "\n### ")
+        lines += ["", f"## {pid}：不用阈值的框内响应排序（仅诊断）", "",
+                  "- 扫描数：" + "，".join(f"{role} {by_role[role]['n_scans']}" for role in present), "",
+                  *body.rstrip("\n").splitlines()]
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Census of the negative support (audit of 2026-11-14)
+
+
+def run_unified_census_v5(*, plan: dict, plan_sha256: str, protocols: dict, members: dict, approvals: dict,
+                          raw: Path, label_maps: dict, run_root: Path, private_root: Path, repo: Path, run_id: str,
+                          max_wall_hours: float, created_at: str, environment: dict, code: dict, fixture_mode: bool,
+                          steps: int | None = None, protocol_ids: list | None = None) -> dict:
+    """Redraw the training patches of a box-supervised member of the finished run `run_id` and count what the
+    supports of its box objective were made of (engine.replay_v5.negative_census_v5): the eligible negative voxels
+    on the class's host tissues, on other segmented tissue and off every segmented tissue, by whether the scan has
+    a primary box of the class, only other boxes, or none. `steps`: the run's first steps to redraw (all of them
+    when None). No model is built and no checkpoint is read; every step's support is compared with the run's log.
+    Only train is read."""
+    started = time.monotonic()
+    if steps is not None and not _positive_int(steps):
+        raise V5Error("INVALID_TYPE", "$.steps")
+    opened = _open_finished_run(plan=plan, plan_sha256=plan_sha256, protocols=protocols, members=members,
+                                approvals=approvals, run_root=run_root, run_id=run_id, private_root=private_root,
+                                max_wall_hours=max_wall_hours, code=code, fixture_mode=fixture_mode)
+    private_root, pids, unified = Path(private_root), opened["pids"], opened["unified"]
+    scopes = {pid: protocols[pid]["scope"] for pid in pids}
+    wanted = _box_members(plan, protocols, pids, protocol_ids)
+    run_steps = {pid: stop_step_v5(plan) or member_recipe_v5(plan, pid, "baseline")["budget"]["max_steps"]
+                 for pid in wanted}
+    if steps is not None and any(steps > taken for taken in run_steps.values()):
+        raise V5Error("INVALID_TYPE", "$.steps")
+    log = _step_log(opened["run_root"] / "runs" / run_id / "metrics.jsonl")
+    summary = {"kind": "unified_census", "plan_id": plan["plan_id"], "plan_sha256": plan_sha256,
+               "run": {"run_id": unified["run_id"], "run_sha256": run_sha256_v5(unified), "code": dict(unified["code"]),
+                       "members": {pid: {"scope_id": scopes[pid].scope_id, "scope_hash": scopes[pid].scope_hash,
+                                         "run_sha256": unified["members"][pid]["run_sha256"],
+                                         "split_sha256": unified["members"][pid]["split_sha256"]} for pid in pids}},
+               "census": {"roles": ["train"], "steps": steps, "code": dict(code), "environment": dict(environment),
+                          "created_at": created_at},
+               "status": "FAILED", "stop_code": None, "stop_phase": None, "members": None, "elapsed_hours": None,
+               "budget_hours": float(max_wall_hours), "plan_budget_remaining_hours": opened["remaining_hours"],
+               "scientific_conclusion": CONCLUSION}
+
+    def finish(stop_code: str | None, phase: str | None) -> dict:
+        summary["stop_code"], summary["stop_phase"] = stop_code, phase
+        summary["elapsed_hours"] = (time.monotonic() - started) / 3600.0
+        write_private_json(resolve_private_output(private_root / "summary.json", private_root, repo), summary)
+        return summary
+
+    results = {}
+    for pid in wanted:
+        member, scope, protocol = plan["members"][pid], scopes[pid], protocols[pid]
+        box, classes = member["box_supervision"], list(scope.abnormality_classes)
+        recipe = member_recipe_v5(plan, pid, "baseline")
+        seed = plan["shared"]["seeds"]["sampler"] + sorted(plan["members"]).index(pid)
+        taken = run_steps[pid] if steps is None else steps
+        samples, references = driver.load_member_samples_v5(
+            plan=plan, protocol_id=pid, protocol=protocol, records=members[pid]["records"],
+            registry=members[pid]["registry"], raw=raw, label_maps=label_maps, roles=["train"],
+            box_references=members[pid].get("box_references"))
+        ids = _group_ids(scope, protocol["groups"])
+        host_ids = [sorted({i for group in protocol["groups_by_class"].get(name, []) for i in ids[group]})
+                    for name in classes]
+        groups = {uid: [scan_group_v5(references[uid]["boxes"], name) for name in classes] for uid in samples}
+        sampler = member_sampler_v5(samples, recipe, seed, box)
+        compared = mismatches = 0
+        totals = [{"negative": {group: dict.fromkeys(CENSUS_TISSUES, 0) for group in SCAN_GROUPS},
+                   "patches": dict.fromkeys(SCAN_GROUPS, 0), "bags": 0, "bag_voxels": 0, "steps_with_a_bag": 0,
+                   "host_share": []} for _ in classes]
+        for step in range(1, taken + 1):
+            if step % _BUDGET_CHECK_EVERY == 0 and time.monotonic() - started > max_wall_hours * 3600.0:
+                return finish("EVAL_BUDGET_EXCEEDED", "census")
+            drawn = len(sampler.drawn)
+            _, targets, eligibility = make_batch_v5(samples, sampler, recipe, scope)
+            uids = sampler.drawn[drawn:]
+            logged = (log.get(step) or {}).get(pid)
+            if logged is None:
+                raise V5Error("REPLAY_LOG_MISSING", "$.metrics")
+            for task, value in batch_exposure_v5(uids, targets, eligibility)["support"].items():
+                compared += 1
+                mismatches += int(value != logged["tasks"][task]["support"])
+            counted = negative_census_v5(uids, targets["A"], targets["U"], eligibility["U"]["e_pos"],
+                                         eligibility["U"]["e_neg"], host_ids, groups)
+            for total, item in zip(totals, counted):
+                for group, counts in item["negative"].items():
+                    for tissue, voxels in counts.items():
+                        total["negative"][group][tissue] += voxels
+                for group, n in item["patches"].items():
+                    total["patches"][group] += n
+                total["bags"] += item["bags"]
+                total["bag_voxels"] += item["bag_voxels"]
+                total["steps_with_a_bag"] += int(item["bags"] > 0)
+                if item["eligible"]:
+                    total["host_share"].append(item["host"] / item["eligible"])
+        by_class = {}
+        for c, name in enumerate(classes):
+            total = totals[c]
+            voxels = sum(sum(counts.values()) for counts in total["negative"].values())
+            patches = sum(total["patches"].values())
+            by_class[name] = {
+                "scans": {group: sum(1 for uid in groups if groups[uid][c] == group) for group in SCAN_GROUPS},
+                "bags": total["bags"], "bag_voxels": total["bag_voxels"], "steps_with_a_bag": total["steps_with_a_bag"],
+                "negative": {
+                    "voxels": voxels,
+                    "by_tissue": {tissue: {"voxels": (n := sum(counts[tissue] for counts in total["negative"].values())),
+                                           "share": n / voxels if voxels else None} for tissue in CENSUS_TISSUES},
+                    "by_scan_group": {group: {"voxels": (n := sum(total["negative"][group].values())),
+                                              "share": n / voxels if voxels else None,
+                                              "host_voxels": total["negative"][group]["host"],
+                                              "patches": total["patches"][group],
+                                              "patch_share": total["patches"][group] / patches if patches else None}
+                                      for group in SCAN_GROUPS}},
+                "host_share_per_batch": _distribution(total["host_share"])}
+        results[pid] = {"steps": taken, "run_steps": run_steps[pid], "patches": taken * recipe["batch_size"],
+                        "patch_size": list(recipe["patch_size"]),
+                        "positive_fraction": recipe["sampling"]["positive_fraction"],
+                        "sampler_seed_offset": sorted(plan["members"]).index(pid),
+                        "topk_fraction": box["topk_fraction"],
+                        "negative_topk_fraction": box.get("negative_topk_fraction"),
+                        "verification": {"support_compared": compared, "support_mismatches": mismatches},
+                        "classes": by_class}
+        del samples
+    summary["members"] = results
+    summary["status"] = "COMPLETED"
+    return finish(None, None)
+
+
+def render_unified_census_md_v5(summary: dict) -> str:
+    """Counts and shares of a census; no identifiers, no duration."""
+    run, census = summary["run"], summary["census"]
+    tissue_labels = {"host": "该类别的宿主组织", "other_tissue": "其他已分割组织", "background": "没有分割标注的体素"}
+    group_labels = {"with_primary": "有该类主分析框的扫描", "other_boxes_only": "只有其他的框的扫描",
+                    "no_box": "没有任何框的扫描"}
+    lines = [f"# 统一模型框监督的负监督构成：{summary['plan_id']}", "",
+             "本报告只含配置、计数、比例与哈希；不含样本或患者 ID、路径或文件名。", "",
+             f"- 计划 sha256 `{summary['plan_sha256']}`；被读取的运行 run_sha256 `{run['run_sha256']}`",
+             f"- 训练代码 `{run['code']['git_commit']}`；本次统计代码 `{census['code']['git_commit']}`",
+             f"- 结果：{summary['status']}" + (f"（停止：{summary['stop_code']}，阶段 {summary['stop_phase']}）"
+                                              if summary["stop_code"] else ""),
+             f"- scientific_conclusion: {summary['scientific_conclusion']}；没有构建模型，没有读取检查点，没有前向计算："
+             "只按训练时的种子重抽裁块并计数，所以这些计数与权重无关。",
+             "- 只读 train；development_val 与 locked_test 未读。",
+             "- 负监督指框目标把它当作“无该类异常”的体素（所有同类主分析框与忽略区之外）。这是训练规则："
+             "医生没有标注不等于正常。"]
+    for pid, item in (summary["members"] or {}).items():
+        check = item["verification"]
+        fraction = item["negative_topk_fraction"]
+        lines += ["", f"## {pid}：重抽的批次", "",
+                  f"- 重抽该运行的前 {item['steps']} 步（该运行共 {item['run_steps']} 步），裁块 {item['patches']} 个，"
+                  f"裁块大小 {'×'.join(str(n) for n in item['patch_size'])}；裁块中心有 {item['positive_fraction']} 的概率"
+                  "取在分割前景或袋的体素上，其余在有效视野内均匀取。",
+                  f"- 逐步核对：每一步每个任务的监督体素计数与训练日志比较，共 {check['support_compared']} 项，"
+                  f"不一致 {check['support_mismatches']} 项。",
+                  "- 负项的取法：" + ("每个类别取全部可用负体素的平均。" if fraction is None else
+                                  f"每个类别在整个批次的可用负体素里取响应最高的前 {fraction} 比例；"
+                                  "下表数的是可用负体素，被选中的是哪些取决于权重，这里不统计。")]
+        for name, block in item["classes"].items():
+            negative = block["negative"]
+            lines += ["", f"### {pid}：{name}", "",
+                      "| 项 | 取值 |", "| --- | --- |",
+                      *[f"| train 里{group_labels[group]} | {block['scans'][group]} |" for group in SCAN_GROUPS],
+                      f"| 批次里有该类袋的步数 | {block['steps_with_a_bag']} |",
+                      f"| 袋出现次数 | {block['bags']} |",
+                      f"| 袋的体素（正监督的候选体素） | {block['bag_voxels']} |",
+                      f"| 可用负体素 | {negative['voxels']} |",
+                      *[f"| 可用负体素：{tissue_labels[tissue]} | {negative['by_tissue'][tissue]['voxels']}"
+                        f"（{_share(negative['by_tissue'][tissue]['share'])}） |" for tissue in CENSUS_TISSUES],
+                      *[f"| 可用负体素：来自{group_labels[group]} | {negative['by_scan_group'][group]['voxels']}"
+                        f"（{_share(negative['by_scan_group'][group]['share'])}）；其中宿主组织上 "
+                        f"{negative['by_scan_group'][group]['host_voxels']}；裁块 "
+                        f"{negative['by_scan_group'][group]['patches']}"
+                        f"（{_share(negative['by_scan_group'][group]['patch_share'])}） |" for group in SCAN_GROUPS],
+                      f"| 每个批次里宿主组织占可用负体素的比例：中位数 | {_share(block['host_share_per_batch']['p50'])} |",
+                      f"| 同上：第 10 百分位 / 第 90 百分位 | {_share(block['host_share_per_batch']['p10'])} / "
+                      f"{_share(block['host_share_per_batch']['p90'])} |"]
+    return "\n".join(lines) + "\n"
+
+
+def _share(value) -> str:
+    return "NA" if value is None else f"{value:.5f}"
 
 
 # ---------------------------------------------------------------------------

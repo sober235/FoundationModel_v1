@@ -148,6 +148,28 @@ def _octave(count: np.ndarray | int):
     return np.where(np.asarray(count) > 0, np.floor(np.log2(np.maximum(np.asarray(count), 1))).astype(np.int64), -1)
 
 
+def placement_counts_v5(tissue: np.ndarray, size: np.ndarray) -> tuple:
+    """Every placement of a box of `size` inside the volume that can contain a voxel of `tissue` (which has one):
+    (low, high, counts). The placements start at low + (i, j, k) with low <= start <= high, and counts[i, j, k] is
+    the number of tissue voxels the placement holds."""
+    shape = np.asarray(tissue.shape, dtype=np.int64)
+    size = np.asarray(size, dtype=np.int64)
+    where = np.nonzero(tissue)
+    low = np.maximum(np.asarray([axis.min() for axis in where]) - size + 1, 0)
+    high = np.minimum(np.asarray([axis.max() for axis in where]), shape - size)
+    crop = tissue[tuple(slice(int(a), int(b + n)) for a, b, n in zip(low, high, size))]
+    total = np.pad(crop.astype(np.int32).cumsum(0).cumsum(1).cumsum(2), ((1, 0), (1, 0), (1, 0)))
+    n0, n1, n2 = (int(v) for v in high - low + 1)
+    s0, s1, s2 = (int(v) for v in size)
+
+    def corner(a: int, b: int, c: int) -> np.ndarray:
+        return total[a:a + n0, b:b + n1, c:c + n2]
+
+    counts = (corner(s0, s1, s2) - corner(0, s1, s2) - corner(s0, 0, s2) - corner(s0, s1, 0)
+              + corner(0, 0, s2) + corner(0, s1, 0) + corner(s0, 0, 0) - corner(0, 0, 0))
+    return low, high, counts
+
+
 def relocation_rows_v5(*, findings: list, reference: dict, anatomy_reference: np.ndarray, group_ids: dict) -> list:
     """One row per primary box of one scan: observed hit / host_correct and their probabilities over the comparable
     placements of the box in this scan. `group_ids`: tissue group -> anatomy class ids of the reference anatomy."""
@@ -172,20 +194,7 @@ def relocation_rows_v5(*, findings: list, reference: dict, anatomy_reference: np
         row["host_voxels"] = own
         if own == 0:
             continue
-        where = np.nonzero(tissue)
-        # starts of every placement inside the volume that can contain a tissue voxel
-        low = np.maximum(np.asarray([axis.min() for axis in where]) - size + 1, 0)
-        high = np.minimum(np.asarray([axis.max() for axis in where]), np.asarray(shape) - size)
-        crop = tissue[tuple(slice(int(a), int(b + n)) for a, b, n in zip(low, high, size))]
-        total = np.pad(crop.astype(np.int32).cumsum(0).cumsum(1).cumsum(2), ((1, 0), (1, 0), (1, 0)))
-        n0, n1, n2 = (int(v) for v in high - low + 1)
-        s0, s1, s2 = (int(v) for v in size)
-
-        def corner(a: int, b: int, c: int) -> np.ndarray:
-            return total[a:a + n0, b:b + n1, c:c + n2]
-
-        counts = (corner(s0, s1, s2) - corner(0, s1, s2) - corner(s0, 0, s2) - corner(s0, s1, 0)
-                  + corner(0, 0, s2) + corner(0, s1, 0) + corner(s0, 0, 0) - corner(0, 0, 0))
+        low, high, counts = placement_counts_v5(tissue, size)
         comparable = _octave(counts) == int(_octave(own))
         # state of every placement: 0 no finding of the class inside, 1 hit, 2 hit and the largest names the host
         state = np.zeros(counts.shape, dtype=np.int8)

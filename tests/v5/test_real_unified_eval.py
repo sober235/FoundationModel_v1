@@ -815,3 +815,236 @@ def test_any_other_error_of_the_description_is_not_swallowed(env, monkeypatch): 
 
     monkeypatch.setattr(real_unified_module, "_infer", broken)
     _raises("GRID_MISMATCH", "$.abnormality_map", run_unified_training_v5, **env.train_kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Audit of 2026-11-14: the probabilities read without a threshold, and what the negative support is made of
+
+
+def _rank_kwargs(finished, **overrides):
+    kwargs = dict(finished.eval_kwargs, private_root=finished.eval_kwargs["private_root"].with_name("ranking"),
+                  n_placements=50, n_bootstrap=20)
+    kwargs.update(overrides)
+    return kwargs
+
+
+def test_the_ranking_reads_probabilities_without_threshold_component_or_anchor(finished, monkeypatch):
+    from anatobind.v41 import perception
+    from anatobind.v41.real_unified_eval_v5 import render_unified_ranking_md_v5, run_unified_ranking_v5
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("the ranking went through the acceptance chain")
+
+    for owner, name in ((eval_module, "run_perception_v5"), (perception, "apply_acceptance_v5"),
+                        (perception, "extract_instances_v5"), (eval_module, "findings_from_output_v5")):
+        monkeypatch.setattr(owner, name, _fail_if_called)
+    result = run_unified_ranking_v5(**_rank_kwargs(finished))
+    assert result["status"] == "COMPLETED" and result["stop_code"] is None, result
+    assert result["kind"] == "unified_ranking" and result["scientific_conclusion"] == "NOT_EVALUATED"
+    assert set(result["members"]) == {"knee"}                          # the box-supervised member
+    train, development = result["members"]["knee"]["train"], result["members"]["knee"]["development_val"]
+    assert (train["n_scans"], development["n_scans"]) == (2, 1)
+    assert train["ranking"]["boxes"]["overall"]["n_boxes"] == 1        # knee-0 has the one training box
+    assert development["ranking"]["boxes"]["overall"]["n_boxes"] == 1
+    groups = train["ranking"]["scans"]["target_a"]["groups"]
+    assert (groups["with_primary"]["n"], groups["no_box"]["n"]) == (1, 1)
+    assert result["evaluation"]["n_placements"] == 50 and result["evaluation"]["roles"] == ["train", "development_val"]
+    checkpoint = result["checkpoint"]
+    assert checkpoint["sha256"] == finished.summary["training"]["checkpoint_sha256"]
+    assert checkpoint["weights_unchanged"] is True
+    assert _tree(finished.root) == finished.before                     # the finished run is byte for byte as before
+    out = _rank_kwargs(finished)["private_root"]
+    rows = [json.loads(line) for line in (out / "rows" / "train.knee.jsonl").read_text().splitlines()]
+    assert len(rows) == 2 and set(rows[0]) == {"ranking"} and "patient_uid" in rows[0]["ranking"]
+    for path in out.rglob("*"):
+        if path.is_file():
+            assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    text = render_unified_ranking_md_v5(result)
+    assert "knee-0" not in text and "synthetic:" not in text and str(finished.root) not in text
+    for phrase in ("NOT_EVALUATED", "不用阈值", "权重未被修改", "locked_test 未读", "不能代替泛化评价", "弱标注",
+                   checkpoint["sha256"], "可比摆放的上限 50"):
+        assert phrase in text, phrase
+
+
+def test_the_ranking_reads_the_probabilities_the_evaluation_reads(finished, monkeypatch):
+    import numpy as np
+
+    from anatobind.v41.real_unified_eval_v5 import run_unified_ranking_v5
+
+    seen = {"evaluation": [], "ranking": []}
+    diagnose, rank = eval_module.diagnose_scan_v5, eval_module.ranking_scan_v5
+
+    def recording_diagnose(**kwargs):
+        seen["evaluation"].append(np.array(kwargs["probability"]))
+        return diagnose(**kwargs)
+
+    def recording_rank(**kwargs):
+        seen["ranking"].append(np.array(kwargs["probability"]))
+        return rank(**kwargs)
+
+    monkeypatch.setattr(eval_module, "diagnose_scan_v5", recording_diagnose)
+    monkeypatch.setattr(eval_module, "ranking_scan_v5", recording_rank)
+    run_unified_evaluation_v5(**finished.eval_kwargs)
+    run_unified_ranking_v5(**_rank_kwargs(finished))
+    assert len(seen["evaluation"]) == len(seen["ranking"]) == 3
+    for a, b in zip(seen["evaluation"], seen["ranking"]):
+        assert a.dtype == b.dtype and np.array_equal(a, b)
+
+
+def test_the_placements_drawn_for_a_box_do_not_depend_on_which_roles_one_command_reads(finished):
+    from anatobind.v41.real_unified_eval_v5 import run_unified_ranking_v5
+
+    def rows(out):
+        return [json.loads(line)["ranking"]["boxes"] for line in
+                (out / "rows" / "development_val.knee.jsonl").read_text().splitlines()]
+
+    both = _rank_kwargs(finished, n_placements=3)
+    alone = _rank_kwargs(finished, n_placements=3, roles=["development_val"],
+                         private_root=both["private_root"].with_name("ranking_dev"))
+    run_unified_ranking_v5(**both)
+    run_unified_ranking_v5(**alone)
+    assert rows(both["private_root"]) == rows(alone["private_root"])
+    assert any(box["exhaustive"] is False for scan in rows(both["private_root"]) for box in scan)   # a draw was made
+
+
+def test_the_ranking_reads_a_selected_checkpoint_and_refuses_what_the_evaluation_refuses(finished, monkeypatch):
+    from anatobind.v41.real_unified_eval_v5 import run_unified_ranking_v5
+
+    earlier, final = _sidecar(finished.root, 2)["sha256"], finished.summary["training"]["checkpoint_sha256"]
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("data was read before the request was checked")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(real_unified_module, "load_member_samples_v5", _fail_if_called)
+        _raises("LOCKED_TEST_NOT_READABLE", "$.roles[0]", run_unified_ranking_v5,
+                **_rank_kwargs(finished, roles=["locked_test"]))
+        _raises("EVAL_CHECKPOINT_MISMATCH", "$.checkpoint", run_unified_ranking_v5,
+                **_rank_kwargs(finished), checkpoint=(2, final))
+        _raises("INVALID_TYPE", "$.n_placements", run_unified_ranking_v5, **_rank_kwargs(finished, n_placements=0))
+        _raises("EVAL_BUDGET_INVALID", "$.max_wall_hours", run_unified_ranking_v5,
+                **_rank_kwargs(finished, max_wall_hours=2.5))
+    assert not _rank_kwargs(finished)["private_root"].exists()
+    result = run_unified_ranking_v5(**_rank_kwargs(finished), checkpoint=(2, earlier))
+    checkpoint = result["checkpoint"]
+    assert (checkpoint["step"], checkpoint["sha256"], checkpoint["selection"], checkpoint["is_final"]) == (
+        2, earlier, "explicit", False)
+    _raises("EVAL_OUT_EXISTS", "$.out", run_unified_ranking_v5, **_rank_kwargs(finished))      # never written over
+
+
+def test_the_ranking_detects_a_changed_weight(finished, monkeypatch):
+    from anatobind.v41.real_unified_eval_v5 import run_unified_ranking_v5
+
+    original = eval_module.restored_probabilities_v5
+
+    def nudging(model, *args, **kwargs):
+        next(iter(model.parameters())).data.add_(1.0)
+        return original(model, *args, **kwargs)
+
+    monkeypatch.setattr(eval_module, "restored_probabilities_v5", nudging)
+    _raises("EVAL_WEIGHTS_CHANGED", "$.checkpoint", run_unified_ranking_v5, **_rank_kwargs(finished))
+    assert not (_rank_kwargs(finished)["private_root"] / "summary.json").exists()
+
+
+def _census_kwargs(finished, **overrides):
+    kwargs = {key: value for key, value in finished.replay_kwargs.items() if key not in ("loss_steps", "device")}
+    kwargs.update(private_root=finished.replay_kwargs["private_root"].with_name("census"))
+    kwargs.update(overrides)
+    return kwargs
+
+
+def test_the_census_counts_what_the_negative_support_of_the_run_was_made_of(finished, monkeypatch):
+    import torch
+
+    from anatobind.v41.real_unified_eval_v5 import render_unified_census_md_v5, run_unified_census_v5
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("the census built a model")
+
+    monkeypatch.setattr(eval_module, "build_unified_model_v5", _fail_if_called)
+    monkeypatch.setattr(eval_module, "load_checkpoint_v5", _fail_if_called)
+    result = run_unified_census_v5(**_census_kwargs(finished))
+    assert result["status"] == "COMPLETED" and result["kind"] == "unified_census", result
+    assert result["census"]["roles"] == ["train"] and result["scientific_conclusion"] == "NOT_EVALUATED"
+    knee = result["members"]["knee"]
+    patches = 4 * finished.eval_kwargs["plan"]["members"]["knee"]["batch_size"]
+    assert knee["steps"] == 4 and knee["patches"] == patches
+    assert knee["verification"]["support_mismatches"] == 0 and knee["verification"]["support_compared"] == 8
+    # the same counts from the run's own log: every eligible negative voxel of every step is placed once
+    log = [json.loads(line) for line in (finished.root / "runs" / "train-u" / "metrics.jsonl").read_text().splitlines()]
+    steps = [entry["members"]["knee"]["tasks"]["U"]["box"]["classes"] for entry in log if entry.get("event") == "step"]
+    for c, name in enumerate(("target_a", "target_b")):
+        block = knee["classes"][name]
+        assert block["negative"]["voxels"] == sum(step[c]["negative_eligible"] for step in steps)
+        assert sum(item["voxels"] for item in block["negative"]["by_tissue"].values()) == block["negative"]["voxels"]
+        assert sum(item["voxels"] for item in block["negative"]["by_scan_group"].values()) == block["negative"]["voxels"]
+        assert sum(item["patches"] for item in block["negative"]["by_scan_group"].values()) == patches
+        assert set(block["negative"]["by_tissue"]) == {"host", "other_tissue", "background"}
+        assert block["bags"] == sum(step[c]["bags"] for step in steps)
+        assert block["host_share_per_batch"]["n"] == 4
+    a = knee["classes"]["target_a"]["negative"]["by_scan_group"]
+    assert a["other_boxes_only"]["patches"] == 0 and a["with_primary"]["patches"] + a["no_box"]["patches"] == patches
+    assert knee["classes"]["target_b"]["negative"]["by_scan_group"]["with_primary"]["patches"] == 0    # no box of it
+    assert _tree(finished.root) == finished.before
+    text = render_unified_census_md_v5(result)
+    assert "knee-0" not in text and "synthetic:" not in text and str(finished.root) not in text
+    for phrase in ("NOT_EVALUATED", "只读 train", "没有构建模型", "负监督", "宿主组织", "没有任何框", "不等于正常"):
+        assert phrase in text, phrase
+    assert torch.is_tensor(torch.zeros(1))                             # torch stays importable; nothing was trained
+
+
+def test_the_census_of_the_first_steps_only_and_its_refusals(finished, monkeypatch):
+    from anatobind.v41.real_unified_eval_v5 import run_unified_census_v5
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("data was read before the request was checked")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(real_unified_module, "load_member_samples_v5", _fail_if_called)
+        for bad in (0, 5, True, 2.0):
+            _raises("INVALID_TYPE", "$.steps", run_unified_census_v5, **_census_kwargs(finished, steps=bad))
+        _raises("EVAL_BUDGET_INVALID", "$.max_wall_hours", run_unified_census_v5,
+                **_census_kwargs(finished, max_wall_hours=2.5))
+    result = run_unified_census_v5(**_census_kwargs(finished, steps=2))
+    batch_size = finished.eval_kwargs["plan"]["members"]["knee"]["batch_size"]
+    assert result["members"]["knee"]["steps"] == 2 and result["members"]["knee"]["patches"] == 2 * batch_size
+    assert result["members"]["knee"]["verification"]["support_compared"] == 4
+
+
+def test_the_rank_and_census_commands_hand_their_arguments_to_the_driver(tmp_path, monkeypatch, capsys):
+    calls = []
+
+    def fake(**kwargs):
+        kwargs["private_root"].mkdir(mode=0o700)
+        calls.append(kwargs)
+        return {"status": "COMPLETED"}
+
+    shared = _command_files(tmp_path)
+    digest = "ab" * 32
+    monkeypatch.setattr(eval_module, "run_unified_ranking_v5", fake)
+    monkeypatch.setattr(eval_module, "render_unified_ranking_md_v5", lambda summary: "ranking report\n")
+    out = tmp_path / "ranking"
+    assert real_unified_module.main(["rank", *shared, "--out", str(out), "--role", "train", "--role",
+                                     "development_val", "--max-wall-hours", "1.5", "--checkpoint-step", "6000",
+                                     "--checkpoint-sha256", digest, "--placements", "500"]) == 0
+    given = calls.pop()
+    assert (given["roles"], given["checkpoint"], given["n_placements"]) == (["train", "development_val"],
+                                                                           (6000, digest), 500)
+    assert (given["run_root"], given["private_root"], given["max_wall_hours"]) == (tmp_path / "finished", out, 1.5)
+    assert (out / "unified_ranking.md").read_text() == "ranking report\n"
+    capsys.readouterr()
+    assert real_unified_module.main(["rank", *shared, "--out", str(tmp_path / "ranking_final"), "--role", "train",
+                                     "--max-wall-hours", "1"]) == 0
+    given = calls.pop()
+    assert given["checkpoint"] is None and given["n_placements"] == 1000
+    capsys.readouterr()
+
+    monkeypatch.setattr(eval_module, "run_unified_census_v5", fake)
+    monkeypatch.setattr(eval_module, "render_unified_census_md_v5", lambda summary: "census report\n")
+    out = tmp_path / "census"
+    assert real_unified_module.main(["census", *shared, "--out", str(out), "--max-wall-hours", "2", "--steps",
+                                     "6000"]) == 0
+    given = calls.pop()
+    assert given["steps"] == 6000 and given["max_wall_hours"] == 2.0 and "roles" not in given and "device" not in given
+    assert (out / "unified_census.md").read_text() == "census report\n"
+    assert capsys.readouterr().out == "census report\n"

@@ -193,6 +193,22 @@ def state_policy_hash_v5(scope: ActiveScope, acceptance_policy: dict) -> str:
 # The chain
 
 
+def restored_probabilities_v5(model: PerceptionModelV5, batch, original_shape: tuple, window: tuple, stride: tuple,
+                              precision: str) -> tuple:
+    """predict → restore: ({"anatomy": ..., "abnormality": ...} for the enabled tasks, represented, valid_fov), all
+    on the original grid. These are the probabilities the acceptance step of run_perception_v5 reads; a diagnostic
+    that needs them without a threshold reads them here."""
+    probabilities = predict_volume_v5(model, batch, window, stride, precision)
+    chain = list(batch.to_original[0])
+    restored, represented = {}, None
+    for key, prob in probabilities.items():
+        restored[key], represented = restore_probabilities_v5(prob, chain, original_shape)
+    # The model-grid FOV maps back conservatively: in FOV only where every coarse voxel used is in FOV.
+    fov = batch.valid_fov[0].detach().cpu().numpy().astype(np.float32)[None]
+    valid_fov = restore_probabilities_v5(fov, chain, original_shape)[0][0] >= 1.0 - _FOV_TOLERANCE
+    return restored, represented, valid_fov
+
+
 def run_perception_v5(model: PerceptionModelV5, batch, scope: ActiveScope, *, observation_uid: str,
                       checkpoint_sha256: str, original_geometry: dict, acceptance_policy: dict, window: tuple,
                       stride: tuple, precision: str, relation_fn=None, probe=None,
@@ -220,14 +236,8 @@ def run_perception_v5(model: PerceptionModelV5, batch, scope: ActiveScope, *, ob
         raise V5Error("GRID_MISMATCH", "$.original_geometry")
     original_shape = tuple(int(s) for s in original_geometry["shape"])
 
-    probabilities = predict_volume_v5(model, batch, window, stride, precision)
-    chain = list(batch.to_original[0])
-    restored, represented = {}, None
-    for key, prob in probabilities.items():
-        restored[key], represented = restore_probabilities_v5(prob, chain, original_shape)
-    # The model-grid FOV maps back conservatively: in FOV only where every coarse voxel used is in FOV.
-    fov = batch.valid_fov[0].detach().cpu().numpy().astype(np.float32)[None]
-    valid_fov = restore_probabilities_v5(fov, chain, original_shape)[0][0] >= 1.0 - _FOV_TOLERANCE
+    restored, represented, valid_fov = restored_probabilities_v5(model, batch, original_shape, window, stride,
+                                                                 precision)
     if probe is not None:
         probe(restored)
     decided = apply_acceptance_v5(restored, represented, valid_fov, acceptance_policy, scope)

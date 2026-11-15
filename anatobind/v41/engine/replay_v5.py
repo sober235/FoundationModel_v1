@@ -139,3 +139,39 @@ def batch_exposure_v5(uids: list, targets: dict, eligibility: dict) -> dict:
                 for bag_id in torch.unique(values).tolist():
                     found.append((uid, c, int(bag_id), int((values == bag_id).sum())))
     return {"support": support, "bags": found}
+
+
+CENSUS_TISSUES = ("host", "other_tissue", "background")
+
+
+def negative_census_v5(uids: list, anatomy: torch.Tensor, bags: torch.Tensor, e_pos: torch.Tensor,
+                       e_neg: torch.Tensor, host_ids: list, groups: dict) -> list:
+    """What the box objective's supports of one batch are made of, per class (no weights are involved).
+
+    `anatomy`: the reference tissue labels of the patches [B, *patch] (0 = no segmented tissue); `host_ids[c]`: the
+    labels of the host tissues of class c; `groups[uid][c]`: the group of that scan for class c (any hashable).
+    Per class: `negative[group][tissue]` = eligible negative voxels (e_neg) on the class's host tissues, on other
+    segmented tissue and off every segmented tissue, by the group of the scan the patch was cut from; `patches`:
+    patches per group; `eligible` and `host`: the batch's totals; `bags` and `bag_voxels`: its positive support."""
+    if not (bags.shape == e_pos.shape == e_neg.shape) or bags.ndim < 3 or anatomy.shape != bags[:, 0].shape \
+            or len(uids) != bags.shape[0] or len(host_ids) != bags.shape[1]:
+        raise V5Error("GRID_MISMATCH", "$.bags")
+    e_pos, e_neg = e_pos.to(torch.bool), e_neg.to(torch.bool)
+    out = []
+    for c in range(bags.shape[1]):
+        negative, patches, found, voxels = {}, {}, 0, 0
+        for b, uid in enumerate(uids):
+            group = groups[uid][c]
+            host = torch.isin(anatomy[b], torch.as_tensor(list(host_ids[c]), dtype=anatomy.dtype))
+            counts = negative.setdefault(group, dict.fromkeys(CENSUS_TISSUES, 0))
+            counts["host"] += int((e_neg[b, c] & host).sum())
+            counts["other_tissue"] += int((e_neg[b, c] & ~host & (anatomy[b] > 0)).sum())
+            counts["background"] += int((e_neg[b, c] & (anatomy[b] == 0)).sum())
+            patches[group] = patches.get(group, 0) + 1
+            supported = bags[b, c][e_pos[b, c] & (bags[b, c] > 0)]
+            found += int(torch.unique(supported).numel())
+            voxels += int(supported.numel())
+        out.append({"negative": negative, "patches": patches, "bags": found, "bag_voxels": voxels,
+                    "eligible": sum(sum(counts.values()) for counts in negative.values()),
+                    "host": sum(counts["host"] for counts in negative.values())})
+    return out

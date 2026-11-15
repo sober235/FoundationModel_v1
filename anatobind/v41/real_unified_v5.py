@@ -553,6 +553,9 @@ def main(argv: list | None = None) -> int:
     evaluate / replay: read the finished run --run-id under --run-root with its final checkpoint, never train,
     and write into a new --out (real_unified_eval_v5); the members are given exactly as they were for train.
     evaluate takes another checkpoint of the run with --checkpoint-step and --checkpoint-sha256 (both).
+    rank: the abnormality probabilities of a checkpoint of the finished run against the readers' boxes, without
+    threshold, component or anchor (same checkpoint selection as evaluate). census: redraw the finished run's
+    training patches (no model) and count what the negative support of the box objective was made of.
     probe: the box objective's terms and the reach of the hard-negative selection under the given checkpoints
     (--checkpoint STEP:SHA256, repeatable) of the registered run, on its first --loss-steps training batches; the
     run need not have finished. compare: whether the run of --plan and the run of --control-plan were run alike
@@ -574,15 +577,16 @@ def main(argv: list | None = None) -> int:
     repo = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(prog="anatobind.v41.real_unified_v5")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("plan-hash", "smoke", "gbase-gate", "train", "evaluate", "replay", "probe", "compare"):
+    for name in ("plan-hash", "smoke", "gbase-gate", "train", "evaluate", "replay", "probe", "compare", "rank",
+                 "census"):
         command = sub.add_parser(name)
         for key in ("--plan", "--protocols", "--policies"):
             command.add_argument(key, required=True)
-        if name in ("smoke", "train", "evaluate", "replay", "probe"):
+        if name in ("smoke", "train", "evaluate", "replay", "probe", "rank", "census"):
             for key in ("--raw", "--approvals", "--run-id", "--device", "--out"):
                 command.add_argument(key, required=True)
             command.add_argument("--member", action="append", required=True)
-        if name in ("evaluate", "replay", "probe"):
+        if name in ("evaluate", "replay", "probe", "rank", "census"):
             command.add_argument("--run-root", required=True, help="the private root of the training run")
             command.add_argument("--max-wall-hours", required=True, type=float,
                                  help="wall budget of this command; must fit in what the plan's budget has left")
@@ -599,11 +603,17 @@ def main(argv: list | None = None) -> int:
             command.add_argument("--steps", required=True, type=int, help="the first steps of both runs to compare")
             command.add_argument("--checkpoint-step", action="append", type=int, default=[],
                                  help="a step at which both runs kept a checkpoint; repeat for several")
-        if name == "evaluate":
+        if name in ("evaluate", "rank"):
             command.add_argument("--role", action="append", required=True, choices=["train", "development_val"])
             command.add_argument("--checkpoint-step", type=int,
-                                 help="evaluate this checkpoint of the run instead of its final one (with its hash)")
+                                 help="read this checkpoint of the run instead of its final one (with its hash)")
             command.add_argument("--checkpoint-sha256", help="the sha256 of the checkpoint of --checkpoint-step")
+        if name == "rank":
+            command.add_argument("--placements", type=int, default=1000,
+                                 help="comparable placements per box before a seeded sample is drawn")
+        if name == "census":
+            command.add_argument("--steps", type=int, help="redraw only the run's first steps (default: all of them)")
+        if name == "evaluate":
             command.add_argument("--fresh-predictions", action="store_true",
                                  help="reuse no saved output of the run: every prediction is computed anew")
             command.add_argument("--module-development", action="store_true",
@@ -715,7 +725,7 @@ def main(argv: list | None = None) -> int:
             "smoke_evidence": load_json(paths["smoke-evidence"]) if "smoke-evidence" in paths else None,
             "box_references": Path(paths["box-references"]) if "box-references" in paths else None}
     out = Path(args.out)
-    reading = args.command in ("evaluate", "replay", "probe")           # their driver refuses an existing --out
+    reading = args.command in ("evaluate", "replay", "probe", "rank", "census")     # their driver refuses an existing --out
     resuming = args.command == "train" and args.resume
     if not resuming and not reading:
         out.mkdir(mode=0o700)                                           # never overwritten
@@ -737,12 +747,21 @@ def main(argv: list | None = None) -> int:
         from . import real_unified_eval_v5 as finished
 
         common.update(run_root=Path(args.run_root), max_wall_hours=args.max_wall_hours)
-        if args.command == "evaluate":
-            selected = None
-            if args.checkpoint_step is not None or args.checkpoint_sha256 is not None:
-                if args.checkpoint_step is None or args.checkpoint_sha256 is None:      # a step needs its hash
-                    raise V5Error("EVAL_CHECKPOINT_INVALID", "$.checkpoint")
-                selected = (args.checkpoint_step, args.checkpoint_sha256)
+        selected = None
+        if args.command in ("evaluate", "rank") and (
+                args.checkpoint_step is not None or args.checkpoint_sha256 is not None):
+            if args.checkpoint_step is None or args.checkpoint_sha256 is None:          # a step needs its hash
+                raise V5Error("EVAL_CHECKPOINT_INVALID", "$.checkpoint")
+            selected = (args.checkpoint_step, args.checkpoint_sha256)
+        if args.command == "rank":
+            summary = finished.run_unified_ranking_v5(**common, roles=list(args.role), checkpoint=selected,
+                                                      n_placements=args.placements)
+            markdown, name = finished.render_unified_ranking_md_v5(summary), "unified_ranking.md"
+        elif args.command == "census":
+            common.pop("device")                                                # no model is built
+            summary = finished.run_unified_census_v5(**common, steps=args.steps)
+            markdown, name = finished.render_unified_census_md_v5(summary), "unified_census.md"
+        elif args.command == "evaluate":
             summary = finished.run_unified_evaluation_v5(
                 **common, roles=list(args.role), checkpoint=selected,
                 reuse_inference=None if args.fresh_predictions else "inference",

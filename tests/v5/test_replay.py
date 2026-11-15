@@ -151,3 +151,34 @@ def test_the_counts_of_the_terms_need_no_weights():
         math.ceil(entry["negative_eligible"] / 100) for entry in kept]
     assert box_counts_v5(bags, e_pos, torch.zeros(shape, dtype=torch.bool), SPEC)[0] == {
         "bags": 1, "negative_eligible": 0, "negative_selected": 0}
+
+
+def test_the_census_places_every_eligible_negative_voxel_by_tissue_and_by_the_scan_it_came_from():
+    """Audit of 2026-11-14: what the negative support of the box objective is made of; no weights involved."""
+    from anatobind.v41.contracts_v5 import V5Error
+    from anatobind.v41.engine.replay_v5 import CENSUS_TISSUES, negative_census_v5
+
+    anatomy = torch.zeros((2, 4, 4, 2), dtype=torch.int64)
+    anatomy[:, 0:2] = 1                                        # tissue 1: host of class 0
+    anatomy[:, 2:3] = 2                                        # tissue 2: host of class 1
+    bags = torch.zeros((2, 2, 4, 4, 2), dtype=torch.int32)
+    bags[0, 0, 0, 0:2] = 3                                     # one bag of class 0 in the first patch: 4 voxels
+    e_pos = bags > 0
+    e_neg = torch.ones_like(e_pos)
+    e_neg[0, 0, 0:1] = False                                   # its box window (wider than the bag) is no negative
+    e_neg[1, :, 3] = False                                     # an ignore region of the second patch, every class
+    groups = {"a": ["with_primary", "other_boxes_only"], "b": ["other_boxes_only", "other_boxes_only"]}
+    first, second = negative_census_v5(["a", "b"], anatomy, bags, e_pos, e_neg, [[1], [2]], groups)
+    assert (first["bags"], first["bag_voxels"], second["bags"], second["bag_voxels"]) == (1, 4, 0, 0)
+    assert first["negative"]["with_primary"] == {"host": 8, "other_tissue": 8, "background": 8}
+    assert first["negative"]["other_boxes_only"] == {"host": 16, "other_tissue": 8, "background": 0}
+    assert first["patches"] == {"with_primary": 1, "other_boxes_only": 1}
+    assert second["negative"] == {"other_boxes_only": {"host": 16, "other_tissue": 32, "background": 8}}
+    assert second["patches"] == {"other_boxes_only": 2}
+    for item, c in ((first, 0), (second, 1)):
+        assert item["eligible"] == int(e_neg[:, c].sum())
+        assert item["host"] == sum(counts["host"] for counts in item["negative"].values())
+        assert all(set(counts) == set(CENSUS_TISSUES) for counts in item["negative"].values())
+    with pytest.raises(V5Error) as err:
+        negative_census_v5(["a"], anatomy, bags, e_pos, e_neg, [[1], [2]], groups)
+    assert (err.value.code, err.value.path) == ("GRID_MISMATCH", "$.bags")
