@@ -341,3 +341,27 @@ def test_the_smoke_of_a_plan_with_a_stop_step_runs_its_own_steps(tmp_path):
     summary = run_unified_smoke_v5(**world.smoke_kwargs)
     assert summary["status"] == "PASS", summary
     assert {name: item["step"] for name, item in summary["executions"].items()} == {"continuous": 4, "resumed": 4}
+
+
+def test_the_smoke_takes_an_explicit_bound_of_the_instance_masks(env, monkeypatch):
+    """A 40-step model may give more components than perception's default memory bound allows (zone plan,
+    2026-11-21). The bound is an engineering protection: the smoke may name another one, and says so."""
+    from anatobind.v41 import perception
+
+    monkeypatch.setattr(perception, "INSTANCE_MASK_BYTES_LIMIT", 1)     # any kept component exceeds the default
+    _raises("INVALID_TYPE", "$.instance_mask_limit_gib", run_unified_smoke_v5,
+            **dict(env.smoke_kwargs, instance_mask_limit_gib=0))
+    summary = run_unified_smoke_v5(**dict(env.smoke_kwargs, instance_mask_limit_gib=1.0))
+    assert summary["status"] == "PASS", summary
+    assert summary["instance_mask_bytes_limit"] == 2 ** 30 and summary["instance_mask_limit_explicit"] is True
+    assert sum(member["inference"]["findings"] for member in summary["members"].values()) >= 1
+    assert "实例掩膜的内存上限 1 GiB（本次冒烟显式指定" in render_unified_smoke_md_v5(summary)
+
+
+def test_the_smoke_without_an_explicit_bound_keeps_the_default_and_does_not_mention_it(env):
+    from anatobind.v41 import perception
+
+    summary = run_unified_smoke_v5(**env.smoke_kwargs)
+    assert summary["instance_mask_bytes_limit"] == perception.INSTANCE_MASK_BYTES_LIMIT
+    assert summary["instance_mask_limit_explicit"] is False
+    assert "实例掩膜的内存上限" not in render_unified_smoke_md_v5(summary)

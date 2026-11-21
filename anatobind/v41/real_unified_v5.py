@@ -20,12 +20,14 @@ false positive, and an unmarked scan is not a normal scan.
 from __future__ import annotations
 
 import json
+import math
 import time
 from collections import Counter
 from pathlib import Path
 
 import torch
 
+from . import perception
 from .contracts_v5 import ActiveScope, V5Error
 from .engine.box_data_v5 import load_box_references_v5, load_box_training_sample_v5
 from .engine.data_v5 import load_training_sample_v5, original_geometry_v5
@@ -151,7 +153,8 @@ def _train_members(plan: dict, member_runs: dict, samples: dict, run_kind: str, 
 
 
 def _infer(*, model, pid: str, plan: dict, protocol: dict, observation, record, member_run: dict, registry: dict,
-           checkpoint_sha256: str, private_root: Path, repo: Path, folder: str = "inference") -> tuple:
+           checkpoint_sha256: str, private_root: Path, repo: Path, folder: str = "inference",
+           instance_mask_bytes_limit: int | None = None) -> tuple:
     """One full-volume inference of a member's view through the formal entry, and its findings."""
     member, scope = plan["members"][pid], protocol["scope"]
     relation_fn = None
@@ -166,8 +169,10 @@ def _infer(*, model, pid: str, plan: dict, protocol: dict, observation, record, 
         original_geometry=original_geometry_v5(observation, record), acceptance_policy=member["acceptance_policy"],
         window=tuple(member["inference"]["window"]), stride=tuple(member["inference"]["stride"]),
         precision=plan["shared"]["precision"], out_dir=Path(private_root) / folder / pid,
-        private_root=private_root, repo=repo, run=member_run, registry=registry, relation_fn=relation_fn)
-    return output, findings_from_output_v5(output, scope, member["acceptance_policy"], protocol["groups"])
+        private_root=private_root, repo=repo, run=member_run, registry=registry, relation_fn=relation_fn,
+        instance_mask_bytes_limit=instance_mask_bytes_limit)
+    return output, findings_from_output_v5(output, scope, member["acceptance_policy"], protocol["groups"],
+                                           instance_mask_bytes_limit)
 
 
 def _device_summary(device: torch.device) -> dict:
@@ -180,11 +185,19 @@ def _device_summary(device: torch.device) -> dict:
 
 def run_unified_smoke_v5(*, plan: dict, plan_sha256: str, protocols: dict, members: dict, approvals: dict,
                          raw: Path, label_maps: dict, private_root: Path, repo: Path, device: str, run_id: str,
-                         created_at: str, environment: dict, code: dict, fixture_mode: bool) -> dict:
+                         created_at: str, environment: dict, code: dict, fixture_mode: bool,
+                         instance_mask_limit_gib: float | None = None) -> dict:
     """Two executions of plan.smoke.steps on each member's registered train subset (continuous, and paused at
     pause_at then resumed), their comparison, and one full-volume inference per member. PASS needs both executions
-    COMPLETED, the resume comparison passed and every inference output valid."""
+    COMPLETED, the resume comparison passed and every inference output valid. `instance_mask_limit_gib` names the
+    memory bound of the instance masks of that inference instead of perception's default (an engineering
+    protection; no acceptance rule depends on it)."""
     started = time.monotonic()
+    if instance_mask_limit_gib is not None and not (
+            isinstance(instance_mask_limit_gib, (int, float)) and not isinstance(instance_mask_limit_gib, bool)
+            and math.isfinite(instance_mask_limit_gib) and instance_mask_limit_gib > 0):
+        raise V5Error("INVALID_TYPE", "$.instance_mask_limit_gib")
+    mask_limit = None if instance_mask_limit_gib is None else int(instance_mask_limit_gib * 2 ** 30)
     pids = _precheck(plan, plan_sha256, protocols, members, approvals, fixture_mode)
     private_root, device_t, smoke = Path(private_root), torch.device(device), plan["smoke"]
     scopes = {pid: protocols[pid]["scope"] for pid in pids}
@@ -246,7 +259,8 @@ def run_unified_smoke_v5(*, plan: dict, plan_sha256: str, protocols: dict, membe
             output, findings = _infer(model=trained[0], pid=pid, plan=plan, protocol=protocols[pid],
                                       observation=samples[pid][uid].observation, record=by_uid[pid][uid],
                                       member_run=member_runs[pid], registry=members[pid]["registry"],
-                                      checkpoint_sha256=trained[1], private_root=root, repo=repo)
+                                      checkpoint_sha256=trained[1], private_root=root, repo=repo,
+                                      instance_mask_bytes_limit=mask_limit)
             member_summary[pid]["inference"] = {"output_kind": output.output_kind, "findings": len(findings)}
     passed = all(execution["status"] == "COMPLETED" for execution in executions.values()) \
         and resume is not None and resume["passed"] \
@@ -256,6 +270,8 @@ def run_unified_smoke_v5(*, plan: dict, plan_sha256: str, protocols: dict, membe
                "resume": resume, "members": member_summary, "step_seconds": step_seconds,
                "peak_memory_bytes": int(torch.cuda.max_memory_allocated(device_t)) if device_t.type == "cuda" else None,
                "elapsed_hours": (time.monotonic() - started) / 3600.0, "budget_hours": smoke["max_wall_hours"],
+               "instance_mask_bytes_limit": perception.INSTANCE_MASK_BYTES_LIMIT if mask_limit is None else mask_limit,
+               "instance_mask_limit_explicit": mask_limit is not None,
                "scientific_conclusion": CONCLUSION}
     write_private_json(resolve_private_output(private_root / "summary.json", private_root, repo), summary)
     return summary
@@ -270,6 +286,10 @@ def render_unified_smoke_md_v5(summary: dict) -> str:
              f"- 结果：{summary['status']}；scientific_conclusion: {summary['scientific_conclusion']}",
              f"- 设备：{summary['device']['name']} × {summary['device']['count']}；用时 "
              f"{summary['elapsed_hours']:.3f} h（预算 {summary['budget_hours']:.2f} h）"]
+    if summary.get("instance_mask_limit_explicit"):
+        lines.append(f"- 实例掩膜的内存上限 {summary['instance_mask_bytes_limit'] / 2 ** 30:g} GiB（本次冒烟显式指定；"
+                     f"默认 {perception.INSTANCE_MASK_BYTES_LIMIT / 2 ** 30:g} GiB）。这是实现上的内存保护："
+                     "阈值、体素数下限与通过条件都不依赖它。")
     if summary["step_seconds"] is not None:
         lines.append(f"- 连续执行的单步耗时：{summary['step_seconds']:.3f} s（每步各协议一个批次）")
     if summary["peak_memory_bytes"] is not None:
@@ -626,6 +646,10 @@ def main(argv: list | None = None) -> int:
                                  help="check the chain on the first N train scans with a primary box; no ranking")
         if name == "census":
             command.add_argument("--steps", type=int, help="redraw only the run's first steps (default: all of them)")
+        if name == "smoke":
+            command.add_argument("--instance-mask-limit-gib", type=float,
+                                 help="memory bound of the instance masks (GiB) of the smoke's full-volume "
+                                      "inference instead of perception's default; an engineering bound")
         if name == "evaluate":
             command.add_argument("--fresh-predictions", action="store_true",
                                  help="reuse no saved output of the run: every prediction is computed anew")
@@ -750,7 +774,7 @@ def main(argv: list | None = None) -> int:
               "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
               "environment": capture_environment_v5(), "code": capture_code_v5(repo), "fixture_mode": False}
     if args.command == "smoke":
-        summary = run_unified_smoke_v5(**common)
+        summary = run_unified_smoke_v5(**common, instance_mask_limit_gib=args.instance_mask_limit_gib)
         markdown, name = render_unified_smoke_md_v5(summary), "unified_smoke.md"
         for pid in sorted(protocols):
             write_private_json(out / f"smoke_evidence.{pid}.json",

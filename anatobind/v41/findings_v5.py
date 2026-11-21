@@ -126,14 +126,16 @@ def _anchor(mask: np.ndarray, bbox: list | None = None) -> list:
     return [int(v) for v in coordinates[int(np.argmin(distance))]]
 
 
-def findings_from_output_v5(output, scope: ActiveScope, acceptance_policy: dict, groups: dict | None) -> list:
-    """One finding per accepted abnormality instance of a joint (PerceptionOutput) or module (ModuleOutput) output."""
+def findings_from_output_v5(output, scope: ActiveScope, acceptance_policy: dict, groups: dict | None,
+                            mask_bytes_limit: int | None = None) -> list:
+    """One finding per accepted abnormality instance of a joint (PerceptionOutput) or module (ModuleOutput) output.
+    `mask_bytes_limit` bounds the instance masks a module output's components are extracted with (None: default)."""
     if output.output_kind == "joint":
         instances = list(output.abnormal_instances)
         relations = {relation["instance_uid"]: relation for relation in output.tissue_relations}
     else:
         instances = extract_instances_v5(output.abnormality_map, output.acceptance["abnormality"], scope,
-                                         acceptance_policy)
+                                         acceptance_policy, mask_bytes_limit)
         relations = {}
     ids = _group_ids(scope, groups) if groups is not None else None
     findings = []

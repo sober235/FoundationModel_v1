@@ -285,8 +285,9 @@ def run_perception_v5(model: PerceptionModelV5, batch, scope: ActiveScope, *, ob
 def infer_and_save_v5(model: PerceptionModelV5, batch, scope: ActiveScope, *, observation_uid: str,
                       checkpoint_sha256: str, original_geometry: dict, acceptance_policy: dict, window: tuple,
                       stride: tuple, precision: str, out_dir: Path, private_root: Path, repo: Path, run: dict,
-                      registry: dict, relation_fn=None) -> tuple:
-    """The formal inference entry: run_perception_v5, then save_output_v5. The observation must be one the run may
+                      registry: dict, relation_fn=None, instance_mask_bytes_limit: int | None = None) -> tuple:
+    """The formal inference entry: run_perception_v5, then save_output_v5. `instance_mask_bytes_limit` is handed on
+    (None: the default bound). The observation must be one the run may
     read through its frozen split (never locked_test); that and the destination are checked first."""
     if not isinstance(observation_uid, str) or not observation_uid:
         raise V5Error("INVALID_TYPE", "$.observation_uid")
@@ -298,5 +299,6 @@ def infer_and_save_v5(model: PerceptionModelV5, batch, scope: ActiveScope, *, ob
     output = run_perception_v5(model, batch, scope, observation_uid=observation_uid,
                                checkpoint_sha256=checkpoint_sha256, original_geometry=original_geometry,
                                acceptance_policy=acceptance_policy, window=window, stride=stride,
-                               precision=precision, relation_fn=relation_fn)
+                               precision=precision, relation_fn=relation_fn,
+                               instance_mask_bytes_limit=instance_mask_bytes_limit)
     return output, save_output_v5(output, out_dir, private_root, repo)

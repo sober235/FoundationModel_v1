@@ -1216,3 +1216,18 @@ ZONE_PREREG_SHA256 = "35777f7f7d9734f8525141547a540a8b6f4b0aa3e726425217cff27eb8
 
 def test_the_plan_of_the_zone_experiment_was_not_edited_after_it_was_frozen():
     assert hashlib.sha256(ZONE_PREREG.read_bytes()).hexdigest() == ZONE_PREREG_SHA256
+
+
+def test_status_records_the_failed_smoke_of_the_zone_plan_and_the_engineering_change():
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    heading = "## 分区负项实验：冒烟未通过与一处工程改动（2026-11-21）"
+    assert heading in status
+    section = status.split(heading, 1)[1].split("\n## ", 1)[0]
+    for phrase in ("`INSTANCE_LIMIT_EXCEEDED`", "没有写出冒烟汇总与冒烟证据", "没有测量", "仍是假设", "532 s",
+                   "研究者 2026-11-21 选 A", "`--instance-mask-limit-gib`", "计划文件与计划哈希、阈值、体素数下限、负项、冒烟的通过条件都没有动",
+                   "失败的冒烟目录原样保留", "这两个字段没有改动", "G-BASE 的批准没有签"):
+        assert phrase in section, phrase
+    assert 134 + 95 + 303 == 532 and "CST" not in section
+    for pattern in _REDACTED:
+        assert not re.search(pattern, section), pattern
+    assert hashlib.sha256(ZONE_PREREG.read_bytes()).hexdigest() == ZONE_PREREG_SHA256
