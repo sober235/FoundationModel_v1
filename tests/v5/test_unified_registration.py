@@ -206,3 +206,76 @@ def test_the_second_pilot_plan_differs_from_the_first_only_in_the_negative_fract
                "brain_dwi_adc": source_binding_v5(policies["isles_2022"])}
     assert validate_unified_plan_v5(second, scopes, sources) is second
     assert unified_plan_sha256_v5(second) not in (FIRST_PILOT_PLAN_SHA256, ORIGINAL_PLAN_SHA256)
+
+
+# ---------------------------------------------------------------------------
+# Zone-balanced negative part (control experiment proposed on 2026-11-20)
+
+def test_a_plan_may_balance_the_negatives_between_the_host_tissue_and_the_rest():
+    plan = make_unified_plan(SCOPES)
+    box = plan["members"]["knee"]["box_supervision"]
+    box["negative_zones"] = "host_and_rest"
+    assert validate_unified_plan_v5(plan, SCOPES, SOURCES) is plan
+    for value in ("by_tissue", "", True, 1, None, ["host_and_rest"]):
+        box["negative_zones"] = value
+        _raises("UNIFIED_PLAN_INVALID", "$.members.knee.box_supervision", validate_unified_plan_v5, plan, SCOPES,
+                SOURCES)
+    box["negative_zones"] = "host_and_rest"
+    box["negative_topk_fraction"] = 0.05            # the two ways of treating the negatives are not combined
+    _raises("UNIFIED_PLAN_INVALID", "$.members.knee.box_supervision", validate_unified_plan_v5, plan, SCOPES, SOURCES)
+
+
+ZONE_PLAN = Path("configs/v5/proposals/unified_knee_brain_negzone_pilot.yaml")
+SECOND_PILOT_PLAN_SHA256 = "b4c3813a56bedd1548c0d4c8dd839cabf38cca30e694f195e0bcd2e86c6f627e"
+
+
+def test_the_zone_plan_differs_from_the_finished_run_only_in_how_the_negatives_are_averaged():
+    """Control experiment approved on 2026-11-20: the negative term of the knee box objective averages the eligible
+    negatives on the class's host tissue and the rest apart, one half each. The 6000-step stop on the 30000-step
+    schedule, seeds, splits, sampling, positive term, weights and acceptance policy are those of the finished run."""
+    original, second, zone = (yaml.safe_load(path.read_text()) for path in (ORIGINAL_PLAN, SECOND_PILOT_PLAN, ZONE_PLAN))
+    assert unified_plan_sha256_v5(original) == ORIGINAL_PLAN_SHA256
+    assert unified_plan_sha256_v5(second) == SECOND_PILOT_PLAN_SHA256
+    before, after = _flat(original), _flat(zone)
+    changed = {key: (before.get(key), after.get(key)) for key in sorted(set(before) | set(after))
+               if before.get(key) != after.get(key)}
+    assert changed == {
+        "plan_id": ("unified_knee_brain_v1", "unified_knee_brain_negzone_pilot_v1"),
+        "shared.stop_at_step": (None, 6000),
+        "members.knee_qdess.box_supervision.negative_zones": (None, "host_and_rest"),
+        "shared.budget.max_wall_hours": (16.0, 14.0),      # two limits on time; they do not change what is trained
+        "budget.max_wall_hours": (20.0, 14.0)}
+    before = _flat(second)                                  # against the second pilot: the same stop, no top fraction
+    changed = {key: (before.get(key), after.get(key)) for key in sorted(set(before) | set(after))
+               if before.get(key) != after.get(key)}
+    assert changed == {
+        "plan_id": ("unified_knee_brain_negtopk05_pilot_v1", "unified_knee_brain_negzone_pilot_v1"),
+        "members.knee_qdess.box_supervision.negative_topk_fraction": (0.05, None),
+        "members.knee_qdess.box_supervision.negative_zones": (None, "host_and_rest"),
+        "shared.budget.max_wall_hours": (16.0, 14.0),
+        "budget.max_wall_hours": (16.0, 14.0)}
+    box = zone["members"]["knee_qdess"]["box_supervision"]
+    assert (box["topk_fraction"], box["positive_weight"], box["negative_weight"]) == (0.1, 1.0, 1.0)
+    assert zone["shared"]["seeds"] == {"init": 20261110, "sampler": 20261111}
+    assert zone["shared"]["checkpoint_every"] == 2000 and zone["shared"]["budget"]["max_steps"] == 30000
+    scopes = {"knee_qdess": _scope("skm_joint_early"), "brain_dwi_adc": _scope("isles_u")}
+    policies = load_source_policies_v5(Path("configs/v5/sources_v5.yaml"))
+    sources = {"knee_qdess": source_binding_v5(policies["skm_tea_joint_early"]),
+               "brain_dwi_adc": source_binding_v5(policies["isles_2022"])}
+    assert validate_unified_plan_v5(zone, scopes, sources) is zone
+    assert unified_plan_sha256_v5(zone) not in (ORIGINAL_PLAN_SHA256, FIRST_PILOT_PLAN_SHA256, SECOND_PILOT_PLAN_SHA256)
+
+
+def test_the_host_tissue_of_each_knee_lesion_class_is_what_the_census_counted():
+    """The zones of the plan use the tissue groups of the protocol: cartilage for cartilage lesions, the menisci for
+    meniscal tears (the 'host' column of the census of 2026-11-15 is this definition)."""
+    from anatobind.v41.findings_v5 import class_host_labels_v5, load_protocols_v5
+
+    protocol = load_protocols_v5(Path("configs/v5/protocols_v5.yaml"), Path("configs/v5"))["knee_qdess"]
+    scope = protocol["scope"]
+    labels = class_host_labels_v5(scope, protocol["groups"], protocol["groups_by_class"])
+    names = {name: sorted(scope.anatomy_classes[i - 1] for i in ids)
+             for name, ids in zip(scope.abnormality_classes, labels)}
+    assert set(names) == {"cartilage_lesion", "meniscal_tear"}
+    assert all("cartilage" in tissue for tissue in names["cartilage_lesion"]) and len(names["cartilage_lesion"]) >= 3
+    assert all("meniscus" in tissue for tissue in names["meniscal_tear"]) and len(names["meniscal_tear"]) == 2

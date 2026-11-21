@@ -238,3 +238,36 @@ def test_every_step_logs_the_terms_of_the_box_objective(tmp_path):
         assert task["support"] == box["bags"] + sum(item["negative_eligible"] for item in box["classes"])
         assert "box" not in line["members"]["knee"]["tasks"]["A"]
         assert "box" not in line["members"]["brain"]["tasks"]["U"]
+
+
+# ---------------------------------------------------------------------------
+# Zone-balanced negative part (control experiment proposed on 2026-11-20)
+
+def test_unified_loss_reads_the_host_tissue_of_each_class_from_the_anatomy_target():
+    torch.manual_seed(0)
+    logits = torch.randn(1, 1, 2, 2, 2)
+    bags = torch.zeros(1, 1, 2, 2, 2, dtype=torch.int32)
+    bags[0, 0, 0, 0, 0] = 2
+    anatomy = torch.tensor([[[[1, 1], [0, 2]], [[0, 0], [3, 0]]]])              # labels 1 and 2 are the host tissues
+    eligibility = {"U": {"e_pos": bags > 0, "e_neg": bags == 0},
+                   "A": {"e_pos": torch.ones(1, 4, 2, 2, 2, dtype=torch.bool),
+                         "e_neg": torch.ones(1, 4, 2, 2, 2, dtype=torch.bool)}}
+    supervision = {"tasks": {"U": {"kind": "sigmoid", "ce_weight": 1.0, "dice_weight": 1.0, "task_weight": 3.0}}}
+    output = ModelOutputV5(anatomy_logits=None, abnormality_logits=logits)
+    zoned = dict(SYNTH_BOX_SPEC, negative_zones="host_and_rest")
+    targets = {"U": bags, "A": anatomy}
+    loss, parts = unified_loss_v5(output, targets, eligibility, supervision, zoned, [[1, 2]])
+    host = torch.isin(anatomy, torch.tensor([1, 2])).unsqueeze(1)
+    record = box_terms_record_v5(box_mil_terms_v5(logits, bags, bags > 0, bags == 0, zoned, host=host))
+    assert parts["U"]["box"] == record
+    zones = record["classes"][0]["negative_zones"]
+    assert (zones["host"]["eligible"], zones["rest"]["eligible"]) == (2, 5)     # the bag voxel is on host tissue too
+    assert float(loss) == pytest.approx(3.0 * (record["positive"] + record["negative"]), abs=1e-5)
+    assert record["negative"] != pytest.approx(record["negative_all"], abs=1e-4)
+    _raises("HOST_MAP_MISSING", "$.box_host_ids", unified_loss_v5, output, targets, eligibility, supervision, zoned)
+    _raises("TARGET_MISSING", "$.targets.A", unified_loss_v5, output, {"U": bags}, eligibility, supervision, zoned,
+            [[1, 2]])
+    plain, parts = unified_loss_v5(output, targets, eligibility, supervision, SYNTH_BOX_SPEC, [[1, 2]])
+    assert "negative_zones" not in parts["U"]["box"]["classes"][0]              # without the key nothing changes
+    assert float(plain) == pytest.approx(
+        3.0 * float(box_mil_objective_v5(logits, bags, bags > 0, bags == 0, SYNTH_BOX_SPEC)))

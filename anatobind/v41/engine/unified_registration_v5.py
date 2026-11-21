@@ -16,7 +16,7 @@ from pathlib import Path
 
 from ..contracts_v5 import ActiveScope, V5Error, canonical_sha256
 from ..evaluation.policy import validate_metric_policy_v5
-from ..losses import BOX_SPEC_KEYS, BOX_SPEC_OPTIONAL_KEYS
+from ..losses import BOX_SPEC_KEYS, BOX_SPEC_OPTIONAL_KEYS, NEGATIVE_ZONE_KINDS
 from ..paths import PrivatePathError, resolve_private_output, write_private_json
 from ..perception import validate_acceptance_policy_v5
 from .registration_v5 import (
@@ -98,6 +98,9 @@ def _check_member(plan: dict, pid: str, scope: ActiveScope, source: dict) -> Non
                 and _is_number(box["topk_fraction"]) and 0 < box["topk_fraction"] <= 1
                 and ("negative_topk_fraction" not in box
                      or (_is_number(box["negative_topk_fraction"]) and 0 < box["negative_topk_fraction"] <= 1))
+                and ("negative_zones" not in box
+                     or (isinstance(box["negative_zones"], str) and box["negative_zones"] in NEGATIVE_ZONE_KINDS
+                         and "negative_topk_fraction" not in box))
                 and all(_is_number(box[key]) and box[key] >= 0 for key in ("positive_weight", "negative_weight"))
                 and box["positive_weight"] + box["negative_weight"] > 0
                 and (_is_sha256(box["box_policy_sha256"]) or _non_empty_str(box["box_policy_sha256"]))):

@@ -90,6 +90,7 @@ from .evaluation.findings_ranking_v5 import (
     scan_group_v5, summarize_ranking_v5)
 from .evaluation.findings_v5 import OUTSIDE_NOTE, anatomy_dice_v5, score_findings_v5, summarize_findings_v5
 from .findings_v5 import _group_ids, findings_from_output_v5, host_relation_fn_v5, render_findings_zh_v5
+from .losses import host_map_v5
 from .models.interface_v5 import build_model_input_v5
 from .models.unified_v5 import build_unified_model_v5
 from .paths import resolve_private_output, write_private_json
@@ -1091,12 +1092,14 @@ def _checkpoints(directory: Path) -> dict:
     return found
 
 
-def _parts(view, batch, targets: dict, eligibility: dict, box: dict, precision: str, device: torch.device) -> dict:
+def _parts(view, batch, targets: dict, eligibility: dict, box: dict, precision: str, device: torch.device,
+           host_ids: list | None = None) -> dict:
     batch, targets, eligibility = _to_device(batch, targets, eligibility, device)
     with torch.inference_mode(), autocast_v5(precision, device.type):
         output = view(batch)
+    host = None if host_ids is None else host_map_v5(targets["A"], host_ids)
     return box_objective_parts_v5(output.abnormality_logits.float(), targets["U"], eligibility["U"]["e_pos"],
-                                  eligibility["U"]["e_neg"], box)
+                                  eligibility["U"]["e_neg"], box, host)
 
 
 def _weighted(parts: dict, box: dict) -> float:
@@ -1181,6 +1184,7 @@ def run_unified_replay_v5(*, plan: dict, plan_sha256: str, protocols: dict, memb
         max_steps = stop_step_v5(plan) or schedule_steps        # the steps the run took: its stop step, if it has one
         samples = load(pid, "train")
         sampler = member_sampler_v5(samples, recipe, seed, box)
+        host_ids = driver.box_host_ids_v5(plan, protocols, pid)      # None unless the plan balances zones
         full = full_bag_voxels_v5(samples)
         weights_steps = {0, *[step for step in checkpoints if step < max_steps]}
         shown, share, with_bag = Counter(), {c: [] for c in range(len(classes))}, Counter()
@@ -1191,7 +1195,7 @@ def run_unified_replay_v5(*, plan: dict, plan_sha256: str, protocols: dict, memb
             """The two parts under `weights` on the first loss_steps batches a fresh sampler draws from `held`."""
             fresh = member_sampler_v5(held, recipe, seed, box)
             return _current([_parts(weights.view(pid), *make_batch_v5(held, fresh, recipe, scope), box, precision,
-                                    device_t) for _ in range(loss_steps)])
+                                    device_t, host_ids) for _ in range(loss_steps)])
 
         for step in range(1, max_steps + 1):
             if step % _BUDGET_CHECK_EVERY == 0 and time.monotonic() - started > max_wall_hours * 3600.0:
@@ -1207,11 +1211,16 @@ def run_unified_replay_v5(*, plan: dict, plan_sha256: str, protocols: dict, memb
                 mismatches += int(value != logged["tasks"][task]["support"])
             logged_terms = logged["tasks"]["U"].get("box")      # absent in logs written before 2026-11-12
             if logged_terms is not None:                        # the counts of the terms do not depend on the weights
-                counts = box_counts_v5(targets["U"], eligibility["U"]["e_pos"], eligibility["U"]["e_neg"], box)
+                counts = box_counts_v5(targets["U"], eligibility["U"]["e_pos"], eligibility["U"]["e_neg"], box,
+                                       None if host_ids is None else host_map_v5(targets["A"], host_ids))
                 for mine, theirs in zip(counts, logged_terms["classes"]):
                     for key in ("bags", "negative_eligible", "negative_selected"):
                         terms_compared += 1
                         terms_mismatches += int(mine[key] != theirs[key])
+                    for name, voxels in mine.get("negative_zones", {}).items():
+                        terms_compared += 1
+                        terms_mismatches += int(voxels != ((theirs.get("negative_zones") or {}).get(name)
+                                                           or {}).get("eligible"))
             steps_with_a_bag += int(bool(exposure["bags"]))
             for c in {c for _, c, _, _ in exposure["bags"]}:
                 with_bag[c] += 1
@@ -1220,7 +1229,7 @@ def run_unified_replay_v5(*, plan: dict, plan_sha256: str, protocols: dict, memb
                 share[c].append(voxels / full[(uid, c, bag_id)])
             if step - 1 in weights_steps:               # the weights before this step are known exactly
                 weights = weights_after(step - 1)
-                parts = _parts(weights.view(pid), batch, targets, eligibility, box, precision, device_t)
+                parts = _parts(weights.view(pid), batch, targets, eligibility, box, precision, device_t, host_ids)
                 recomputed, logged_loss = _weighted(parts, box), logged["tasks"]["U"]["loss"]
                 history.append({"step": step, "weights_step": step - 1, **parts, "recomputed_loss": recomputed,
                                 "logged_loss": logged_loss, "abs_diff": abs(recomputed - logged_loss),
@@ -1263,7 +1272,8 @@ def run_unified_replay_v5(*, plan: dict, plan_sha256: str, protocols: dict, memb
             "history": history, "logged_loss": logged_loss,
             "weights": {"positive_weight": box["positive_weight"], "negative_weight": box["negative_weight"],
                         "topk_fraction": box["topk_fraction"],
-                        "negative_topk_fraction": box.get("negative_topk_fraction")},
+                        "negative_topk_fraction": box.get("negative_topk_fraction"),
+                        "negative_zones": box.get("negative_zones")},
             "trajectory": [{"weights_step": step, **trajectory[step]} for step in sorted(trajectory)],
             "current": dict(trajectory[final_step])}
     if state_sha256_v5(model) != before:
@@ -1304,7 +1314,9 @@ def render_unified_replay_md_v5(summary: dict) -> str:
         lines += ["", f"## {pid}：框目标的正项与负项", "",
                   f"- 框目标 = {weights['positive_weight']} × 正项 + {weights['negative_weight']} × 负项"
                   f"（正项取每个袋里前 {weights['topk_fraction']} 比例的体素；负项"
-                  + ("取每个类别全部可用负体素的平均" if weights.get("negative_topk_fraction") is None else
+                  + ("把每个类别的可用负体素分成该类别的宿主组织上的与其余的两个分区，各自取平均，两个分区各占一半"
+                     "（某个批次里一个分区没有体素时，另一个分区占全部）" if weights.get("negative_zones") is not None else
+                     "取每个类别全部可用负体素的平均" if weights.get("negative_topk_fraction") is None else
                      f"取每个类别在整个批次里响应最高的前 {weights['negative_topk_fraction']} 比例的可用负体素的平均")
                   + "）。“全部负体素平均”一列是不做选择时的负项，只作记录。"]
         logged_terms = any(row["logged_terms"] is not None for row in item["history"])

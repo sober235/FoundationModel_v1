@@ -195,3 +195,101 @@ def test_an_invalid_negative_fraction_is_refused(fraction):
     with pytest.raises(V5Error) as err:
         box_mil_objective_v5(logits, bags, e_pos, e_neg, dict(SPEC, negative_topk_fraction=fraction))
     assert (err.value.code, err.value.path) == ("INVALID_LOSS_WEIGHTS", "$.spec")
+
+
+# ---------------------------------------------------------------------------
+# Zone-balanced negative part (control experiment proposed on 2026-11-20): with `negative_zones: host_and_rest` each
+# class averages its eligible negatives on its own host tissue and the remaining ones apart, and the two means count
+# one half each. Everything else of the objective is as before; without the key the objective is the earlier one.
+
+ZONED = dict(SPEC, negative_zones="host_and_rest")
+
+
+def _host(flags):
+    return torch.tensor(flags, dtype=torch.bool)[:, :, None, None, :]
+
+
+def test_the_two_zones_of_a_class_count_one_half_each_whatever_their_sizes():
+    values = [[[3.0, -1.0, 0.0, -2.0, 1.0]]]
+    logits, bags, e_pos, e_neg = _grid(values, [[[True, True, True, True, True]]])
+    host = _host([[[True, False, False, False, False]]])             # one host voxel against four others
+    record = box_terms_record_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, ZONED, host=host))
+    on_host = _softplus(3.0)
+    rest = (_softplus(-1.0) + _softplus(0.0) + _softplus(-2.0) + _softplus(1.0)) / 4
+    assert record["negative"] == pytest.approx((on_host + rest) / 2, abs=1e-6)
+    assert record["negative_all"] == pytest.approx((on_host + 4 * rest) / 5, abs=1e-6)   # the earlier term, recorded
+    entry = record["classes"][0]
+    assert (entry["negative_eligible"], entry["negative_selected"]) == (5, 5)             # no voxel is dropped
+    assert entry["negative_zones"]["host"] == {"eligible": 1, "mean": pytest.approx(on_host, abs=1e-6)}
+    assert entry["negative_zones"]["rest"] == {"eligible": 4, "mean": pytest.approx(rest, abs=1e-6)}
+
+
+def test_the_gradient_of_a_host_voxel_is_its_half_of_the_term_divided_by_the_host_voxels():
+    logits, bags, e_pos, e_neg = _grid([[[0.0, 0.0, 0.0, 0.0, 0.0]]], [[[True, True, True, True, True]]])
+    host = _host([[[True, False, False, False, False]]])
+    box_mil_terms_v5(logits, bags, e_pos, e_neg, ZONED, host=host)["negative"].backward()
+    grad = logits.grad.reshape(-1)
+    assert float(grad[0]) == pytest.approx(0.5 * 0.5 / 1, abs=1e-7)          # sigmoid(0) = 0.5; one host voxel
+    assert [float(g) for g in grad[1:]] == pytest.approx([0.5 * 0.5 / 4] * 4, abs=1e-7)
+
+
+def test_a_zone_without_an_eligible_voxel_leaves_the_whole_term_to_the_other_zone():
+    logits, bags, e_pos, e_neg = _grid([[[2.0, -1.0, 0.5]]], [[[True, True, True]]])
+    plain = box_terms_record_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, SPEC))["negative"]
+    for flags, empty, full in (([[[False, False, False]]], "host", "rest"), ([[[True, True, True]]], "rest", "host")):
+        record = box_terms_record_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, ZONED, host=_host(flags)))
+        assert record["negative"] == pytest.approx(plain, abs=1e-6)
+        zones = record["classes"][0]["negative_zones"]
+        assert zones[empty] == {"eligible": 0, "mean": None} and zones[full]["eligible"] == 3
+
+
+def test_only_eligible_negatives_enter_a_zone_and_each_class_reads_its_own_host_map():
+    values = [[[4.0, 1.0, -1.0, 0.0], [0.0, 2.0, -3.0, 5.0]]]
+    negative = [[[False, True, True, True], [True, True, True, False]]]        # the first voxel of class 0 is no negative
+    logits, bags, e_pos, e_neg = _grid(values, negative, [[[1, 0, 0, 0], [0, 0, 0, 0]]])
+    host = _host([[[True, True, False, False], [False, False, True, True]]])
+    record = box_terms_record_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, ZONED, host=host))
+    first = (_softplus(1.0) + (_softplus(-1.0) + _softplus(0.0)) / 2) / 2
+    second = (_softplus(-3.0) + (_softplus(0.0) + _softplus(2.0)) / 2) / 2
+    assert [item["negative"] for item in record["classes"]] == pytest.approx([first, second], abs=1e-6)
+    assert record["negative"] == pytest.approx((first + second) / 2, abs=1e-6)
+    assert [item["negative_zones"]["host"]["eligible"] for item in record["classes"]] == [1, 1]
+    assert record["positive"] == pytest.approx(_softplus(-4.0), abs=1e-6)       # the positive part is as before
+    total = float(box_mil_objective_v5(logits, bags, e_pos, e_neg, ZONED, host=host).detach())
+    assert total == pytest.approx(record["positive"] + record["negative"], abs=1e-6)
+
+
+def test_without_the_key_the_host_map_changes_nothing_and_the_record_has_no_zones():
+    logits, bags, e_pos, e_neg = _grid([[[2.0, 0.0, -1.0]]], [[[True, True, True]]])
+    host = _host([[[True, False, False]]])
+    with_map = box_terms_record_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, SPEC, host=host))
+    assert with_map == box_terms_record_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, SPEC))
+    assert "negative_zones" not in with_map["classes"][0]
+
+
+@pytest.mark.parametrize("spec,host,code,path", [
+    (dict(SPEC, negative_zones="host_and_rest"), None, "HOST_MAP_MISSING", "$.host"),
+    (dict(SPEC, negative_zones="host_and_rest"), "short", "GRID_MISMATCH", "$.host"),
+    (dict(SPEC, negative_zones="by_tissue"), "full", "INVALID_LOSS_WEIGHTS", "$.spec"),
+    (dict(SPEC, negative_zones=True), "full", "INVALID_LOSS_WEIGHTS", "$.spec"),
+    (dict(SPEC, negative_zones="host_and_rest", negative_topk_fraction=0.05), "full", "INVALID_LOSS_WEIGHTS", "$.spec")])
+def test_a_zone_specification_that_cannot_be_applied_is_refused(spec, host, code, path):
+    logits, bags, e_pos, e_neg = _grid([[[2.0, 0.0, -1.0]]], [[[True, True, True]]])
+    maps = {None: None, "short": _host([[[True, False]]]), "full": _host([[[True, False, False]]])}
+    with pytest.raises(V5Error) as err:
+        box_mil_terms_v5(logits, bags, e_pos, e_neg, spec, host=maps[host])
+    assert (err.value.code, err.value.path) == (code, path)
+
+
+def test_the_host_map_marks_for_each_class_the_voxels_with_one_of_its_host_labels():
+    from anatobind.v41.losses import host_map_v5
+
+    anatomy = torch.tensor([[[[0, 1, 2, 3]]], [[[2, 2, 0, 1]]]])               # [batch, 1, 1, 4]; 0 = no tissue
+    host = host_map_v5(anatomy, [[1, 2], [3]])
+    assert host.shape == (2, 2, 1, 1, 4) and host.dtype == torch.bool
+    assert host[:, 0].reshape(2, 4).tolist() == [[False, True, True, False], [True, True, False, True]]
+    assert host[:, 1].reshape(2, 4).tolist() == [[False, False, False, True], [False, False, False, False]]
+    for ids in ([], [[1], []], [[0]], [[1, True]], [[1.5]], "12"):
+        with pytest.raises(V5Error) as err:
+            host_map_v5(anatomy, ids)
+        assert (err.value.code, err.value.path) == ("INVALID_TYPE", "$.host_ids")

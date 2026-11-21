@@ -161,3 +161,20 @@ def test_host_and_anchor_read_only_the_box_of_the_instance_and_give_the_same_res
     relations, _ = host_relation_fn_v5(GROUPS, GROUPS_BY_CLASS)([stray], anatomy_map, np.ones(shape, bool), SCOPE)
     assert relations == _old_relation([stray], anatomy_map, np.ones(shape, bool), SCOPE)
     assert _anchor(mask, stray["bbox"]) == _old_anchor(mask)
+
+
+def test_the_host_labels_of_a_class_are_the_labels_of_the_tissues_of_its_groups():
+    from anatobind.v41.findings_v5 import class_host_labels_v5
+
+    labels = class_host_labels_v5(SCOPE, GROUPS, GROUPS_BY_CLASS)
+    assert len(labels) == len(SCOPE.abnormality_classes)
+    for name, ids in zip(SCOPE.abnormality_classes, labels):
+        tissues = sorted({tissue for group in GROUPS_BY_CLASS[name] for tissue in GROUPS[group]})
+        assert ids == sorted(SCOPE.anatomy_classes.index(tissue) + 1 for tissue in tissues) and ids
+    with pytest.raises(V5Error) as err:
+        class_host_labels_v5(SCOPE, None, None)
+    assert (err.value.code, err.value.path) == ("PROTOCOL_GROUPS_MISSING", "$.groups")
+    missing = {name: [] for name in SCOPE.abnormality_classes}
+    with pytest.raises(V5Error) as err:
+        class_host_labels_v5(SCOPE, GROUPS, missing)                         # a class without any host tissue
+    assert (err.value.code, err.value.path) == ("PROTOCOL_GROUPS_MISSING", "$.groups_by_class")

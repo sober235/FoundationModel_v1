@@ -214,3 +214,33 @@ def test_the_policy_check_counts_eligible_negatives_inside_what_the_policy_exclu
     with pytest.raises(Exception) as error:
         negative_policy_check_v5(reference, e_neg[:1], classes)
     assert error.value.code == "GRID_MISMATCH"
+
+
+# ---------------------------------------------------------------------------
+# Zone-balanced negative part (control experiment proposed on 2026-11-20)
+
+def test_the_counts_and_the_parts_of_a_zoned_plan_carry_the_two_zones():
+    from anatobind.v41.engine.replay_v5 import box_counts_v5
+    from anatobind.v41.losses import box_mil_terms_v5, box_terms_record_v5
+
+    generator = torch.Generator().manual_seed(7)
+    shape = (2, 2, 3, 4, 5)
+    bags = torch.zeros(shape, dtype=torch.int32)
+    bags[0, 0, 0, :2, :3], bags[1, 1, 1, :, :2] = 1, 1
+    e_pos = bags > 0
+    e_neg = (torch.rand(shape, generator=generator) > 0.4) & (bags == 0)
+    host = torch.rand(shape, generator=generator) > 0.7
+    logits = torch.randn(shape, generator=generator)
+    spec = dict(SPEC, negative_zones="host_and_rest")
+    counts = box_counts_v5(bags, e_pos, e_neg, spec, host=host)
+    record = box_terms_record_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, spec, host=host))
+    for c, (mine, theirs) in enumerate(zip(counts, record["classes"])):
+        assert mine["negative_zones"] == {name: zone["eligible"] for name, zone in theirs["negative_zones"].items()}
+        assert mine["negative_zones"]["host"] == int((e_neg[:, c] & host[:, c]).sum())
+        assert sum(mine["negative_zones"].values()) == mine["negative_eligible"] == mine["negative_selected"]
+    parts = box_objective_parts_v5(logits, bags, e_pos, e_neg, spec, host=host)
+    assert parts["classes"] == record["classes"] and parts["negative"] == record["negative"]
+    assert "negative_zones" not in box_counts_v5(bags, e_pos, e_neg, SPEC, host=host)[0]
+    with pytest.raises(Exception) as err:
+        box_counts_v5(bags, e_pos, e_neg, spec)
+    assert (err.value.code, err.value.path) == ("HOST_MAP_MISSING", "$.host")

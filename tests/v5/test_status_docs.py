@@ -1146,3 +1146,73 @@ def test_status_records_the_results_of_the_ranking_audit_apart_from_the_conclusi
         assert not re.search(pattern, section), pattern
     # the sections written before the audit ran still say what they said
     assert "**等研究者批准。**" in _audit_section() and "结果出来后在本节之后另记，不改写本节" in _approval_section()
+
+
+# ---------------------------------------------------------------------------
+# Zone-balanced negative term: the plan frozen on 2026-11-20, before any real-data job
+
+ZONE_PREREG = Path("reports/v5/negzone_pilot_prereg_20261120.md")
+ZONE_PLAN = Path("configs/v5/proposals/unified_knee_brain_negzone_pilot.yaml")
+ZONE_PLAN_SHA256 = "c5a0ba7dcbc58cef4a3abd166be9511523728784b1ee9fd59f41e95ed7e81efb"
+ZONE_BASELINE_SHA256 = "f992c12d3560a2cc2d1dd119d0af75cae717ea269ea71dc4c0d8849ad436649f"   # finished run, step 6000
+
+
+def _zone_section() -> str:
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    heading = "## 按解剖分区平衡负项的对照实验：批准与冻结的方案（2026-11-20）"
+    assert heading in status
+    return status.split(heading, 1)[1].split("\n## ", 1)[0]
+
+
+def test_the_plan_of_the_zone_experiment_names_what_the_plan_file_and_the_code_hold():
+    from anatobind.v41.engine.unified_registration_v5 import unified_plan_sha256_v5
+    from anatobind.v41.losses import NEGATIVE_ZONE_KINDS, NEGATIVE_ZONES
+
+    plan = yaml.safe_load(ZONE_PLAN.read_text(encoding="utf-8"))
+    assert unified_plan_sha256_v5(plan) == ZONE_PLAN_SHA256
+    box = plan["members"]["knee_qdess"]["box_supervision"]
+    assert box["negative_zones"] in NEGATIVE_ZONE_KINDS and NEGATIVE_ZONES == ("host", "rest")
+    assert "negative_topk_fraction" not in box and plan["shared"]["stop_at_step"] == 6000
+    assert plan["budget"]["max_wall_hours"] == 14.0
+    text = ZONE_PREREG.read_text(encoding="utf-8")
+    for phrase in (ZONE_PLAN_SHA256, ZONE_BASELINE_SHA256, str(ZONE_PLAN), "在任何真实数据作业启动之前写定并提交",
+                   "没有读到过任何真实的结果", "`negative_zones: host_and_rest`", "两个平均各占一半",
+                   "**负资格没有改。**", "不引入可调的比例", "总预算 **14 h**", "| | **合计的上限** | | **13.6 h** |",
+                   "\"As long as it doesn't deviate from the overall goal, it's fine.\"", "读法有出入时由研究者更正",
+                   "**假设（待检验，不是既定的解释）：**", "不设数值界限", "最终归类由研究者判断",
+                   "都不自动启动下一次训练", "`locked_test` 不读", "不合并 PR #2", "**以上都是合成数据。**",
+                   "scientific_conclusion: NOT_EVALUATED"):
+        assert phrase in text, phrase
+    # the bounds of the jobs add up to the stated total, under the budget of the plan
+    bounds = [float(x) for x in re.findall(r"\| (\d+\.\d+) h \|\n", text.split("### 6.1")[1].split("### 6.2")[0])]
+    assert len(bounds) == 7 and abs(sum(bounds) - 13.6) < 1e-9 and sum(bounds) <= plan["budget"]["max_wall_hours"]
+    # three readings, each with its condition, and the meaning of each written beforehand
+    table = text.split("## 5. 三种结果的读法")[1].split("## 6.")[0]
+    assert all(f"| {name}" in table for name in ("阳性", "阴性", "不确定")) and "**读出之后的含义（事先写明）：**" in table
+    for pattern in _REDACTED:
+        assert not re.search(pattern, text), pattern
+    assert "CST" not in text
+
+
+def test_status_records_the_approval_of_the_zone_experiment_apart_from_the_conclusion_fields():
+    section = _zone_section()
+    for phrase in ("negzone_pilot_prereg_20261120.md", ZONE_PLAN_SHA256,
+                   "\"As long as it doesn't deviate from the overall goal, it's fine.\"", "执行方的读法",
+                   "上限 14 h", "`cb9b23d`", "`ad13e36`", "**没有合并 PR #2**", "这两个字段没有改动",
+                   "上一节没有改写", "不是既定的解释", "没有在真实数据上运行过", "locked_test 未读",
+                   "不自动启动下一次训练"):
+        assert phrase in section, phrase
+    meta = _front_matter()
+    assert meta["scientific_conclusion"] == "NOT_EVALUATED" and meta["core_target_validated"] is None
+    assert "CST" not in section and "amax 时间" not in section
+    for pattern in _REDACTED:
+        assert not re.search(pattern, section), pattern
+    # the section written before the decision still says what it said
+    assert "**等研究者决定**" in _results_section() and "决定之前不实现、不启动" in _results_section()
+
+
+ZONE_PREREG_SHA256 = "35777f7f7d9734f8525141547a540a8b6f4b0aa3e726425217cff27eb8d6566d"
+
+
+def test_the_plan_of_the_zone_experiment_was_not_edited_after_it_was_frozen():
+    assert hashlib.sha256(ZONE_PREREG.read_bytes()).hexdigest() == ZONE_PREREG_SHA256

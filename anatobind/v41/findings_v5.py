@@ -54,6 +54,19 @@ def _group_ids(scope: ActiveScope, groups: dict) -> dict:
     return {group: [scope.anatomy_classes.index(name) + 1 for name in names] for group, names in groups.items()}
 
 
+def class_host_labels_v5(scope: ActiveScope, groups: dict | None, groups_by_class: dict | None) -> list:
+    """For each abnormality class of the scope, in its order: the sorted anatomy labels of the tissues of the
+    class's tissue groups (its host tissue). Every class must have one."""
+    if not isinstance(groups, dict) or not isinstance(groups_by_class, dict):
+        raise V5Error("PROTOCOL_GROUPS_MISSING", "$.groups")
+    ids = _group_ids(scope, groups)
+    labels = [sorted({i for group in groups_by_class.get(name, []) for i in ids[group]})
+              for name in scope.abnormality_classes]
+    if not all(labels):
+        raise V5Error("PROTOCOL_GROUPS_MISSING", "$.groups_by_class")
+    return labels
+
+
 def _region(instance: dict, mask: np.ndarray) -> tuple:
     """The instance's bounding box as slices when its mask lies inside it (as extract_instances_v5 builds it),
     else the whole volume. Reading only the box gives the same voxels in the same order."""

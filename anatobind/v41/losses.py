@@ -130,7 +130,10 @@ def masked_objective_v5(logits: torch.Tensor, target: torch.Tensor, e_pos: torch
 # Box multiple-instance objective (Proposal_v5 §0.6, §5.0; design 2026-11-10 §5.2)
 
 BOX_SPEC_KEYS = ("kind", "topk_fraction", "positive_weight", "negative_weight", "box_policy_sha256")
-BOX_SPEC_OPTIONAL_KEYS = ("negative_topk_fraction",)        # absent: every eligible negative voxel is kept
+# negative_topk_fraction absent: every eligible negative voxel is kept; negative_zones absent: one mean over them
+BOX_SPEC_OPTIONAL_KEYS = ("negative_topk_fraction", "negative_zones")
+NEGATIVE_ZONES = ("host", "rest")           # a class's eligible negatives on its own host tissue, and all the others
+NEGATIVE_ZONE_KINDS = ("host_and_rest",)
 
 
 def _number(value: object) -> bool:
@@ -146,18 +149,35 @@ def negative_top_count_v5(fraction: float, eligible: int) -> int:
     return math.ceil(Fraction(str(fraction)) * eligible)
 
 
+def host_map_v5(anatomy: torch.Tensor, host_ids: list) -> torch.Tensor:
+    """[batch, classes, *spatial] bool: for class c the voxels whose reference tissue label is one of host_ids[c].
+
+    `anatomy`: the reference tissue labels of the patches [batch, *spatial] (0 = no segmented tissue). Every class
+    names at least one label, all of them positive integers."""
+    if not (isinstance(host_ids, list) and host_ids and all(
+            isinstance(ids, list) and ids and all(isinstance(i, int) and not isinstance(i, bool) and i > 0 for i in ids)
+            for ids in host_ids)):
+        raise V5Error("INVALID_TYPE", "$.host_ids")
+    return torch.stack([torch.isin(anatomy, torch.as_tensor(ids, dtype=anatomy.dtype, device=anatomy.device))
+                        for ids in host_ids], dim=1)
+
+
 def box_mil_terms_v5(logits: torch.Tensor, bags: torch.Tensor, e_pos: torch.Tensor, e_neg: torch.Tensor,
-                     spec: dict) -> dict:
+                     spec: dict, host: torch.Tensor | None = None) -> dict:
     """The terms box_mil_objective_v5 adds, as tensors, with their supports. Training, replay and probes all read
     the objective through this one function.
 
     positive      mean over bags of the mean softplus(-logit) of each bag's top ceil(topk_fraction·n) logits;
     negative      the term that is optimised: mean over the classes with support of each class's mean
                   softplus(logit) over the voxels it keeps. A class keeps all N of its e_neg voxels, or with
-                  `negative_topk_fraction` the ceil(fraction·N) highest of them, pooled over the whole batch;
+                  `negative_topk_fraction` the ceil(fraction·N) highest of them, pooled over the whole batch.
+                  With `negative_zones: host_and_rest` a class keeps all N, split by `host` (the class's host tissue,
+                  shaped as the logits) into the voxels on it and the rest: its term is the mean of the two zone
+                  means, one half each, and a zone without a voxel leaves the term to the other one;
     negative_all  the same average with every class keeping all of its e_neg voxels (no gradient: it is recorded,
                   not optimised, unless every class keeps everything, where it is `negative` itself);
-    classes       per class: bags, its positive mean, eligible and selected negative voxels, its two negative means.
+    classes       per class: bags, its positive mean, eligible and selected negative voxels, its two negative means;
+                  with zones also `negative_zones`: the eligible voxels and the mean of each zone.
     A term without support is None. Only e_neg says what a negative is; it is never rebuilt from the bags."""
     if not isinstance(spec, dict) or spec.get("kind") != "box_mil":
         raise V5Error("UNKNOWN_LOSS_KIND", "$.spec.kind")
@@ -168,8 +188,18 @@ def box_mil_terms_v5(logits: torch.Tensor, bags: torch.Tensor, e_pos: torch.Tens
     keep = spec["negative_topk_fraction"] if "negative_topk_fraction" in spec else None
     if "negative_topk_fraction" in spec and not _fraction(keep):
         raise V5Error("INVALID_LOSS_WEIGHTS", "$.spec")
+    zoned = "negative_zones" in spec
+    if zoned and (spec["negative_zones"] not in NEGATIVE_ZONE_KINDS or isinstance(spec["negative_zones"], bool)
+                  or "negative_topk_fraction" in spec):
+        raise V5Error("INVALID_LOSS_WEIGHTS", "$.spec")
     if not (logits.shape == bags.shape == e_pos.shape == e_neg.shape) or logits.ndim < 3:
         raise V5Error("GRID_MISMATCH", "$.logits")
+    if zoned:
+        if host is None:
+            raise V5Error("HOST_MAP_MISSING", "$.host")
+        if host.shape != logits.shape:
+            raise V5Error("GRID_MISMATCH", "$.host")
+        host = host.to(torch.bool)
     e_pos, e_neg = e_pos.to(torch.bool), e_neg.to(torch.bool)
     positive, negative, negative_all, classes = [], [], [], []
     for c in range(logits.shape[1]):
@@ -182,7 +212,17 @@ def box_mil_terms_v5(logits: torch.Tensor, bags: torch.Tensor, e_pos: torch.Tens
                 raise V5Error("NON_FINITE_LOGITS", "$.logits")
             eligible = int(selected.numel())
             kept = eligible if keep is None else negative_top_count_v5(keep, eligible)
-            if kept < eligible:
+            if zoned:
+                on_host = host[:, c][class_negative]
+                means = {name: F.softplus(selected[flags]).mean() if bool(flags.any()) else None
+                         for name, flags in zip(NEGATIVE_ZONES, (on_host, ~on_host))}
+                term = torch.stack([mean for mean in means.values() if mean is not None]).mean()
+                with torch.no_grad():
+                    everything = F.softplus(selected).mean()
+                entry["negative_zones"] = {
+                    name: {"eligible": int(flags.sum()), "mean": means[name]}
+                    for name, flags in zip(NEGATIVE_ZONES, (on_host, ~on_host))}
+            elif kept < eligible:
                 with torch.no_grad():
                     everything = F.softplus(selected).mean()
                 term = F.softplus(torch.topk(selected, kept, sorted=False).values).mean()
@@ -201,6 +241,8 @@ def box_mil_terms_v5(logits: torch.Tensor, bags: torch.Tensor, e_pos: torch.Tens
                     raise V5Error("NON_FINITE_LOGITS", "$.logits")
                 top = torch.topk(selected, max(1, math.ceil(fraction * selected.numel()))).values
                 of_class.append(F.softplus(-top).mean())
+        if zoned and "negative_zones" not in entry:
+            entry["negative_zones"] = {name: {"eligible": 0, "mean": None} for name in NEGATIVE_ZONES}
         if of_class:
             entry.update(bags=len(of_class), positive=torch.stack(of_class).mean())
         positive += of_class
@@ -229,20 +271,28 @@ def box_terms_record_v5(terms: dict) -> dict:
     def value(term):
         return None if term is None else float(term.detach())
 
+    def plain(entry):
+        out = {**entry, **{key: value(entry[key]) for key in ("positive", "negative", "negative_all")}}
+        if "negative_zones" in entry:
+            out["negative_zones"] = {name: {"eligible": zone["eligible"], "mean": value(zone["mean"])}
+                                     for name, zone in entry["negative_zones"].items()}
+        return out
+
     return {"positive": value(terms["positive"]), "negative": value(terms["negative"]),
             "negative_all": value(terms["negative_all"]), "bags": terms["bags"],
-            "classes": [{**entry, **{key: value(entry[key]) for key in ("positive", "negative", "negative_all")}}
-                        for entry in terms["classes"]]}
+            "classes": [plain(entry) for entry in terms["classes"]]}
 
 
 def box_mil_objective_v5(logits: torch.Tensor, bags: torch.Tensor, e_pos: torch.Tensor, e_neg: torch.Tensor,
-                         spec: dict) -> torch.Tensor:
+                         spec: dict, host: torch.Tensor | None = None) -> torch.Tensor:
     """Box-level supervision without filling boxes into voxel truth.
 
     Positive part: for each bag (a released box on its host tissue, id > 0 in `bags`) the mean of softplus(-logit)
     over its top ceil(topk_fraction·n) logits, so a box only has to contain *some* marked tissue; averaged over
     bags. Negative part: mean softplus(logit) over each class's e_neg voxels, averaged over classes with support;
-    with `negative_topk_fraction` each class keeps only its ceil(fraction·N) highest e_neg voxels of the batch.
+    with `negative_topk_fraction` each class keeps only its ceil(fraction·N) highest e_neg voxels of the batch;
+    with `negative_zones` each class averages the e_neg voxels on its host tissue (`host`) and the others apart
+    and gives each of the two means one half.
     A part without support adds zero; without any support the result is a differentiable zero.
     """
-    return box_mil_total_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, spec), spec, logits)
+    return box_mil_total_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, spec, host), spec, logits)

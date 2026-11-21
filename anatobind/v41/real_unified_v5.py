@@ -40,7 +40,8 @@ from .engine.unified_registration_v5 import (
     write_unified_run_v5)
 from .evaluation.findings_v5 import (
     OUTSIDE_NOTE, anatomy_dice_v5, render_findings_eval_md_v5, score_findings_v5, summarize_findings_v5)
-from .findings_v5 import findings_from_output_v5, host_relation_fn_v5, render_findings_zh_v5
+from .findings_v5 import (
+    class_host_labels_v5, findings_from_output_v5, host_relation_fn_v5, render_findings_zh_v5)
 from .gates_v5 import FIXTURE_APPROVERS, gate_task_v5
 from .models.interface_v5 import build_model_input_v5
 from .models.unified_v5 import build_unified_model_v5
@@ -132,10 +133,20 @@ def _register(*, plan: dict, plan_sha256: str, protocols: dict, members: dict, a
     return unified, member_runs
 
 
-def _train_members(plan: dict, member_runs: dict, samples: dict, run_kind: str) -> dict:
+def box_host_ids_v5(plan: dict, protocols: dict, pid: str) -> list | None:
+    """The host labels of each abnormality class of a member whose box objective balances zones; None otherwise."""
+    box = plan["members"][pid]["box_supervision"]
+    if box is None or "negative_zones" not in box:
+        return None
+    protocol = protocols[pid]
+    return class_host_labels_v5(protocol["scope"], protocol["groups"], protocol["groups_by_class"])
+
+
+def _train_members(plan: dict, member_runs: dict, samples: dict, run_kind: str, protocols: dict) -> dict:
     return {pid: {"run": member_runs[pid], "samples": samples[pid], "recipe": member_recipe_v5(plan, pid, run_kind),
                   "supervision": plan["members"][pid]["supervision"],
                   "box_supervision": plan["members"][pid]["box_supervision"],
+                  "box_host_ids": box_host_ids_v5(plan, protocols, pid),
                   "loss_weight": plan["members"][pid]["loss_weight"]} for pid in sorted(plan["members"])}
 
 
@@ -204,7 +215,7 @@ def run_unified_smoke_v5(*, plan: dict, plan_sha256: str, protocols: dict, membe
         torch.cuda.reset_peak_memory_stats(device_t)
     for name in ("continuous", "resumed"):
         unified, member_runs, root, run_dir = registered[name]
-        train_members = _train_members(plan, member_runs, samples, "smoke")
+        train_members = _train_members(plan, member_runs, samples, "smoke", protocols)
         model = build_unified_model_v5(plan, scopes).to(device_t)
         tick = time.monotonic()
         result = train_unified_v5(unified, model, train_members, plan, run_dir, root, repo, None,
@@ -386,8 +397,8 @@ def run_unified_training_v5(*, plan: dict, plan_sha256: str, protocols: dict, me
     # 1. the train part of every member, seeded random initialisation, selection rule `last`
     train = {pid: load(pid, ["train"])[0] for pid in pids}
     model = build_unified_model_v5(plan, scopes).to(device_t)
-    result = train_unified_v5(unified, model, _train_members(plan, member_runs, train, "baseline"), plan, run_dir,
-                              private_root, repo, checkpoint)
+    result = train_unified_v5(unified, model, _train_members(plan, member_runs, train, "baseline", protocols), plan,
+                              run_dir, private_root, repo, checkpoint)
     summary["training"] = {"status": result["status"], "step": result["step"],
                            "schedule_steps": result["schedule_steps"], "controlled_stop": result["controlled_stop"],
                            "samples": {pid: len(train[pid]) for pid in pids},

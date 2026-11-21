@@ -29,7 +29,7 @@ from pathlib import Path
 import torch
 
 from ..contracts_v5 import V5Error, canonical_sha256
-from ..losses import box_mil_terms_v5, box_mil_total_v5, box_terms_record_v5, masked_objective_v5
+from ..losses import box_mil_terms_v5, box_mil_total_v5, box_terms_record_v5, host_map_v5, masked_objective_v5
 from ..models.interface_v5 import ModelOutputV5
 from ..models.unified_v5 import UnifiedModelV5, build_unified_model_v5
 from ..paths import resolve_private_output, write_private_json
@@ -54,9 +54,10 @@ def _bag_count(bags: torch.Tensor, e_pos: torch.Tensor) -> int:
 
 
 def unified_loss_v5(output: ModelOutputV5, targets: dict, eligibility: dict, supervision: dict,
-                    box_supervision: dict | None) -> tuple[torch.Tensor, dict]:
+                    box_supervision: dict | None, box_host_ids: list | None = None) -> tuple[torch.Tensor, dict]:
     """Σ task_weight·L_t of one member; with box_supervision the U loss is the box objective on the bag map, and
-    its entry of the parts carries "box": the terms that were added (box_terms_record_v5)."""
+    its entry of the parts carries "box": the terms that were added (box_terms_record_v5). A box specification with
+    `negative_zones` reads each class's host tissue from the anatomy target: `box_host_ids[c]` are its labels."""
     if not isinstance(output, ModelOutputV5):
         raise V5Error("INVALID_TYPE", "$.output")
     tasks = supervision.get("tasks") if isinstance(supervision, dict) else None
@@ -73,7 +74,14 @@ def unified_loss_v5(output: ModelOutputV5, targets: dict, eligibility: dict, sup
         e_neg = eligibility[task]["e_neg"].to(torch.bool)
         box = None
         if task == "U" and box_supervision is not None:
-            terms = box_mil_terms_v5(logits.float(), targets[task], e_pos, e_neg, box_supervision)
+            host = None
+            if "negative_zones" in box_supervision:
+                if box_host_ids is None:
+                    raise V5Error("HOST_MAP_MISSING", "$.box_host_ids")
+                if "A" not in targets:
+                    raise V5Error("TARGET_MISSING", "$.targets.A")
+                host = host_map_v5(targets["A"], box_host_ids)
+            terms = box_mil_terms_v5(logits.float(), targets[task], e_pos, e_neg, box_supervision, host)
             loss = box_mil_total_v5(terms, box_supervision, logits)
             support = _bag_count(targets[task], e_pos) + int(e_neg.sum())
             box = box_terms_record_v5(terms)
@@ -236,7 +244,7 @@ def train_unified_v5(unified_run: dict, model: UnifiedModelV5, members: dict, pl
                     if logits is not None and not bool(torch.isfinite(logits).all()):
                         raise V5Error("NON_FINITE_LOGITS", "$.output")
                 loss, task_parts = unified_loss_v5(output, targets, eligibility, member["supervision"],
-                                                   member["box_supervision"])
+                                                   member["box_supervision"], member.get("box_host_ids"))
                 scaler.scale(member["loss_weight"] * loss).backward()
                 total += member["loss_weight"] * float(loss.detach())
                 parts[pid] = {"loss": float(loss.detach()), "tasks": task_parts}

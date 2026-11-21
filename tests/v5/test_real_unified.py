@@ -252,6 +252,56 @@ def test_resume_refuses_another_run_and_a_run_without_checkpoint(env, monkeypatc
     assert original is real_unified_module.train_unified_v5
 
 
+# a zoned plan: the same stop, and the negatives averaged on the class's host tissue and on the rest apart
+ZONED = {"shared": {"budget": {"max_steps": 8}, "stop_at_step": 4},
+         "members": {"knee": {"box_supervision": {"negative_zones": "host_and_rest"}}}}
+
+
+@pytest.fixture
+def zoned(tmp_path):
+    return _world(tmp_path, **ZONED)
+
+
+def test_a_plan_with_negative_zones_trains_and_logs_what_each_zone_held(zoned):
+    summary = run_unified_training_v5(**zoned.train_kwargs)
+    assert summary["status"] == "COMPLETED" and summary["stop_code"] is None, summary
+    root = zoned.train_kwargs["private_root"]
+    lines = [json.loads(x) for x in (root / "runs" / "train-u" / "metrics.jsonl").read_text().splitlines()]
+    steps = [x for x in lines if x["event"] == "step"]
+    assert len(steps) == 4
+    seen_host = 0
+    for step in steps:
+        box = step["members"]["knee"]["tasks"]["U"]["box"]
+        for entry in box["classes"]:
+            zones = entry["negative_zones"]
+            assert set(zones) == {"host", "rest"}
+            assert zones["host"]["eligible"] + zones["rest"]["eligible"] == entry["negative_eligible"]
+            assert entry["negative_selected"] == entry["negative_eligible"]
+            means = [zone["mean"] for zone in zones.values() if zone["mean"] is not None]
+            assert entry["negative"] == pytest.approx(sum(means) / len(means), abs=1e-6)
+            seen_host += zones["host"]["eligible"]
+        assert "box" not in step["members"]["brain"]["tasks"]["U"]
+    assert seen_host > 0                                         # the synthetic patches do carry host tissue
+
+
+def test_the_smoke_of_a_plan_with_negative_zones_resumes_bit_for_bit(tmp_path):
+    world = _world(tmp_path, shared={"budget": {"max_steps": 8}, "stop_at_step": 2},
+                   members={"knee": {"box_supervision": {"negative_zones": "host_and_rest"}}})
+    summary = run_unified_smoke_v5(**world.smoke_kwargs)
+    assert summary["status"] == "PASS", summary
+    assert summary["resume"]["passed"] and summary["resume"]["bitwise_parameters"]
+
+
+def test_negative_zones_need_the_tissue_groups_of_the_protocol(zoned):
+    protocols = copy.deepcopy({pid: {key: value for key, value in protocol.items() if key != "scope"}
+                               for pid, protocol in PROTOCOLS.items()})
+    for pid in protocols:
+        protocols[pid]["scope"] = PROTOCOLS[pid]["scope"]
+    protocols["knee"]["groups_by_class"] = None
+    _raises("PROTOCOL_GROUPS_MISSING", "$.groups", run_unified_training_v5,
+            **dict(zoned.train_kwargs, protocols=protocols))
+
+
 def test_plan_hash_command_prints_the_hash(capsys):
     assert main(["plan-hash", "--plan", "configs/v5/proposals/unified_knee_brain.yaml", "--protocols",
                  "configs/v5/protocols_v5.yaml", "--policies", "configs/v5/sources_v5.yaml"]) == 0

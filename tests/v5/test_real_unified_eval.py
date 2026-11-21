@@ -17,7 +17,7 @@ from anatobind.v41.contracts_v5 import V5Error
 from anatobind.v41.real_unified_eval_v5 import (
     render_unified_evaluation_md_v5, render_unified_replay_md_v5, run_unified_evaluation_v5, run_unified_replay_v5)
 from anatobind.v41.real_unified_v5 import run_unified_training_v5
-from tests.v5.test_real_unified import _world, env, pilot  # noqa: F401  (the synthetic two-member worlds)
+from tests.v5.test_real_unified import _world, env, pilot, zoned  # noqa: F401  (the synthetic two-member worlds)
 
 
 def _raises(error_code, error_path, fn, *args, **kwargs):
@@ -1202,3 +1202,51 @@ def test_the_rank_command_hands_a_preflight_to_the_driver_and_fails_when_a_check
     passed[0] = False
     assert real_unified_module.main([*command, "--out", str(tmp_path / "preflight_failed")]) != 0
     capsys.readouterr()
+
+
+# ---------------------------------------------------------------------------
+# Zone-balanced negative part (control experiment proposed on 2026-11-20)
+
+@pytest.fixture
+def finished_zoned(zoned, tmp_path):  # noqa: F811
+    """The same for a zoned plan: negatives on the host tissue and the rest averaged apart, stopped after step 4."""
+    return _finished(zoned, tmp_path)
+
+
+def test_the_replay_of_a_zoned_run_checks_the_zone_counts_and_recovers_the_logged_terms(finished_zoned):
+    result = run_unified_replay_v5(**finished_zoned.replay_kwargs)
+    assert result["status"] == "COMPLETED", result
+    knee = result["members"]["knee"]
+    check = knee["verification"]
+    assert (check["steps"], check["support_mismatches"], check["sampler_state_equal"]) == (4, 0, True)
+    # per step and class: bags, eligible, selected and the two zones
+    assert check["terms_compared"] == 4 * 2 * 5 and check["terms_mismatches"] == 0
+    for item in knee["history"]:
+        assert item["logged_terms_abs_diff"] <= 1e-5 and item["abs_diff"] <= 1e-5
+        assert all("negative_zones" in entry for entry in item["classes"])
+    assert knee["weights"]["negative_zones"] == "host_and_rest" and knee["weights"]["negative_topk_fraction"] is None
+    text = render_unified_replay_md_v5(result)
+    assert "两个分区各占一半" in text and "逐步记录" in text
+
+
+def test_a_changed_zone_count_in_the_log_is_reported_by_the_replay(finished_zoned, tmp_path):
+    import shutil
+
+    copy_root = tmp_path / "copy"
+    shutil.copytree(finished_zoned.root, copy_root)
+    log = copy_root / "runs" / "train-u" / "metrics.jsonl"
+    lines = [json.loads(line) for line in log.read_text().splitlines()]
+    step = next(line for line in lines if line.get("event") == "step")
+    zones = step["members"]["knee"]["tasks"]["U"]["box"]["classes"][0]["negative_zones"]
+    zones["host"]["eligible"] += 1
+    zones["rest"]["eligible"] -= 1
+    log.chmod(0o600)
+    log.write_text("".join(json.dumps(line, sort_keys=True) + "\n" for line in lines))
+    result = run_unified_replay_v5(**dict(finished_zoned.replay_kwargs, run_root=copy_root))
+    assert result["members"]["knee"]["verification"]["terms_mismatches"] == 2
+
+
+def test_the_evaluation_of_a_zoned_run_reads_its_checkpoint_as_any_other(finished_zoned):
+    result = run_unified_evaluation_v5(**finished_zoned.eval_kwargs)
+    assert result["status"] == "COMPLETED", result
+

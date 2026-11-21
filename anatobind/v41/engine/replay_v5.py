@@ -18,7 +18,7 @@ import numpy as np
 import torch
 
 from ..contracts_v5 import V5Error
-from ..losses import box_mil_terms_v5, box_terms_record_v5, negative_top_count_v5
+from ..losses import NEGATIVE_ZONES, box_mil_terms_v5, box_terms_record_v5, negative_top_count_v5
 from .box_data_v5 import _is_primary, _window, box_positive_centers_v5
 from .data_v5 import PatchSamplerV5, positive_centers_v5
 from .train_unified_v5 import _bag_count
@@ -26,7 +26,7 @@ from .train_v5 import _support
 
 
 def box_objective_parts_v5(logits: torch.Tensor, bags: torch.Tensor, e_pos: torch.Tensor, e_neg: torch.Tensor,
-                           spec: dict) -> dict:
+                           spec: dict, host: torch.Tensor | None = None) -> dict:
     """The terms of box_mil_objective_v5 as numbers: box_terms_record_v5 of box_mil_terms_v5, plus
     "negative_voxels" (the e_neg voxels of all classes). The same record a training log line keeps.
 
@@ -35,7 +35,7 @@ def box_objective_parts_v5(logits: torch.Tensor, bags: torch.Tensor, e_pos: torc
     negative_all: the mean over every e_neg voxel whatever the plan keeps; classes: the same per class with the
     eligible and selected voxel counts. The objective is positive_weight·positive + negative_weight·negative; a
     part without support is None."""
-    record = box_terms_record_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, spec))
+    record = box_terms_record_v5(box_mil_terms_v5(logits, bags, e_pos, e_neg, spec, host))
     return {**record, "negative_voxels": sum(entry["negative_eligible"] for entry in record["classes"])}
 
 
@@ -70,12 +70,19 @@ def negative_reach_v5(logits: torch.Tensor, e_neg: torch.Tensor, fraction: float
     return reach
 
 
-def box_counts_v5(bags: torch.Tensor, e_pos: torch.Tensor, e_neg: torch.Tensor, spec: dict) -> list:
+def box_counts_v5(bags: torch.Tensor, e_pos: torch.Tensor, e_neg: torch.Tensor, spec: dict,
+                  host: torch.Tensor | None = None) -> list:
     """The counts of box_mil_terms_v5 that do not depend on the weights, per class: the bags with a supervised
-    voxel, the eligible negative voxels and the number of them the plan keeps. A replayed batch gives them without
-    a forward pass, so they can be compared with a training log at every step."""
+    voxel, the eligible negative voxels and the number of them the plan keeps; for a plan with `negative_zones`
+    also `negative_zones`, the eligible negatives on the class's host tissue (`host`) and off it. A replayed batch
+    gives them without a forward pass, so they can be compared with a training log at every step."""
     if not (bags.shape == e_pos.shape == e_neg.shape) or bags.ndim < 3:
         raise V5Error("GRID_MISMATCH", "$.bags")
+    zoned = "negative_zones" in spec
+    if zoned and host is None:
+        raise V5Error("HOST_MAP_MISSING", "$.host")
+    if zoned and host.shape != bags.shape:
+        raise V5Error("GRID_MISMATCH", "$.host")
     e_pos, e_neg, keep = e_pos.to(torch.bool), e_neg.to(torch.bool), spec.get("negative_topk_fraction")
     counts = []
     for c in range(bags.shape[1]):
@@ -86,6 +93,9 @@ def box_counts_v5(bags: torch.Tensor, e_pos: torch.Tensor, e_neg: torch.Tensor, 
             found += int(torch.unique(supported[supported > 0]).numel())
         counts.append({"bags": found, "negative_eligible": eligible,
                        "negative_selected": eligible if keep is None else negative_top_count_v5(keep, eligible)})
+        if zoned:
+            on_host = int((e_neg[:, c] & host[:, c].to(torch.bool)).sum())
+            counts[-1]["negative_zones"] = dict(zip(NEGATIVE_ZONES, (on_host, eligible - on_host)))
     return counts
 
 
