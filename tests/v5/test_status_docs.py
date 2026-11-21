@@ -881,9 +881,9 @@ def test_status_records_the_classification_of_the_second_pilot_apart_from_the_co
     assert "CST" not in section and "amax 时间" not in section
     # the second pilot's own section still says what it said: the classification is recorded here, not written back
     assert "最终归类由研究者判断" in _pilot05_section()
-    # nothing was run on real data: no result of the audit is in the repository
-    assert not list(Path("reports/v5").glob("ranking_audit_2026111[4-9]*")) or \
-        [p.name for p in Path("reports/v5").glob("ranking_audit_2026111[4-9]*")] == [RANKING_PREREG.name]
+    # this section was written before anything ran on real data and still says so: the results of the audit are
+    # recorded later, in a section of their own, and were not written back into this one
+    assert "未检出排序证据" not in section and "ranking_audit_20261115.md" not in section
 
 
 # ---------------------------------------------------------------------------
@@ -970,3 +970,179 @@ def test_the_context_summary_of_the_audit_in_progress_carries_no_ranking_result_
     assert "17,667,373,086" in text and "17,707,628,330" in text
     meta = _front_matter()
     assert meta["scientific_conclusion"] == "NOT_EVALUATED" and meta["core_target_validated"] is None
+
+
+# ---------------------------------------------------------------------------
+# Results of the ranking audit (run on 2026-11-15, recorded on 2026-11-20)
+
+RANKING_RESULTS = Path("reports/v5/ranking_audit_20261115.md")
+RANKING_FOLDER = Path("reports/v5/ranking_audit_20261115")
+# archived copy -> (sha256 of the copy, sha256 of the untouched server file, timings replaced on the server side)
+RANKING_ARCHIVE = {
+    "ranking_family.md": ("1954fbfb0655ab54e370e7bf93fd1510a7ccf7d2f802c1b94f23e20e3b432123",
+                          "1954fbfb0655ab54e370e7bf93fd1510a7ccf7d2f802c1b94f23e20e3b432123", 0),
+    "census.md": ("69616beff2bc73c04b21840423080d3fc661faae44ad6afbc35fa612dddb6103",
+                  "69616beff2bc73c04b21840423080d3fc661faae44ad6afbc35fa612dddb6103", 0),
+    "rank_R1.md": ("cf3f533e20843f746cc01c2a83ab3b4b33a227de008c14dd35dbd1573fafc3d5",
+                   "34184a5787322acac16a031b595da7c4e5f039bea243a97a36e0da268685de9e", 2),
+    "rank_R2.md": ("e72c30eef113c2be4645a4e0311297ffac7223e79bf3d91ca27885311320b23b",
+                   "7d90dfba4de9525b10e9591db95d0ec8afcee4e581eec1129c40aedc932b030b", 2),
+    "rank_R3.md": ("818ea407cb5833cf1411273b6c89395ff99e3da19a93adc5833f17254c0d6815",
+                   "5494ea96fc9412928924c79ee58d967b721d286ce0942f5902dca43b822c95e8", 2),
+    "rank_R4.md": ("fdfbf2652d094f12bab027e67d3fbb792385f77ba0e3f6227988823214eb7b58",
+                   "7dc68591c259c9f095d1f49851d0ad3aac0efbc6aae06ac1de06cc4b295532f3", 2),
+    "preflight_R1.md": ("04b20fbfaf0fe56b609cc618d3c8244041cd09c8810061e11b28e1678456c537",
+                        "1f616e0c19a77e3babae20e14b727f08fc23d9ce2763aeb03b35a47255bba6d8", 2),
+    "preflight_R2.md": ("e6978f0464630bb94ef16a25fa7b59492fcb8a17222b6f146a2ebe5411135858",
+                        "516a7feb2ebaf1c69c5f3f9716f4d426da965ecf5fdbb5fabcad0fd0e2645fd8", 2),
+    "preflight_R3.md": ("6d9383338c089929c07b910e57fd2e5b922e0c57e766120143bb0ac784c59465",
+                        "da039d55b214772fd0af9fdfa38a98fa4357866090539418328bc10845305d13", 2),
+    "preflight_R4.md": ("fb10dd43bcf4900f0291d068ca497675043174de1347a5d07e8f3ce39e92c8d3",
+                        "078b46f5249bea698552bac0d9d46e4500d608fae973be0db1f614c0c8242fe5", 2),
+}
+RANKING_TIMING = "[服务器端计时，未取回]"
+# seconds on the Mac's clock, in the order of the budget table of the report
+RANKING_LEDGER = (90, 2120, 55, 686, 8007, 7832, 7771, 7740, 6)
+
+
+def _results_section() -> str:
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    heading = "## 排序审计的结果（2026-11-15 执行，2026-11-20 记录）"
+    assert heading in status
+    return status.split(heading, 1)[1].split("\n## ", 1)[0]
+
+
+def _family_rows(text: str) -> list:
+    """The eight rows of the development family of the merged report: its cells without the two label columns."""
+    table = text.split("## 比较族：development_val（判读）", 1)[1].split("\n## ", 1)[0]
+    rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in table.splitlines()
+            if line.startswith("| R")]
+    assert [row[:2] for row in rows] == [[run, name] for run in ("R1", "R2", "R3", "R4")
+                                        for name in ("cartilage_lesion", "meniscal_tear")]
+    return rows
+
+
+def test_the_archived_reports_of_the_ranking_audit_are_the_fetched_copies():
+    report = RANKING_RESULTS.read_text(encoding="utf-8")
+    for name, (copy, server, timings) in RANKING_ARCHIVE.items():
+        data = (RANKING_FOLDER / name).read_bytes()
+        assert hashlib.sha256(data).hexdigest() == copy, name
+        text = data.decode("utf-8")
+        assert text.count(RANKING_TIMING) == timings and (copy == server) == (timings == 0), name
+        assert f"| `{name}` |" in report and f"`{copy}` | `{server}` | {timings} 处 |" in report, name
+        for pattern in _REDACTED:
+            assert not re.search(pattern, text), (name, pattern)
+        assert "CST" not in text and not re.search(r"\d{2}:\d{2}:\d{2}", text), name
+        assert "NOT_EVALUATED" in text or name == "ranking_family.md"
+    # the four ranking reports read the four registered checkpoints, each one unchanged at the end, with the frozen code
+    for run, checkpoint in zip(("R1", "R2", "R3", "R4"), RANKING_CHECKPOINTS):
+        for name in (f"rank_{run}.md", f"preflight_{run}.md"):
+            text = (RANKING_FOLDER / name).read_text(encoding="utf-8")
+            for phrase in (checkpoint, "权重未被修改", "f1120e265b81afee44641769d18a5ee3304da76f", "结果：COMPLETED",
+                           "locked_test"):
+                assert phrase in text, (name, phrase)
+        assert "总结果：通过" in (RANKING_FOLDER / f"preflight_{run}.md").read_text(encoding="utf-8")
+        assert f"| {run} |" in (RANKING_FOLDER / "ranking_family.md").read_text(encoding="utf-8")
+    # the census named in the summary of 2026-11-15 is the archived one
+    assert RANKING_ARCHIVE["census.md"][1] in Path("reports/v5/context_summary_20261115.md").read_text(encoding="utf-8")
+
+
+def test_the_side_by_side_tables_are_what_the_script_makes_of_the_archived_reports(tmp_path):
+    import importlib.util
+    import shutil
+
+    spec = importlib.util.spec_from_file_location("side_by_side_ranking", RANKING_FOLDER / "side_by_side.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for run in module.RUNS:
+        shutil.copy(RANKING_FOLDER / f"rank_{run}.md", tmp_path / f"rank_{run}.md")
+    module.main(str(tmp_path))
+    for name in ("side_by_side.json", "side_by_side_tables.md"):
+        assert (tmp_path / name).read_bytes() == (RANKING_FOLDER / name).read_bytes(), name
+    tables = (RANKING_FOLDER / "side_by_side_tables.md").read_text(encoding="utf-8")
+    for pattern in _REDACTED:
+        assert not re.search(pattern, tables), pattern
+    # the support is the same in the four reports (the script refuses to write the table otherwise)
+    assert "| 主分析框 | 106 | 53 |" in tables and "| 计入 | 106 | 53 |" in tables and "| 用了全部可比摆放的框 | 0 | 0 |" in tables
+
+
+def test_the_results_report_quotes_the_family_the_server_wrote_and_reads_it_by_the_frozen_rule():
+    from anatobind.v41.evaluation import findings_ranking_v5 as ranking
+
+    family = (RANKING_FOLDER / "ranking_family.md").read_text(encoding="utf-8")
+    report = RANKING_RESULTS.read_text(encoding="utf-8")
+    assert "各检查点读到的框与摆放池一致。" in family
+    names = {"cartilage_lesion": "软骨病变", "meniscal_tear": "半月板撕裂"}
+    rows = _family_rows(family)
+    assert len(rows) == ranking.FAMILY_SIZE == 8
+    raw = []
+    for run, name, boxes, patients, mean, effect, interval, p, holm, dependent, reading in rows:
+        counted, total = boxes.split("/")
+        assert counted == total and int(patients) >= ranking.MIN_PATIENTS
+        low, high = (float(value) for value in interval.split(" – "))
+        assert abs(float(mean) - ranking.NULL_PERCENTILE - float(effect)) < 6e-4
+        # the frozen rule: positive effect, lower bound above 0.5 and Holm p at most 0.05
+        detected = float(effect) > 0 and low > ranking.NULL_PERCENTILE and float(holm) <= ranking.FAMILY_ALPHA
+        assert not detected and reading == "未检出排序证据", (run, name)
+        raw.append(float(p))
+        quoted = (f"| {run} | {names[name]} | {counted} | {patients} | {mean} | {effect.replace('-', '−')} | {interval} "
+                  f"| {p} | {holm} | {dependent} | {reading} |")
+        assert quoted in report, quoted
+    # Holm over the eight raw p values gives the adjusted values of the table (to the digits it prints)
+    order = sorted(range(8), key=lambda index: raw[index])
+    adjusted, running = [0.0] * 8, 0.0
+    for rank, index in enumerate(order):
+        running = max(running, min(1.0, (8 - rank) * raw[index]))
+        adjusted[index] = running
+    for row, value in zip(rows, adjusted):
+        assert abs(float(row[8]) - value) <= 5e-4 * max(value, 1e-3) + 1e-9, (row[:2], value)
+    for phrase in ("**8 个都读作\"未检出排序证据\"。** 这不等于证明了概率图里没有病变信息", "不是病变概率的阈值",
+                   "它们读作\"未检出\"，不因为接近界限而换一种读法", "**这个差别没有检验。**", "不在其中挑选",
+                   "执行方的计算，不在冻结的方案里", "不是同等训练预算下的比较", "最终怎样归类由研究者判断",
+                   "可用负体素的计数 ≠ 被选中的难负样本的构成 ≠ 梯度的贡献", "### 8.1 观察到了什么（事实）",
+                   "### 8.2 哪些解释有证据支持", "### 8.3 仍是假设的", "### 8.4 没有测量的",
+                   "## 9. 推荐的唯一一个最小的下一步实验（未执行，不自动启动）", "### 9.2 假设", "### 9.3 唯一要改的一处",
+                   "### 9.4 对照", "### 9.5 沿用的端到端评价指标（规则都不改）", "### 9.6 申请的资源",
+                   "这不是采用\"B → A → C\"的既定顺序", "**需要研究者决定：**", "排序的显著性不是终点",
+                   "没有训练", "没有读 `locked_test`", "没有推送，没有合并 PR #2", "NOT_EVALUATED",
+                   RANKING_PREREG_SHA256, RANKING_AMENDMENT_SHA256, *RANKING_CHECKPOINTS):
+        assert phrase in report, phrase
+    for pattern in _REDACTED:
+        assert not re.search(pattern, report), pattern
+    assert "CST" not in report and "amax 时间" not in report
+    # the two frozen plans are as they were
+    assert hashlib.sha256(RANKING_PREREG.read_bytes()).hexdigest() == RANKING_PREREG_SHA256
+    assert hashlib.sha256(RANKING_AMENDMENT.read_bytes()).hexdigest() == RANKING_AMENDMENT_SHA256
+
+
+def test_the_budget_of_the_ranking_audit_adds_up_and_stays_under_its_bound():
+    report = RANKING_RESULTS.read_text(encoding="utf-8")
+    total = sum(RANKING_LEDGER)
+    assert total == 34307 and f"{total / 3600:.3f}" == "9.530" and total / 3600 < 14.0
+    assert "| **合计** | | | | **34307 s = 9.530 h** | |" in report
+    for seconds in RANKING_LEDGER[4:8]:  # the four ranking jobs, each under its own bound of 3.0 h
+        assert seconds < 3.0 * 3600 and f"{seconds} s = {seconds / 3600:.3f} h" in report
+    shared = RANKING_LEDGER[0] + RANKING_LEDGER[2] + RANKING_LEDGER[3] + RANKING_LEDGER[8]
+    assert shared == 837 and shared / 3600 < 0.5 and "837 s = 0.233 h" in report
+    assert RANKING_LEDGER[1] < 1.5 * 3600 and "2120 s = 0.589 h" in report
+
+
+def test_status_records_the_results_of_the_ranking_audit_apart_from_the_conclusion_fields():
+    section = _results_section()
+    family = _family_rows((RANKING_FOLDER / "ranking_family.md").read_text(encoding="utf-8"))
+    for row in family:  # every effect, interval and Holm p of the status table is the server's
+        effect, interval, holm = row[5].replace("-", "−"), row[6], f"{float(row[8]):.3f}".rstrip("0").rstrip(".")
+        assert f"{effect}（{interval}），{holm}" in section, row[:2]
+    for phrase in ("ranking_audit_20261115.md", "`f1120e2`", "9.530 h", "上限 14 h", "退出码都是 0",
+                   "**development_val 上的 8 个比较都读作\"未检出排序证据\"。这不等于证明了概率图里没有病变信息。**",
+                   "这个差别没有检验", "未测量", "这两个字段没有改动", "两份方案文件没有改动", "**等研究者决定**",
+                   "决定之前不实现、不启动", "不是既定的解释", "locked_test 未读", "没有训练",
+                   "没有推送，没有合并 PR", "最终怎样归类由研究者判断"):
+        assert phrase in section, phrase
+    meta = _front_matter()
+    assert meta["scientific_conclusion"] == "NOT_EVALUATED" and meta["core_target_validated"] is None
+    assert "CST" not in section and "amax 时间" not in section
+    for pattern in _REDACTED:
+        assert not re.search(pattern, section), pattern
+    # the sections written before the audit ran still say what they said
+    assert "**等研究者批准。**" in _audit_section() and "结果出来后在本节之后另记，不改写本节" in _approval_section()
