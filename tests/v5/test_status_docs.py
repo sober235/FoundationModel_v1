@@ -1231,3 +1231,21 @@ def test_status_records_the_failed_smoke_of_the_zone_plan_and_the_engineering_ch
     for pattern in _REDACTED:
         assert not re.search(pattern, section), pattern
     assert hashlib.sha256(ZONE_PREREG.read_bytes()).hexdigest() == ZONE_PREREG_SHA256
+
+
+def test_status_records_where_the_zone_experiment_stopped_on_its_budget():
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    heading = "## 分区负项实验：训练完成，评价在时限处停止，按预算规则停下（2026-11-21）"
+    assert heading in status
+    assert status.index(heading) > status.index("## 分区负项实验：冒烟未通过与一处工程改动（2026-11-21）")
+    section = status.split(heading, 1)[1].split("\n## ", 1)[0]
+    for phrase in ("`6517022b…7e00`", "`EVAL_BUDGET_EXCEEDED`", "77 / 86", "没有开始", "18789 s", "原因没有查明",
+                   "12.691 h", "排序与回放没有启动", "53 / 61", "52.78", "10 / 28", "8.90", "不是方案里的读出",
+                   "没有测量", "仍是假设", "最终归类由研究者判断", "这两个字段没有改动", "locked_test 未读"):
+        assert phrase in section, phrase
+    booked = (134 + 95 + 303, 143, 18789, 8, 8299, 25, 17891)
+    assert sum(booked) == 45687 and abs(sum(booked) / 3600 - 12.691) < 1e-3
+    assert sum(booked) / 3600 + 3.0 > 14 and "CST" not in section and "UTC" not in section
+    for pattern in _REDACTED:
+        assert not re.search(pattern, section), pattern
+    assert hashlib.sha256(ZONE_PREREG.read_bytes()).hexdigest() == ZONE_PREREG_SHA256
