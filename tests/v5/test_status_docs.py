@@ -1249,3 +1249,23 @@ def test_status_records_where_the_zone_experiment_stopped_on_its_budget():
     for pattern in _REDACTED:
         assert not re.search(pattern, section), pattern
     assert hashlib.sha256(ZONE_PREREG.read_bytes()).hexdigest() == ZONE_PREREG_SHA256
+
+
+def test_status_sets_the_partial_zone_evaluation_beside_the_original_run_on_the_same_scans():
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    heading = "## 分区负项实验：同一批 77 次 train 扫描上与原运行并列（2026-11-22）"
+    assert heading in status
+    assert status.index(heading) > status.index(
+        "## 分区负项实验：训练完成，评价在时限处停止，按预算规则停下（2026-11-21）")
+    section = status.split(heading, 1)[1].split("\n## ", 1)[0]
+    for phrase in ("`f992c12d…649f`", "0 / 40", "0 / 37", "37 / 40", "34 / 37", "53 / 61", "41 / 61", "52.78", "43.59",
+                   "0.116", "0.234", "1514", "624", "只用于诊断", "不是方案里的读出", "没有测量", "仍是假设",
+                   "最终归类由研究者判断", "回放", "这两个字段没有改动", "locked_test 未读",
+                   "3082 s", "12000 项，不一致 0 项", "60000 项，不一致 0 项", "13.547 h", "0.108", "0.245"):
+        assert phrase in section, phrase
+    assert "回放结束后补入" not in section
+    assert 45687 + 3082 == 48769 and abs(48769 / 3600 - 13.547) < 1e-3
+    assert "CST" not in section and "UTC" not in section
+    for pattern in _REDACTED:
+        assert not re.search(pattern, section), pattern
+    assert hashlib.sha256(ZONE_PREREG.read_bytes()).hexdigest() == ZONE_PREREG_SHA256
