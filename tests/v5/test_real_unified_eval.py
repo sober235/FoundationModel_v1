@@ -1183,6 +1183,27 @@ def test_the_family_entry_reads_ranking_summaries_alike_and_asks_for_their_prefl
     assert not (tmp_path / "other").exists()
 
 
+def test_the_family_command_takes_the_family_size_a_plan_fixed(finished, tmp_path, capsys):
+    from anatobind.v41 import ranking_family_v5 as family_module
+    from anatobind.v41.evaluation.findings_ranking_v5 import FAMILY_SIZE
+    from anatobind.v41.real_unified_eval_v5 import run_unified_ranking_v5
+
+    base = _rank_kwargs(finished)["private_root"]
+    run_unified_ranking_v5(**_rank_kwargs(finished))
+    entry = ["--entry", f"new={base / 'summary.json'}", "--no-preflight"]
+    assert family_module.main([*entry, "--family-size", "2", "--out", str(tmp_path / "two")]) == 0
+    capsys.readouterr()
+    assert json.loads((tmp_path / "two" / "family.json").read_text())["family_size"] == 2
+    assert "共 2 个比较" in (tmp_path / "two" / "ranking_family.md").read_text()
+    assert family_module.main([*entry, "--out", str(tmp_path / "default")]) == 0       # unchanged default
+    capsys.readouterr()
+    assert json.loads((tmp_path / "default" / "family.json").read_text())["family_size"] == FAMILY_SIZE
+    for bad in ("0", "-1", "1"):          # not positive, or smaller than the comparisons read (one entry x two classes)
+        assert family_module.main([*entry, "--family-size", bad, "--out", str(tmp_path / f"bad{bad}")]) == 1
+        assert json.loads(capsys.readouterr().out)["code"] in ("INVALID_TYPE", "FAMILY_TOO_SMALL")
+        assert not (tmp_path / f"bad{bad}").exists()
+
+
 def test_the_rank_command_hands_a_preflight_to_the_driver_and_fails_when_a_check_fails(tmp_path, monkeypatch, capsys):
     calls, passed = [], [True]
 

@@ -7,7 +7,10 @@ patient interval, raw and Holm-adjusted p and the reading of every development c
 (evaluation.findings_ranking_v5.ranking_family_v5). It reads no sample and builds no model.
 
   python -m anatobind.v41.ranking_family_v5 --entry R1=<summary.json> ... [--preflight R1=<summary.json> ...] \\
-      --out <new private directory>
+      [--family-size N] --out <new private directory>
+
+`--family-size` is the number of comparisons the plan fixed for its family (default 8, the audit's four checkpoints
+x two classes); Holm's adjustment counts that many.
 """
 from __future__ import annotations
 
@@ -65,7 +68,14 @@ def build_ranking_family_v5(summaries: dict, preflights: dict | None = None, *,
         entries.append({"label": label, "checkpoint_sha256": summary["checkpoint"]["sha256"],
                         "step": summary["checkpoint"]["step"], "plan_id": summary["plan_id"], "problems": problems,
                         "ranking": ranking})
-    family = ranking_family_v5(entries, family_size=family_size)
+    if isinstance(family_size, bool) or not isinstance(family_size, int) or family_size < 1:
+        raise V5Error("INVALID_TYPE", "$.family_size")
+    try:
+        family = ranking_family_v5(entries, family_size=family_size)
+    except ValueError as error:                         # more comparisons read than the family holds
+        if str(error) == "FAMILY_TOO_SMALL":
+            raise V5Error("FAMILY_TOO_SMALL", "$.family_size") from error
+        raise
     family.update(settings={key: first["evaluation"][key] for key in SETTINGS},
                   code=dict(first["evaluation"]["code"]), preflight_required=preflights is not None,
                   scientific_conclusion="NOT_EVALUATED")
@@ -88,13 +98,16 @@ def main(argv: list | None = None) -> int:
     parser.add_argument("--preflight", action="append", default=[], help="LABEL=summary.json of its preflight")
     parser.add_argument("--no-preflight", action="store_true", help="no preflight is required of the entries")
     parser.add_argument("--out", required=True, help="a new private directory")
+    parser.add_argument("--family-size", type=int, default=FAMILY_SIZE,
+                        help="comparisons the family holds, as the plan fixed it (default: the audit's 8)")
     args = parser.parse_args(argv)
     repo = Path(__file__).resolve().parents[2]
     try:
         if args.no_preflight and args.preflight:
             raise V5Error("FAMILY_ENTRY_INVALID", "$.preflight")
         family = build_ranking_family_v5(_labelled(args.entry, "$.entries"),
-                                         None if args.no_preflight else _labelled(args.preflight, "$.preflight"))
+                                         None if args.no_preflight else _labelled(args.preflight, "$.preflight"),
+                                         family_size=args.family_size)
         out = Path(args.out)
         if out.exists():
             raise V5Error("EVAL_OUT_EXISTS", "$.out")
