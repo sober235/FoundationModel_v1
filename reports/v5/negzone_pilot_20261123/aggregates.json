@@ -1,0 +1,632 @@
+{
+ "development_val": {
+  "original_6000": {
+   "cartilage_lesion": {
+    "boxes": 30,
+    "finding_voxels_median": 73.0,
+    "findings": 15756,
+    "hits": 22,
+    "hits_host_correct": 19,
+    "host_positive_share": {
+     "ignored": 0.2559,
+     "outside": 0.2343,
+     "same_class_primary": 0.2507
+    },
+    "large_finding_scans": {
+     "with_box": [
+      22,
+      23
+     ],
+     "without_box": [
+      10,
+      10
+     ]
+    },
+    "largest_finding_per_scan_median": 22562,
+    "relocation_expected_hits": 23.35
+   },
+   "findings_per_scan": {
+    "max": 844,
+    "median": 629,
+    "min": 441
+   },
+   "meniscal_tear": {
+    "boxes": 23,
+    "finding_voxels_median": 88,
+    "findings": 4635,
+    "hits": 6,
+    "hits_host_correct": 2,
+    "host_positive_share": {
+     "ignored": 0.2103,
+     "outside": 0.2274,
+     "same_class_primary": 0.2646
+    },
+    "large_finding_scans": {
+     "with_box": [
+      23,
+      23
+     ],
+     "without_box": [
+      10,
+      10
+     ]
+    },
+    "largest_finding_per_scan_median": 27778,
+    "relocation_expected_hits": 6.0
+   },
+   "scans": 33
+  },
+  "pilot5_6000": {
+   "cartilage_lesion": {
+    "boxes": 30,
+    "finding_voxels_median": 94,
+    "findings": 1785,
+    "hits": 9,
+    "hits_host_correct": 5,
+    "host_positive_share": {
+     "ignored": 0.1411,
+     "outside": 0.1132,
+     "same_class_primary": 0.1318
+    },
+    "large_finding_scans": {
+     "with_box": [
+      23,
+      23
+     ],
+     "without_box": [
+      10,
+      10
+     ]
+    },
+    "largest_finding_per_scan_median": 25883,
+    "relocation_expected_hits": 10.48
+   },
+   "findings_per_scan": {
+    "max": 119,
+    "median": 73,
+    "min": 45
+   },
+   "meniscal_tear": {
+    "boxes": 23,
+    "finding_voxels_median": 109.5,
+    "findings": 642,
+    "hits": 5,
+    "hits_host_correct": 5,
+    "host_positive_share": {
+     "ignored": 0.0755,
+     "outside": 0.103,
+     "same_class_primary": 0.1406
+    },
+    "large_finding_scans": {
+     "with_box": [
+      23,
+      23
+     ],
+     "without_box": [
+      10,
+      10
+     ]
+    },
+    "largest_finding_per_scan_median": 4182,
+    "relocation_expected_hits": 6.28
+   },
+   "scans": 33
+  },
+  "zone_6000": {
+   "cartilage_lesion": {
+    "boxes": 30,
+    "finding_voxels_median": 93.0,
+    "findings": 36890,
+    "hits": 24,
+    "hits_host_correct": 20,
+    "host_positive_share": {
+     "ignored": 0.1307,
+     "outside": 0.1158,
+     "same_class_primary": 0.1251
+    },
+    "large_finding_scans": {
+     "with_box": [
+      0,
+      23
+     ],
+     "without_box": [
+      0,
+      10
+     ]
+    },
+    "largest_finding_per_scan_median": 913,
+    "relocation_expected_hits": 25.42
+   },
+   "findings_per_scan": {
+    "max": 1884,
+    "median": 1525,
+    "min": 1210
+   },
+   "meniscal_tear": {
+    "boxes": 23,
+    "finding_voxels_median": 84,
+    "findings": 13667,
+    "hits": 7,
+    "hits_host_correct": 5,
+    "host_positive_share": {
+     "ignored": 0.0736,
+     "outside": 0.0816,
+     "same_class_primary": 0.1208
+    },
+    "large_finding_scans": {
+     "with_box": [
+      23,
+      23
+     ],
+     "without_box": [
+      10,
+      10
+     ]
+    },
+    "largest_finding_per_scan_median": 47358,
+    "relocation_expected_hits": 7.97
+   },
+   "scans": 33
+  }
+ },
+ "log_segments_500": [
+  {
+   "cartilage_lesion": {
+    "host_eligible_mean": 62863,
+    "host_mean": 0.2948,
+    "negative": 0.2026,
+    "positive": 0.3714,
+    "rest_eligible_mean": 2866909,
+    "rest_mean": 0.1273,
+    "steps_without_host": 44
+   },
+   "meniscal_tear": {
+    "host_eligible_mean": 14569,
+    "host_mean": 0.2031,
+    "negative": 0.134,
+    "positive": 0.7235,
+    "rest_eligible_mean": 2923772,
+    "rest_mean": 0.0922,
+    "steps_without_host": 108
+   },
+   "steps": [
+    1,
+    500
+   ]
+  },
+  {
+   "cartilage_lesion": {
+    "host_eligible_mean": 61223,
+    "host_mean": 0.2659,
+    "negative": 0.1472,
+    "positive": 0.1959,
+    "rest_eligible_mean": 2857364,
+    "rest_mean": 0.0514,
+    "steps_without_host": 52
+   },
+   "meniscal_tear": {
+    "host_eligible_mean": 14486,
+    "host_mean": 0.1674,
+    "negative": 0.0921,
+    "positive": 0.7225,
+    "rest_eligible_mean": 2912247,
+    "rest_mean": 0.0449,
+    "steps_without_host": 109
+   },
+   "steps": [
+    501,
+    1000
+   ]
+  },
+  {
+   "cartilage_lesion": {
+    "host_eligible_mean": 65255,
+    "host_mean": 0.2452,
+    "negative": 0.1373,
+    "positive": 0.208,
+    "rest_eligible_mean": 2903550,
+    "rest_mean": 0.044,
+    "steps_without_host": 36
+   },
+   "meniscal_tear": {
+    "host_eligible_mean": 14729,
+    "host_mean": 0.1624,
+    "negative": 0.0899,
+    "positive": 0.4462,
+    "rest_eligible_mean": 2960154,
+    "rest_mean": 0.0423,
+    "steps_without_host": 99
+   },
+   "steps": [
+    1001,
+    1500
+   ]
+  },
+  {
+   "cartilage_lesion": {
+    "host_eligible_mean": 63435,
+    "host_mean": 0.2472,
+    "negative": 0.1309,
+    "positive": 0.1824,
+    "rest_eligible_mean": 2874031,
+    "rest_mean": 0.0342,
+    "steps_without_host": 44
+   },
+   "meniscal_tear": {
+    "host_eligible_mean": 15489,
+    "host_mean": 0.1798,
+    "negative": 0.0955,
+    "positive": 0.3625,
+    "rest_eligible_mean": 2926238,
+    "rest_mean": 0.0382,
+    "steps_without_host": 90
+   },
+   "steps": [
+    1501,
+    2000
+   ]
+  },
+  {
+   "cartilage_lesion": {
+    "host_eligible_mean": 62628,
+    "host_mean": 0.2399,
+    "negative": 0.1304,
+    "positive": 0.173,
+    "rest_eligible_mean": 2886352,
+    "rest_mean": 0.0352,
+    "steps_without_host": 34
+   },
+   "meniscal_tear": {
+    "host_eligible_mean": 14727,
+    "host_mean": 0.169,
+    "negative": 0.083,
+    "positive": 0.223,
+    "rest_eligible_mean": 2941991,
+    "rest_mean": 0.028,
+    "steps_without_host": 106
+   },
+   "steps": [
+    2001,
+    2500
+   ]
+  },
+  {
+   "cartilage_lesion": {
+    "host_eligible_mean": 62696,
+    "host_mean": 0.2358,
+    "negative": 0.1223,
+    "positive": 0.1595,
+    "rest_eligible_mean": 2870380,
+    "rest_mean": 0.0276,
+    "steps_without_host": 43
+   },
+   "meniscal_tear": {
+    "host_eligible_mean": 14802,
+    "host_mean": 0.1652,
+    "negative": 0.0817,
+    "positive": 0.4082,
+    "rest_eligible_mean": 2923401,
+    "rest_mean": 0.0284,
+    "steps_without_host": 104
+   },
+   "steps": [
+    2501,
+    3000
+   ]
+  },
+  {
+   "cartilage_lesion": {
+    "host_eligible_mean": 66512,
+    "host_mean": 0.2254,
+    "negative": 0.1182,
+    "positive": 0.1513,
+    "rest_eligible_mean": 2881731,
+    "rest_mean": 0.0244,
+    "steps_without_host": 33
+   },
+   "meniscal_tear": {
+    "host_eligible_mean": 16046,
+    "host_mean": 0.1534,
+    "negative": 0.0766,
+    "positive": 0.2273,
+    "rest_eligible_mean": 2937607,
+    "rest_mean": 0.0231,
+    "steps_without_host": 85
+   },
+   "steps": [
+    3001,
+    3500
+   ]
+  },
+  {
+   "cartilage_lesion": {
+    "host_eligible_mean": 63946,
+    "host_mean": 0.2439,
+    "negative": 0.1253,
+    "positive": 0.2734,
+    "rest_eligible_mean": 2868909,
+    "rest_mean": 0.027,
+    "steps_without_host": 45
+   },
+   "meniscal_tear": {
+    "host_eligible_mean": 14577,
+    "host_mean": 0.1756,
+    "negative": 0.09,
+    "positive": 0.282,
+    "rest_eligible_mean": 2925272,
+    "rest_mean": 0.0366,
+    "steps_without_host": 111
+   },
+   "steps": [
+    3501,
+    4000
+   ]
+  },
+  {
+   "cartilage_lesion": {
+    "host_eligible_mean": 64820,
+    "host_mean": 0.2405,
+    "negative": 0.1322,
+    "positive": 0.2843,
+    "rest_eligible_mean": 2883153,
+    "rest_mean": 0.0397,
+    "steps_without_host": 38
+   },
+   "meniscal_tear": {
+    "host_eligible_mean": 14790,
+    "host_mean": 0.1569,
+    "negative": 0.08,
+    "positive": 0.301,
+    "rest_eligible_mean": 2941983,
+    "rest_mean": 0.0286,
+    "steps_without_host": 94
+   },
+   "steps": [
+    4001,
+    4500
+   ]
+  },
+  {
+   "cartilage_lesion": {
+    "host_eligible_mean": 68618,
+    "host_mean": 0.2313,
+    "negative": 0.1237,
+    "positive": 0.1325,
+    "rest_eligible_mean": 2893471,
+    "rest_mean": 0.0295,
+    "steps_without_host": 32
+   },
+   "meniscal_tear": {
+    "host_eligible_mean": 16981,
+    "host_mean": 0.1732,
+    "negative": 0.0904,
+    "positive": 0.5819,
+    "rest_eligible_mean": 2952606,
+    "rest_mean": 0.0303,
+    "steps_without_host": 76
+   },
+   "steps": [
+    4501,
+    5000
+   ]
+  },
+  {
+   "cartilage_lesion": {
+    "host_eligible_mean": 62610,
+    "host_mean": 0.2452,
+    "negative": 0.1283,
+    "positive": 0.258,
+    "rest_eligible_mean": 2873786,
+    "rest_mean": 0.0312,
+    "steps_without_host": 45
+   },
+   "meniscal_tear": {
+    "host_eligible_mean": 14719,
+    "host_mean": 0.1618,
+    "negative": 0.083,
+    "positive": 0.6769,
+    "rest_eligible_mean": 2929301,
+    "rest_mean": 0.0343,
+    "steps_without_host": 110
+   },
+   "steps": [
+    5001,
+    5500
+   ]
+  },
+  {
+   "cartilage_lesion": {
+    "host_eligible_mean": 67867,
+    "host_mean": 0.2201,
+    "negative": 0.1135,
+    "positive": 0.1243,
+    "rest_eligible_mean": 2902636,
+    "rest_mean": 0.0229,
+    "steps_without_host": 40
+   },
+   "meniscal_tear": {
+    "host_eligible_mean": 15832,
+    "host_mean": 0.148,
+    "negative": 0.0735,
+    "positive": 0.2646,
+    "rest_eligible_mean": 2958936,
+    "rest_mean": 0.0235,
+    "steps_without_host": 94
+   },
+   "steps": [
+    5501,
+    6000
+   ]
+  }
+ ],
+ "train_partial": {
+  "original_6000": {
+   "cartilage_lesion": {
+    "boxes": 61,
+    "finding_voxels_median": 71,
+    "findings": 38157,
+    "hits": 41,
+    "hits_host_correct": 32,
+    "host_positive_share": {
+     "ignored": 0.2582,
+     "outside": 0.234,
+     "same_class_primary": 0.2595
+    },
+    "large_finding_scans": {
+     "with_box": [
+      37,
+      40
+     ],
+     "without_box": [
+      34,
+      37
+     ]
+    },
+    "largest_finding_per_scan_median": 24075,
+    "relocation_expected_hits": 43.59
+   },
+   "findings_per_scan": {
+    "max": 1237,
+    "median": 624,
+    "min": 439
+   },
+   "meniscal_tear": {
+    "boxes": 28,
+    "finding_voxels_median": 90,
+    "findings": 10595,
+    "hits": 11,
+    "hits_host_correct": 5,
+    "host_positive_share": {
+     "ignored": 0.2407,
+     "outside": 0.2208,
+     "same_class_primary": 0.251
+    },
+    "large_finding_scans": {
+     "with_box": [
+      40,
+      40
+     ],
+     "without_box": [
+      37,
+      37
+     ]
+    },
+    "largest_finding_per_scan_median": 21912,
+    "relocation_expected_hits": 9.52
+   },
+   "scans": 77
+  },
+  "pilot5_6000": {
+   "cartilage_lesion": {
+    "boxes": 61,
+    "finding_voxels_median": 92.0,
+    "findings": 3984,
+    "hits": 19,
+    "hits_host_correct": 13,
+    "host_positive_share": {
+     "ignored": 0.1421,
+     "outside": 0.1133,
+     "same_class_primary": 0.1441
+    },
+    "large_finding_scans": {
+     "with_box": [
+      40,
+      40
+     ],
+     "without_box": [
+      36,
+      37
+     ]
+    },
+    "largest_finding_per_scan_median": 28218,
+    "relocation_expected_hits": 17.14
+   },
+   "findings_per_scan": {
+    "max": 176,
+    "median": 66,
+    "min": 35
+   },
+   "meniscal_tear": {
+    "boxes": 28,
+    "finding_voxels_median": 103.0,
+    "findings": 1588,
+    "hits": 9,
+    "hits_host_correct": 8,
+    "host_positive_share": {
+     "ignored": 0.0978,
+     "outside": 0.0977,
+     "same_class_primary": 0.1297
+    },
+    "large_finding_scans": {
+     "with_box": [
+      40,
+      40
+     ],
+     "without_box": [
+      36,
+      37
+     ]
+    },
+    "largest_finding_per_scan_median": 3995,
+    "relocation_expected_hits": 8.45
+   },
+   "scans": 77
+  },
+  "zone_6000": {
+   "cartilage_lesion": {
+    "boxes": 61,
+    "finding_voxels_median": 96.0,
+    "findings": 85362,
+    "hits": 53,
+    "hits_host_correct": 44,
+    "host_positive_share": {
+     "ignored": 0.1306,
+     "outside": 0.1158,
+     "same_class_primary": 0.1308
+    },
+    "large_finding_scans": {
+     "with_box": [
+      0,
+      40
+     ],
+     "without_box": [
+      0,
+      37
+     ]
+    },
+    "largest_finding_per_scan_median": 812,
+    "relocation_expected_hits": 52.78
+   },
+   "findings_per_scan": {
+    "max": 1965,
+    "median": 1514,
+    "min": 1243
+   },
+   "meniscal_tear": {
+    "boxes": 28,
+    "finding_voxels_median": 84,
+    "findings": 31891,
+    "hits": 10,
+    "hits_host_correct": 8,
+    "host_positive_share": {
+     "ignored": 0.0848,
+     "outside": 0.0736,
+     "same_class_primary": 0.1312
+    },
+    "large_finding_scans": {
+     "with_box": [
+      40,
+      40
+     ],
+     "without_box": [
+      37,
+      37
+     ]
+    },
+    "largest_finding_per_scan_median": 43401,
+    "relocation_expected_hits": 8.9
+   },
+   "scans": 77
+  }
+ }
+}

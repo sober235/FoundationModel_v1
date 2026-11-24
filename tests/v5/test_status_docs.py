@@ -1269,3 +1269,46 @@ def test_status_sets_the_partial_zone_evaluation_beside_the_original_run_on_the_
     for pattern in _REDACTED:
         assert not re.search(pattern, section), pattern
     assert hashlib.sha256(ZONE_PREREG.read_bytes()).hexdigest() == ZONE_PREREG_SHA256
+
+
+ZONE_RESULTS = Path("reports/v5/negzone_pilot_20261123.md")
+ZONE_ARCHIVE = Path("reports/v5/negzone_pilot_20261123")
+
+
+def test_the_results_of_the_zone_experiment_are_recorded_with_their_sources():
+    text = ZONE_RESULTS.read_text(encoding="utf-8")
+    for phrase in ("0 / 33", "32 / 33", "31 / 53", "0.630", "0.669（0.568–0.767）", "0.0040 / 0.0080", "检出排序证据",
+                   "0.476（0.357–0.591）", "**0.573**", "0.772", "最终归类由研究者判断", "最接近\"不确定\"",
+                   "64571 s = 17.936 h", "上限 22 h", "Addition. push", "`--family-size`", "locked_test 未读",
+                   "这两个字段没有改动", "原因没有查明", "没有合并 PR #2", "### 7.3 仍待检验的假设"):
+        assert phrase in text, phrase
+    booked = (134, 143, 95, 303, 18789, 8, 8299, 25, 17891, 3082, 7652, 8150)
+    assert sum(booked) == 64571 and abs(sum(booked) / 3600 - 17.936) < 1e-3 and sum(booked) / 3600 <= 22
+    # every archived file is listed with the sha256 of the committed copy
+    listed = dict(re.findall(r"\| `([a-z0-9_.]+)` \| `([0-9a-f]{64})` \|", text))
+    files = sorted(path.name for path in ZONE_ARCHIVE.iterdir())
+    assert sorted(listed) == files
+    for name, digest in listed.items():
+        assert hashlib.sha256((ZONE_ARCHIVE / name).read_bytes()).hexdigest() == digest, name
+    for path in [ZONE_RESULTS, *ZONE_ARCHIVE.iterdir()]:
+        body = path.read_text(encoding="utf-8")
+        assert "CST" not in body and "UTC" not in body and "patient_uid" not in body.replace('["patient_uid"]', "")
+        assert not re.search(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", body), path
+        for pattern in _REDACTED:
+            assert not re.search(pattern, body), (path, pattern)
+    assert hashlib.sha256(ZONE_PREREG.read_bytes()).hexdigest() == ZONE_PREREG_SHA256
+
+
+def test_status_records_the_reading_of_the_zone_experiment_in_a_new_section():
+    status = Path("reports/v5/status.md").read_text(encoding="utf-8")
+    heading = "## 分区负项实验：追加预算后完成的读出（2026-11-23）"
+    assert heading in status
+    assert status.index(heading) > status.index("## 分区负项实验：同一批 77 次 train 扫描上与原运行并列（2026-11-22）")
+    section = status.split(heading, 1)[1].split("\n## ", 1)[0]
+    for phrase in ("negzone_pilot_20261123.md", "Addition. push", "22 h", "17.936 h", "0 / 33", "33 / 33", "31 / 53",
+                   "检出排序证据", "未检出排序证据", "0.573", "最接近\"不确定\"", "最终归类由研究者判断",
+                   "这两个字段没有改动", "locked_test 未读", "`9463480`", "不自动启动下一次训练"):
+        assert phrase in section, phrase
+    assert "CST" not in section and "UTC" not in section
+    for pattern in _REDACTED:
+        assert not re.search(pattern, section), pattern
